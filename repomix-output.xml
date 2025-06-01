@@ -1,0 +1,2363 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.devcontainer/
+  devcontainer.json
+  docker-compose.yml
+  Dockerfile
+lib/
+  wanderer_kills/
+    provider/
+      parser/
+        cache_handler.ex
+        core.ex
+        enricher.ex
+        time_handler.ex
+      api.ex
+      cache.ex
+      fetcher.ex
+      http_client.ex
+      key.ex
+      parser.ex
+      redisq.ex
+    api.ex
+    application.ex
+    preloader.ex
+    supervisor.ex
+  wanderer_kills.ex
+test/
+  test_helper.exs
+  wanderer_kills_test.exs
+.formatter.exs
+.gitignore
+mix.exs
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".devcontainer/devcontainer.json">
+{
+  "name": "wanderer-kills-dev",
+  "dockerComposeFile": ["./docker-compose.yml"],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "jakebecker.elixir-ls",
+        "JakeBecker.elixir-ls",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "search.exclude": {
+          "**/doc": true
+        },
+        "elixirLS.dialyzerEnabled": false
+      }
+    }
+  },
+  "service": "wanderer-kills",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "networkArgs": ["--add-host=host.docker.internal:host-gateway"]
+    }
+  },
+  "forwardPorts": [4004]
+}
+</file>
+
+<file path=".devcontainer/docker-compose.yml">
+version: "0.1"
+
+services:
+  wanderer-kills:
+    environment:
+      PORT: 4004
+      WEB_APP_URL: "http://localhost:4004"
+      ERL_AFLAGS: "-kernel shell_history enabled"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 4004:4004
+    volumes:
+      - ..:/app:delegated
+      - ~/.gitconfig:/root/.gitconfig
+      - ~/.gitignore:/root/.gitignore
+      - ~/.ssh:/root/.ssh
+      - elixir-artifacts:/opt/elixir-artifacts
+    command: sleep infinity
+
+volumes:
+  elixir-artifacts: {}
+</file>
+
+<file path=".devcontainer/Dockerfile">
+FROM elixir:otp-27
+
+RUN apt install -yq curl gnupg
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
+    curl \
+    make \
+    git \
+    bash \
+    build-essential \
+    ca-certificates \
+    jq \
+    vim \
+    net-tools \
+    procps \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt --fix-broken install
+
+RUN mix local.hex --force
+
+WORKDIR /app
+</file>
+
+<file path="lib/wanderer_kills/provider/parser/cache_handler.ex">
+defmodule WandererApp.Zkb.Provider.Parser.CacheHandler do
+  @moduledoc """
+  Handles caching operations for killmails:
+    - store_killmail/1 inserts the killmail and links it to its system,
+      returning `{:ok, km}` or `{:error, :storage_failed}`.
+    - update_kill_count/1 increments the kill count only if the kill_time
+      is within the cutoff, returning `:ok` or `:skip`.
+  """
+
+  require Logger
+  alias WandererApp.Zkb.Provider.Cache
+  alias WandererApp.Zkb.Provider.Key
+
+  @type killmail :: %{required(String.t()) => any()}
+  @type store_result :: {:ok, killmail()} | {:error, :storage_failed}
+
+  # cutoff = one hour ago
+  @cutoff_seconds 3600
+
+  @doc """
+  Store a killmail in the cache and associate it with its solar system.
+  Only `{:error, reason}` from Cache calls will be treated as a failure.
+  """
+  @spec store_killmail(killmail()) :: store_result()
+  def store_killmail(%{"killmail_id" => id, "solar_system_id" => sys_id} = km) do
+    try do
+      case Cache.put_killmail(id, km) do
+        :ok ->
+          case Cache.add_killmail_id_to_system_list(sys_id, id) do
+            :ok ->
+              {:ok, km}
+            {:error, reason2} ->
+              # Rollback: Remove the killmail if adding to system list fails
+              Cache.delete(Key.killmail_key(id))
+              Logger.error(
+                "[CacheHandler] add_killmail_id_to_system_list failed for system #{sys_id}: " <>
+                  "#{inspect(reason2)}"
+              )
+              {:error, :storage_failed}
+          end
+
+        {:error, reason} ->
+          Logger.error("[CacheHandler] put_killmail failed for ##{id}: #{inspect(reason)}")
+          {:error, :storage_failed}
+      end
+    rescue
+      unexpected ->
+        Logger.error(
+          "[CacheHandler] unexpected exception caching ##{id}: #{inspect(unexpected)}"
+        )
+        {:error, :storage_failed}
+    end
+  end
+
+  def store_killmail(invalid) do
+    Logger.error("[CacheHandler] invalid payload: #{inspect(invalid)}")
+    {:error, :storage_failed}
+  end
+
+  @doc """
+  Increment the kill count for this system if the kill_time is within the last hour.
+  """
+  @spec update_kill_count(killmail()) :: :ok | :skip
+  def update_kill_count(%{"kill_time" => %DateTime{} = ts, "solar_system_id" => sys_id}) do
+    if DateTime.compare(ts, cutoff()) == :gt do
+      Cache.increment_kill_count(sys_id)
+      :ok
+    else
+      :skip
+    end
+  end
+
+  def update_kill_count(_), do: :skip
+
+  #-------------------------------------------------------------------------------
+  # Private helpers
+  #-------------------------------------------------------------------------------
+  defp cutoff do
+    DateTime.utc_now()
+    |> DateTime.add(-@cutoff_seconds, :second)
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/parser/core.ex">
+defmodule WandererApp.Zkb.Provider.Parser.Core do
+  @moduledoc """
+  Core killmail parsing logic: merging partial/full data and building
+  a normalized killmail map for downstream enrichment and caching.
+  """
+  require Logger
+
+  @type raw_km       :: %{String.t() => any()}
+  @type merged_km    :: raw_km()
+  @type built_km     :: %{String.t() => any()}
+  @type result_ok    :: {:ok, built_km()}
+  @type result_error :: {:error, :invalid_payload | :missing_kill_time}
+  @type result_t     :: result_ok() | :older | result_error()
+
+  @doc """
+  Merge full ESI killmail data with its zKB partial payload.
+  Validates that kill_time is present in the data.
+  """
+  @spec merge_killmail_data(raw_km(), raw_km()) :: {:ok, merged_km()} | result_error()
+  def merge_killmail_data(%{"killmail_id" => id} = full, %{"zkb" => zkb})
+      when is_integer(id) and is_map(zkb) do
+    kill_time = Map.get(full, "kill_time") || Map.get(full, "killmail_time")
+
+    if kill_time do
+      merged =
+        full
+        |> Map.put("zkb", zkb)
+        |> Map.put("kill_time", kill_time)
+
+      {:ok, merged}
+    else
+      {:error, :missing_kill_time}
+    end
+  end
+  def merge_killmail_data(_, _), do: {:error, :invalid_payload}
+
+  @doc """
+  Given merged data and a cutoff, either build the final map, or return `:older` if it's too old.
+  """
+  @spec build_kill_data(merged_km(), DateTime.t()) :: result_t()
+  def build_kill_data(%{"kill_time" => ts} = merged, %DateTime{} = cutoff) do
+    case parse_time(ts) do
+      {:ok, dt} ->
+        case DateTime.compare(dt, cutoff) do
+          :lt -> :older
+          _ -> do_build(Map.put(merged, "kill_time", dt))
+        end
+      :error -> {:error, :invalid_payload}
+    end
+  end
+  def build_kill_data(_, _), do: {:error, :invalid_payload}
+
+  # -- Private helpers -----------------------------------------------------
+
+  @spec parse_time(DateTime.t() | String.t()) :: {:ok, DateTime.t()} | :error
+  defp parse_time(%DateTime{} = dt), do: {:ok, dt}
+  defp parse_time(time) when is_binary(time) do
+    case DateTime.from_iso8601(time) do
+      {:ok, dt, _} -> {:ok, dt}
+      _ -> :error
+    end
+  end
+  defp parse_time(_), do: :error
+
+  # The real builder, matching on all required fields:
+  @spec do_build(merged_km()) :: result_t()
+  defp do_build(%{
+         "killmail_id"      => id,
+         "kill_time"        => %DateTime{} = ts,
+         "solar_system_id"  => sys,
+         "victim"           => victim_map,
+         "attackers"        => attackers,
+         "zkb"              => zkb
+       })
+       when is_map(victim_map) and is_list(attackers) do
+    final_blow = Enum.find(attackers, & &1["final_blow"])
+
+    try do
+      # Extract required fields
+      with {:ok, victim} <- get_victim(victim_map),
+           {:ok, attackers} <- get_attackers(attackers),
+           {:ok, system_id} <- get_system_id(sys),
+           {:ok, time} <- get_time(ts) do
+        # Build the killmail
+        built =
+          %{
+            "killmail_id"       => id,
+            "kill_time"         => time,
+            "solar_system_id"   => system_id,
+            "attacker_count"    => length(attackers),
+            "total_value"       => Map.get(zkb, "totalValue", 0),
+            "npc"               => Map.get(zkb, "npc", false),
+            "victim"            => victim,
+            "attackers"         => attackers,
+            "zkb"               => zkb
+          }
+          |> Map.merge(flatten_fields(victim, "victim"))
+          |> maybe_flatten_final_blow(final_blow)
+
+        {:ok, built}
+      else
+        {:error, reason} ->
+          Logger.error("[Core] Failed to build killmail #{id}: #{inspect(reason)}")
+          {:error, reason}
+      end
+    rescue
+      e ->
+        Logger.error("[Core] Error building killmail #{id}: #{inspect(e)}")
+        {:error, :build_error}
+    end
+  end
+  defp do_build(%{"killmail_id" => id}) do
+    Logger.error("[Core] Invalid killmail data for build: #{id}")
+    {:error, :invalid_payload}
+  end
+  defp do_build(_) do
+    Logger.error("[Core] Invalid killmail data: missing killmail_id")
+    {:error, :invalid_payload}
+  end
+
+  # Define once the mapping from source keys to suffixes
+  @flatten_mappings [
+    {"character_id",   "char_id"},
+    {"corporation_id", "corp_id"},
+    {"alliance_id",    "alliance_id"},
+    {"ship_type_id",   "ship_type_id"}
+  ]
+
+  @spec flatten_fields(map(), String.t()) :: map()
+  defp flatten_fields(map, prefix) do
+    Enum.reduce(@flatten_mappings, %{}, fn {src_key, suffix}, acc ->
+      case Map.fetch(map, src_key) do
+        {:ok, val} -> Map.put(acc, "#{prefix}_#{suffix}", val)
+        :error     -> acc
+      end
+    end)
+  end
+
+  @spec maybe_flatten_final_blow(map(), map() | nil) :: map()
+  defp maybe_flatten_final_blow(built_map, nil), do: built_map
+
+  defp maybe_flatten_final_blow(built_map, %{} = fb_map) do
+    built_map
+    |> Map.put("final_blow", fb_map)
+    |> Map.merge(flatten_fields(fb_map, "final_blow"))
+  end
+
+  # Helper functions for extracting fields
+  @spec get_victim(map()) :: {:ok, map()} | {:error, term()}
+  defp get_victim(%{"ship_type_id" => _} = victim), do: {:ok, victim}
+  defp get_victim(_), do: {:error, :invalid_victim}
+
+  @spec get_attackers(list()) :: {:ok, list()} | {:error, term()}
+  defp get_attackers(attackers) when is_list(attackers) and length(attackers) > 0 do
+    {:ok, attackers}
+  end
+  defp get_attackers(_), do: {:error, :invalid_attackers}
+
+  @spec get_system_id(integer()) :: {:ok, integer()} | {:error, term()}
+  defp get_system_id(id) when is_integer(id), do: {:ok, id}
+  defp get_system_id(_), do: {:error, :invalid_system_id}
+
+  @spec get_time(DateTime.t()) :: {:ok, DateTime.t()} | {:error, term()}
+  defp get_time(%DateTime{} = dt), do: {:ok, dt}
+  defp get_time(_), do: {:error, :invalid_time}
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/parser/enricher.ex">
+defmodule WandererApp.Zkb.Provider.Parser.Enricher do
+  @moduledoc """
+  Handles enrichment of killmail data with additional information.
+  Manages fetching and adding character, corporation, alliance, and ship information.
+  """
+
+  require Logger
+  alias WandererApp.Esi.ApiClient
+  alias WandererApp.CachedInfo
+  alias WandererApp.Utils.HttpUtil
+
+  @type killmail :: map()
+  @type enrich_result :: {:ok, killmail()} | {:error, term()}
+
+  @doc """
+  Enriches a killmail with additional information.
+  Returns:
+    - `{:ok, enriched_km}` if enrichment was successful
+    - `{:error, reason}` if enrichment failed
+  """
+  @spec enrich_killmail(killmail() | nil) :: enrich_result()
+  def enrich_killmail(nil), do: {:error, :invalid_killmail}
+  def enrich_killmail({:error, reason}), do: {:error, reason}
+  def enrich_killmail(km) when is_map(km) do
+    try do
+      with {:ok, victim_km} <- enrich_victim(km),
+           {:ok, final_km} <- enrich_final_blow(victim_km) do
+        {:ok, final_km}
+      else
+        {:error, reason} ->
+          Logger.error("[Enricher] Failed to enrich killmail #{inspect(km["killmail_id"])}: #{inspect(reason)}")
+          {:error, {:enrichment_failed, reason}}
+      end
+    rescue
+      e ->
+        Logger.error("[Enricher] Failed to enrich killmail #{inspect(km["killmail_id"])}: #{inspect(e)}")
+        {:error, {:enrichment_failed, e}}
+    end
+  end
+  def enrich_killmail(invalid) do
+    Logger.error("[Enricher] Invalid killmail data: #{inspect(invalid)}")
+    {:error, :invalid_killmail}
+  end
+
+  @spec enrich_victim(killmail()) :: {:ok, killmail()} | {:error, term()}
+  defp enrich_victim(km) do
+    try do
+
+      # First enrich the victim data
+      victim = km["victim"] || %{}
+
+      enriched_victim = victim
+        |> maybe_put_character_name("character_id", "character_name")
+        |> maybe_put_corp_info("corporation_id", "corporation_ticker", "corporation_name")
+        |> maybe_put_alliance_info("alliance_id", "alliance_ticker", "alliance_name")
+        |> maybe_put_ship_name("ship_type_id", "ship_name")
+
+      # Then enrich the root level victim fields
+      enriched = km
+        |> Map.put("victim", enriched_victim)
+        |> maybe_put_character_name("victim_char_id", "victim_char_name")
+        |> maybe_put_corp_info("victim_corp_id", "victim_corp_ticker", "victim_corp_name")
+        |> maybe_put_alliance_info("victim_alliance_id", "victim_alliance_ticker", "victim_alliance_name")
+        |> maybe_put_ship_name("victim_ship_type_id", "victim_ship_name")
+
+      {:ok, enriched}
+    rescue
+      e ->
+        Logger.error("[Enricher] Failed to enrich victim data for killmail #{inspect(km["killmail_id"])}: #{inspect(e)}")
+        {:error, :victim_enrichment_failed}
+    end
+  end
+
+  @spec enrich_final_blow(killmail()) :: {:ok, killmail()} | {:error, term()}
+  defp enrich_final_blow(km) do
+    try do
+      # First enrich the final_blow data
+      final_blow = km["final_blow"] || %{}
+
+      enriched_final_blow = final_blow
+        |> maybe_put_character_name("character_id", "character_name")
+        |> maybe_put_corp_info("corporation_id", "corporation_ticker", "corporation_name")
+        |> maybe_put_alliance_info("alliance_id", "alliance_ticker", "alliance_name")
+        |> maybe_put_ship_name("ship_type_id", "ship_name")
+
+      # Then enrich the root level final blow fields
+      enriched = km
+        |> Map.put("final_blow", enriched_final_blow)
+        |> maybe_put_character_name("final_blow_char_id", "final_blow_char_name")
+        |> maybe_put_corp_info("final_blow_corp_id", "final_blow_corp_ticker", "final_blow_corp_name")
+        |> maybe_put_alliance_info("final_blow_alliance_id", "final_blow_alliance_ticker", "final_blow_alliance_name")
+        |> maybe_put_ship_name("final_blow_ship_type_id", "final_blow_ship_name")
+
+      {:ok, enriched}
+    rescue
+      e ->
+        Logger.error("[Enricher] Failed to enrich final blow data for killmail #{inspect(km["killmail_id"])}: #{inspect(e)}")
+        {:error, :final_blow_enrichment_failed}
+    end
+  end
+
+  @spec maybe_put_character_name(killmail(), String.t(), String.t()) :: killmail()
+  defp maybe_put_character_name(km, id_key, name_key) do
+    case Map.get(km, id_key) do
+      id when id in [nil, 0] ->
+        km
+      id when is_binary(id) ->
+        case Integer.parse(id) do
+          {eve_id, ""} ->
+            handle_character_info(km, eve_id, name_key)
+          _ ->
+            km
+        end
+      eve_id when is_integer(eve_id) ->
+        handle_character_info(km, eve_id, name_key)
+      _ ->
+        km
+    end
+  end
+
+  @spec handle_character_info(killmail(), integer(), String.t()) :: killmail()
+  defp handle_character_info(km, eve_id, name_key) do
+    case fetch_character_info(eve_id) do
+      {:ok, char_name} ->
+        Map.put(km, name_key, char_name)
+      :skip ->
+        km
+      {:error, reason} ->
+        Logger.warning("[Enricher] Error fetching character info for ID #{eve_id}: #{inspect(reason)}")
+        km
+    end
+  end
+
+  @spec fetch_character_info(integer()) :: {:ok, String.t()} | :skip | {:error, term()}
+  defp fetch_character_info(eve_id) when is_integer(eve_id) do
+    try do
+      HttpUtil.retry_with_backoff(
+        fn ->
+          case ApiClient.get_character_info(eve_id) do
+            {:ok, %{"name" => char_name}} -> {:ok, char_name}
+            {:error, :timeout} ->
+              Logger.warning("[Enricher] Timeout fetching character info for ID #{eve_id}")
+              raise "Character info timeout, will retry"
+            {:error, :not_found} ->
+              Logger.warning("[Enricher] Character not found for ID #{eve_id}")
+              :skip
+            {:error, reason} ->
+              Logger.error("[Enricher] Error fetching character info for ID #{eve_id}: #{inspect(reason)}")
+              if HttpUtil.retriable_error?(reason) do
+                raise "Character info error: #{inspect(reason)}, will retry"
+              else
+                :skip
+              end
+          end
+        end,
+        max_retries: 3
+      )
+    rescue
+      e ->
+        Logger.warning("[Enricher] All retries exhausted for character info #{eve_id}: #{inspect(e)}")
+        :skip
+    catch
+      :exit, reason ->
+        Logger.warning("[Enricher] Exit during character info fetch for #{eve_id}: #{inspect(reason)}")
+        :skip
+      kind, reason ->
+        Logger.warning("[Enricher] Unexpected error during character info fetch for #{eve_id}: #{inspect({kind, reason})}")
+        :skip
+    end
+  end
+  defp fetch_character_info(_), do: :skip
+
+  @spec maybe_put_corp_info(killmail(), String.t(), String.t(), String.t()) :: killmail()
+  defp maybe_put_corp_info(km, id_key, ticker_key, name_key) do
+    case Map.get(km, id_key) do
+      id when id in [nil, 0] -> km
+      id when is_binary(id) ->
+        case Integer.parse(id) do
+          {corp_id, ""} ->
+            handle_corp_info(km, corp_id, ticker_key, name_key)
+          _ ->
+            km
+        end
+      corp_id when is_integer(corp_id) ->
+        handle_corp_info(km, corp_id, ticker_key, name_key)
+      _ ->
+        km
+    end
+  end
+
+  @spec handle_corp_info(killmail(), integer(), String.t(), String.t()) :: killmail()
+  defp handle_corp_info(km, corp_id, ticker_key, name_key) do
+    fetch_corp_info(corp_id)
+    |> handle_corp_result(km, corp_id, ticker_key, name_key)
+  end
+
+  @spec fetch_corp_info(integer()) :: {:ok, {String.t(), String.t()}} | :skip | {:error, term()}
+  defp fetch_corp_info(corp_id) do
+    HttpUtil.retry_with_backoff(
+      fn ->
+        case ApiClient.get_corporation_info(corp_id) do
+          {:ok, %{"ticker" => ticker, "name" => corp_name}} -> {:ok, {ticker, corp_name}}
+          {:error, :timeout} ->
+            Logger.warning("[Enricher] Timeout fetching corporation info for ID #{corp_id}")
+            raise "Corporation info timeout, will retry"
+          {:error, :not_found} ->
+            Logger.warning("[Enricher] Corporation not found for ID #{corp_id}")
+            :skip
+          {:error, reason} ->
+            Logger.error("[Enricher] Error fetching corporation info for ID #{corp_id}: #{inspect(reason)}")
+            handle_corp_error(reason, corp_id)
+        end
+      end,
+      max_retries: 3
+    )
+  end
+
+  @spec handle_corp_error(term(), integer()) :: :skip | no_return()
+  defp handle_corp_error(reason, _corp_id) do
+    if HttpUtil.retriable_error?(reason) do
+      raise "Corporation info error: #{inspect(reason)}, will retry"
+    else
+      :skip
+    end
+  end
+
+  @spec handle_corp_result({:ok, {String.t(), String.t()}} | :skip | {:error, term()}, killmail(), integer(), String.t(), String.t()) :: killmail()
+  defp handle_corp_result({:ok, {ticker, corp_name}}, km, _corp_id, ticker_key, name_key) do
+    km
+    |> Map.put(ticker_key, ticker)
+    |> Map.put(name_key, corp_name)
+  end
+  defp handle_corp_result(:skip, km, _corp_id, _ticker_key, _name_key) do
+    km
+  end
+  defp handle_corp_result({:error, reason}, km, corp_id, _ticker_key, _name_key) do
+    Logger.warning("[Enricher] Error handling corp info for ID #{corp_id}: #{inspect(reason)}")
+    km
+  end
+
+  @spec maybe_put_alliance_info(killmail(), String.t(), String.t(), String.t()) :: killmail()
+  defp maybe_put_alliance_info(km, id_key, ticker_key, name_key) do
+    case Map.get(km, id_key) do
+      id when id in [nil, 0] -> km
+      id when is_binary(id) ->
+        case Integer.parse(id) do
+          {alliance_id, ""} ->
+            handle_alliance_info(km, alliance_id, ticker_key, name_key)
+          _ ->
+            Logger.debug("[Enricher] Invalid alliance ID format: #{inspect(id)}")
+            km
+        end
+      alliance_id when is_integer(alliance_id) ->
+        handle_alliance_info(km, alliance_id, ticker_key, name_key)
+      _ ->
+        Logger.debug("[Enricher] Skipping alliance info for invalid ID type: #{inspect(Map.get(km, id_key))}")
+        km
+    end
+  end
+
+  @spec handle_alliance_info(killmail(), integer(), String.t(), String.t()) :: killmail()
+  defp handle_alliance_info(km, alliance_id, ticker_key, name_key) do
+    fetch_alliance_info(alliance_id)
+    |> handle_alliance_result(km, alliance_id, ticker_key, name_key)
+  end
+
+  @spec fetch_alliance_info(integer()) :: {:ok, {String.t(), String.t()}} | :skip | {:error, term()}
+  defp fetch_alliance_info(alliance_id) do
+    HttpUtil.retry_with_backoff(
+      fn ->
+        case ApiClient.get_alliance_info(alliance_id) do
+          {:ok, %{"ticker" => alliance_ticker, "name" => alliance_name}} -> {:ok, {alliance_ticker, alliance_name}}
+          {:error, :timeout} ->
+            Logger.warning("[Enricher] Timeout fetching alliance info for ID #{alliance_id}")
+            raise "Alliance info timeout, will retry"
+          {:error, :not_found} ->
+            Logger.warning("[Enricher] Alliance not found for ID #{alliance_id}")
+            :skip
+          {:error, reason} ->
+            Logger.error("[Enricher] Error fetching alliance info for ID #{alliance_id}: #{inspect(reason)}")
+            handle_alliance_error(reason)
+        end
+      end,
+      max_retries: 3
+    )
+  end
+
+  @spec handle_alliance_error(term()) :: :skip | no_return()
+  defp handle_alliance_error(reason) do
+    if HttpUtil.retriable_error?(reason) do
+      raise "Alliance info error: #{inspect(reason)}, will retry"
+    else
+      :skip
+    end
+  end
+
+  @spec handle_alliance_result({:ok, {String.t(), String.t()}} | :skip | {:error, term()}, killmail(), integer(), String.t(), String.t()) :: killmail()
+  defp handle_alliance_result({:ok, {alliance_ticker, alliance_name}}, km, _alliance_id, ticker_key, name_key) do
+    km
+    |> Map.put(ticker_key, alliance_ticker)
+    |> Map.put(name_key, alliance_name)
+  end
+  defp handle_alliance_result(:skip, km, _alliance_id, _ticker_key, _name_key) do
+    km
+  end
+  defp handle_alliance_result({:error, reason}, km, alliance_id, _ticker_key, _name_key) do
+    Logger.warning("[Enricher] Error handling alliance info for ID #{alliance_id}: #{inspect(reason)}")
+    km
+  end
+
+  @spec maybe_put_ship_name(killmail(), String.t(), String.t()) :: killmail()
+  defp maybe_put_ship_name(km, id_key, name_key) do
+    case Map.get(km, id_key) do
+      id when id in [nil, 0] -> km
+      type_id ->
+        handle_ship_info(km, type_id, name_key)
+    end
+  end
+
+  @spec handle_ship_info(killmail(), integer(), String.t()) :: killmail()
+  defp handle_ship_info(km, type_id, name_key) do
+    case CachedInfo.get_ship_type(type_id) do
+      {:ok, %{name: ship_name}} -> Map.put(km, name_key, ship_name)
+      {:ok, nil} ->
+        Logger.warning("[Enricher] Ship type not found for ID #{type_id}")
+        km
+      {:error, :not_found} ->
+        Logger.warning("[Enricher] Ship type not found for ID #{type_id}")
+        km
+      {:error, reason} ->
+        Logger.error("[Enricher] Error fetching ship info for type ID #{type_id}: #{inspect(reason)}")
+        km
+    end
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/parser/time_handler.ex">
+defmodule WandererApp.Zkb.Provider.Parser.TimeHandler do
+  @moduledoc """
+  Handles time parsing and validation for killmails.
+  Manages time-related operations and cutoff checks.
+  """
+
+  require Logger
+
+  @type killmail :: map()
+  @type cutoff_dt :: DateTime.t()
+  @type time_result :: {:ok, DateTime.t()} | {:error, term()}
+  @type validate_result :: {:ok, {killmail(), DateTime.t()}} | :older | :skip
+
+  @doc """
+  Gets the killmail time from any supported format.
+  Returns `{:ok, DateTime.t()}` or `{:error, reason}`.
+  """
+  @spec get_killmail_time(killmail()) :: time_result()
+  def get_killmail_time(%{"killmail_time" => time}) when is_binary(time),  do: parse_time(time)
+  def get_killmail_time(%{"killTime"      => time}) when is_binary(time),  do: parse_time(time)
+  def get_killmail_time(%{"zkb"           => %{"time" => time}}) when is_binary(time), do: parse_time(time)
+  def get_killmail_time(_), do: {:error, :missing_time}
+
+  @doc """
+  Validates and attaches a killmail's timestamp against a cutoff.
+  Returns:
+    - `{:ok, {km_with_time, dt}}` if valid
+    - `:older` if timestamp is before cutoff
+    - `:skip` if timestamp is missing or unparseable
+  """
+  @spec validate_killmail_time(killmail(), cutoff_dt()) :: validate_result()
+  def validate_killmail_time(km, cutoff_dt) do
+    case get_killmail_time(km) do
+      {:ok, km_dt} ->
+        if older_than_cutoff?(km_dt, cutoff_dt) do
+          :older
+        else
+          km_with_time = Map.put(km, "kill_time", km_dt)
+          {:ok, {km_with_time, km_dt}}
+        end
+
+      {:error, reason} ->
+        Logger.warning(
+          "[TimeHandler] Failed to parse time for killmail #{inspect(Map.get(km, "killmail_id"))}: #{inspect(reason)}"
+        )
+        :skip
+    end
+  end
+
+  @spec parse_time(String.t()) :: time_result()
+  def parse_time(time_str) when is_binary(time_str) do
+    case DateTime.from_iso8601(time_str) do
+      {:ok, dt, _offset} ->
+        {:ok, DateTime.shift_zone!(dt, "Etc/UTC")}
+
+      {:error, :invalid_format} ->
+        case NaiveDateTime.from_iso8601(time_str) do
+          {:ok, ndt} -> {:ok, DateTime.from_naive!(ndt, "Etc/UTC")}
+          error     ->
+            log_time_parse_error(time_str, error)
+            error
+        end
+
+      error ->
+        log_time_parse_error(time_str, error)
+        error
+    end
+  end
+  def parse_time(_), do: {:error, :invalid_time_format}
+
+  @spec log_time_parse_error(String.t(), term()) :: :ok
+  defp log_time_parse_error(time_str, error) do
+    Logger.warning("[TimeHandler] Failed to parse time: #{time_str}, error: #{inspect(error)}")
+  end
+
+  @spec older_than_cutoff?(DateTime.t(), DateTime.t()) :: boolean()
+  defp older_than_cutoff?(km_dt, cutoff_dt), do: DateTime.compare(km_dt, cutoff_dt) == :lt
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/api.ex">
+defmodule WandererApp.Zkb.Provider.Api do
+  @moduledoc """
+  High-level interface for interacting with zKillboard API and caching results.
+  """
+
+  require Logger
+  alias WandererApp.Zkb.Provider.{HttpClient, Cache}
+  alias WandererApp.Zkb.Provider.Key
+
+  @kill_count_ttl 300
+
+  @doc """
+  Fetches a killmail by its ID.
+
+  Delegates to HttpClient; returns `{:ok, killmail}` or `{:error, reason}`.
+  """
+  @spec get_killmail(integer()) :: {:ok, map()} | {:error, term()}
+  defdelegate get_killmail(killmail_id), to: HttpClient, as: :get_killmail
+
+  @doc """
+  Fetches all killmails for a system.
+
+  Delegates to HttpClient; returns `{:ok, list_of_killmails}` or `{:error, reason}`.
+  """
+  @spec get_system_killmails(integer()) :: {:ok, [map()]} | {:error, term()}
+  defdelegate get_system_killmails(system_id), to: HttpClient, as: :get_system_killmails
+
+  @doc """
+  Alias for `get_system_killmails/1` retained for backwards compatibility.
+  """
+  @spec get_kills_for_system(integer()) :: {:ok, [map()]} | {:error, term()}
+  defdelegate get_kills_for_system(system_id), to: HttpClient, as: :get_system_killmails
+
+  @doc """
+  Retrieves the cached kill count for a system, or fetches and caches it if missing.
+
+  Returns `{:ok, count}` or `{:error, reason}`.
+  """
+  @spec get_kill_count(integer()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def get_kill_count(system_id) when is_integer(system_id) do
+    key = Key.kill_count_key(system_id)
+
+    case Cache.get(key) do
+      {:ok, count} when is_integer(count) ->
+        {:ok, count}
+
+      {:ok, _} ->
+        fetch_and_cache_count(key, system_id)
+
+      {:error, reason} ->
+        log_cache_error(reason)
+        {:error, reason}
+    end
+  end
+
+  def get_kill_count(system_id) do
+    Logger.warning("[ZkbProvider.Api] Invalid system_id type: #{inspect(system_id)}")
+    {:error, :invalid_system_id}
+  end
+
+  defp log_cache_error(reason) do
+    Logger.error("[ZkbProvider.Api] Cache error: #{inspect(reason)}")
+  end
+
+  defp fetch_and_cache_count(key, system_id) do
+    case get_system_killmails(system_id) do
+      {:ok, killmails} ->
+        count = length(killmails)
+        case Cache.set(key, count, @kill_count_ttl) do
+          :ok ->
+            {:ok, count}
+          {:error, reason} ->
+            Logger.warning("[ZkbProvider.Api] Failed to cache kill count for system #{system_id}: #{inspect(reason)}")
+            {:ok, count}  # Still return the count even if caching failed
+        end
+
+      {:error, reason} ->
+        Logger.error("[ZkbProvider.Api] Failed to fetch killmails for system #{system_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/cache.ex">
+defmodule WandererApp.Zkb.Provider.Cache do
+  @moduledoc """
+  Caching functionality for zKillboard killmails and counts using `WandererApp.Cache`.
+  """
+
+  require Logger
+  alias WandererApp.Cache
+  alias WandererApp.Zkb.Provider.Key
+
+  @type killmail_id :: pos_integer()
+  @type system_id    :: pos_integer()
+  @type killmail     :: map()
+  @type cache_result :: :ok | {:error, term()}
+
+  # TTL values in milliseconds
+  @killmail_ttl            :timer.hours(24)
+  @system_kills_ttl        :timer.hours(1)
+  @fetched_timestamp_ttl   :timer.minutes(5)
+
+  # -------------------------------------------------------------------
+  # Generic cache operations
+  # -------------------------------------------------------------------
+
+  @doc "Fetch a value from the cache."
+  @spec get(String.t()) :: {:ok, term() | nil} | {:error, term()}
+  def get(key), do: Cache.lookup(key)
+
+  @doc "Set a value in the cache with TTL (in ms)."
+  @spec set(String.t(), term(), non_neg_integer()) :: cache_result()
+  def set(key, value, ttl), do: Cache.insert(key, value, ttl: ttl)
+
+  @doc "Delete a key from the cache."
+  @spec delete(String.t()) :: cache_result()
+  def delete(key), do: Cache.delete(key)
+
+  @doc "Get a value or default if missing."
+  @spec get!(String.t(), term()) :: term()
+  def get!(key, default), do: Cache.lookup!(key, default)
+
+  # -------------------------------------------------------------------
+  # Killmail operations
+  # -------------------------------------------------------------------
+
+  @doc "Store a killmail map under its ID."
+  @spec put_killmail(killmail_id(), killmail()) :: cache_result()
+  def put_killmail(id, killmail) when is_integer(id) and is_map(killmail) do
+    case insert(Key.killmail_key(id), killmail, @killmail_ttl) do
+      :ok ->
+        :ok
+      error ->
+        Logger.error("[Cache] Failed to store killmail #{id}: #{inspect(error)}")
+        error
+    end
+  end
+
+  @doc "Retrieve a killmail by ID."
+  @spec get_killmail(killmail_id()) :: {:ok, killmail() | nil} | {:error, term()}
+  def get_killmail(id) when is_integer(id) do
+    get(Key.killmail_key(id))
+  end
+
+  # -------------------------------------------------------------------
+  # System-specific killmail list
+  # -------------------------------------------------------------------
+
+  @doc "Add a killmail ID to a system's list of kills."
+  @spec add_killmail_id_to_system_list(system_id(), killmail_id()) :: cache_result()
+  def add_killmail_id_to_system_list(system_id, killmail_id) when is_integer(system_id) and is_integer(killmail_id) do
+    key = Key.system_kills_list_key(system_id)
+
+    try do
+      _updated_list = Cache.insert_or_update(
+        key,
+        [killmail_id],  # Initial value if key doesn't exist
+        fn existing_list -> [killmail_id | existing_list] end,  # Update function to prepend
+        ttl: @killmail_ttl
+      )
+      :ok
+    rescue
+      # Handle ETS errors during shutdown gracefully
+      error in [ArgumentError] ->
+        Logger.warning("[Cache] Failed to add killmail #{killmail_id} to system #{system_id} list during shutdown: #{inspect(error)}")
+        {:error, error}
+      error ->
+        Logger.error("[Cache] Unexpected error adding killmail #{killmail_id} to system #{system_id} list: #{inspect(error)}")
+        {:error, error}
+    catch
+      # Handle ETS table not existing errors
+      :error, :badarg ->
+        Logger.warning("[Cache] ETS table not available for system #{system_id} killmail list (likely shutting down)")
+        {:error, :cache_unavailable}
+    end
+  end
+
+  @doc "Get killmail IDs for a given system."
+  @spec get_system_killmail_ids(system_id()) :: [killmail_id()]
+  def get_system_killmail_ids(system_id) when is_integer(system_id) do
+    get!(Key.system_kills_list_key(system_id), [])
+    |> Enum.reverse()
+  end
+
+  @doc "Get all killmail maps for a system, filtering out misses and logging errors."
+  @spec get_killmails_for_system(system_id()) :: {:ok, [killmail()]} | {:error, term()}
+  def get_killmails_for_system(system_id) when is_integer(system_id) do
+    try do
+      ids = get_system_killmail_ids(system_id)
+
+      {killmails, errors} = ids
+      |> Enum.reduce({[], []}, fn id, {acc, err_acc} ->
+        case get_killmail(id) do
+          {:ok, nil} ->
+            {acc, err_acc}
+
+          {:ok, killmail} ->
+            {[killmail | acc], err_acc}
+
+          {:error, reason} ->
+            Logger.error("[Cache] Failed to fetch killmail #{id}: #{inspect(reason)}")
+            {acc, [reason | err_acc]}
+        end
+      end)
+
+      result = Enum.reverse(killmails)
+
+      case errors do
+        [] -> {:ok, result}
+        _ ->
+          if length(killmails) > 0 do
+            # Return partial results with a warning
+            Logger.warning("[Cache] Returning #{length(killmails)} killmails for system #{system_id}, but #{length(errors)} failed to load")
+            {:ok, result}
+          else
+            # If no killmails loaded and we have errors, return the first error
+            {:error, List.first(errors)}
+          end
+      end
+    rescue
+      e ->
+        Logger.error("[Cache] Exception in get_killmails_for_system for system #{system_id}: #{inspect(e)}")
+        {:error, {:exception, e}}
+    end
+  end
+
+  # -------------------------------------------------------------------
+  # Kill-count operations
+  # -------------------------------------------------------------------
+
+  @doc "Get the current kill count for a system."
+  @spec get_kill_count(system_id()) :: non_neg_integer()
+  def get_kill_count(system_id) when is_integer(system_id) do
+    get!(Key.kill_count_key(system_id), 0)
+  end
+
+  @doc "Increment the kill count for a system."
+  @spec increment_kill_count(system_id()) :: cache_result()
+  def increment_kill_count(system_id) when is_integer(system_id) do
+    try do
+      _updated_count = Cache.insert_or_update(
+        Key.kill_count_key(system_id),
+        1,
+        &(&1 + 1),
+        ttl: @system_kills_ttl
+      )
+      :ok
+    rescue
+      # Handle ETS errors during shutdown gracefully
+      error in [ArgumentError] ->
+        Logger.warning("[Cache] Failed to increment kill count for system #{system_id} during shutdown: #{inspect(error)}")
+        {:error, error}
+      error ->
+        Logger.error("[Cache] Unexpected error incrementing kill count for system #{system_id}: #{inspect(error)}")
+        {:error, error}
+    catch
+      # Handle ETS table not existing errors
+      :error, :badarg ->
+        Logger.warning("[Cache] ETS table not available for system #{system_id} kill count (likely shutting down)")
+        {:error, :cache_unavailable}
+    end
+  end
+
+  # -------------------------------------------------------------------
+  # Fetch-timestamp operations
+  # -------------------------------------------------------------------
+
+  @doc "Return true if kills for the system were fetched recently."
+  @spec recently_fetched?(system_id()) :: boolean()
+  def recently_fetched?(system_id) when is_integer(system_id) do
+    case get(Key.fetched_timestamp_key(system_id)) do
+      {:ok, ts} when is_integer(ts) ->
+        System.system_time(:millisecond) - ts < @fetched_timestamp_ttl
+
+      _ ->
+        false
+    end
+  end
+
+  @doc "Store the current time as the last fetched timestamp for a system."
+  @spec put_full_fetched_timestamp(system_id()) :: cache_result()
+  def put_full_fetched_timestamp(system_id) when is_integer(system_id) do
+    insert(
+      Key.fetched_timestamp_key(system_id),
+      System.system_time(:millisecond),
+      @fetched_timestamp_ttl
+    )
+  end
+
+  # -------------------------------------------------------------------
+  # Map-specific operations
+  # -------------------------------------------------------------------
+
+  @doc "Store kill counts for all systems in a map."
+  @spec put_map_kill_counts(String.t(), %{integer() => non_neg_integer()}, non_neg_integer()) :: cache_result()
+  def put_map_kill_counts(map_id, kill_counts, ttl) when is_binary(map_id) and is_map(kill_counts) do
+    set("map_#{map_id}:zkb_kills", kill_counts, ttl)
+  end
+
+  @doc "Get kill counts for all systems in a map."
+  @spec get_map_kill_counts(String.t()) :: {:ok, %{integer() => non_neg_integer()}} | {:error, term()}
+  def get_map_kill_counts(map_id) when is_binary(map_id) do
+    case get("map_#{map_id}:zkb_kills") do
+      {:ok, nil} -> {:ok, %{}}
+      {:ok, counts} when is_map(counts) -> {:ok, counts}
+      error -> error
+    end
+  end
+
+  @doc "Store detailed kill data for all systems in a map."
+  @spec put_map_detailed_kills(String.t(), %{integer() => [killmail()]}, non_neg_integer()) :: cache_result()
+  def put_map_detailed_kills(map_id, detailed_kills, ttl) when is_binary(map_id) and is_map(detailed_kills) do
+    set("map_#{map_id}:zkb_detailed_kills", detailed_kills, ttl)
+  end
+
+  @doc "Get detailed kill data for all systems in a map."
+  @spec get_map_detailed_kills(String.t()) :: {:ok, %{integer() => [killmail()]}} | {:error, term()}
+  def get_map_detailed_kills(map_id) when is_binary(map_id) do
+    case get("map_#{map_id}:zkb_detailed_kills") do
+      {:ok, nil} -> {:ok, %{}}
+      {:ok, kills} when is_map(kills) -> {:ok, kills}
+      error -> error
+    end
+  end
+
+  @doc "Store killmail IDs for all systems in a map."
+  @spec put_map_killmail_ids(String.t(), %{integer() => MapSet.t(integer())}, non_neg_integer()) :: cache_result()
+  def put_map_killmail_ids(map_id, ids_map, ttl) when is_binary(map_id) and is_map(ids_map) do
+    set("map_#{map_id}:zkb_ids", ids_map, ttl)
+  end
+
+  @doc "Get killmail IDs for all systems in a map."
+  @spec get_map_killmail_ids(String.t()) :: {:ok, %{integer() => MapSet.t(integer())}} | {:error, term()}
+  def get_map_killmail_ids(map_id) when is_binary(map_id) do
+    case get("map_#{map_id}:zkb_ids") do
+      {:ok, nil} -> {:ok, %{}}
+      {:ok, ids} when is_map(ids) -> {:ok, ids}
+      error -> error
+    end
+  end
+
+  @doc "Check if a map is started."
+  @spec is_map_started?(String.t()) :: boolean()
+  def is_map_started?(map_id) when is_binary(map_id) do
+    Cache.lookup!("map_#{map_id}:started", false)
+  end
+
+  # -------------------------------------------------------------------
+  # Utilities
+  # -------------------------------------------------------------------
+
+  @doc "Clear all zKillboard-related cache entries."
+  @spec clear() :: :ok
+  def clear do
+    Cache.delete_all("zkb_*")
+    :ok
+  end
+
+  @doc "Fetch cached kills for multiple systems at once."
+  @spec fetch_cached_kills_for_systems([system_id()]) :: %{system_id() => [killmail()]}
+  def fetch_cached_kills_for_systems(system_ids) when is_list(system_ids) do
+    for sid <- system_ids, into: %{} do
+      case get_killmails_for_system(sid) do
+        {:ok, kills} -> {sid, kills}
+        {:error, _reason} -> {sid, []}
+      end
+    end
+  end
+
+  # -------------------------------------------------------------------
+  # Private helpers
+  # -------------------------------------------------------------------
+
+  defp insert(key, value, ttl), do: Cache.insert(key, value, ttl: ttl)
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/fetcher.ex">
+defmodule WandererApp.Zkb.Provider.Fetcher do
+  @moduledoc """
+  Fetches killmails from zKB.
+
+  • Parses partial → full killmails via Parser
+  • Caches results via Cache
+  • Handles rate limiting and retries
+  """
+
+  require Logger
+
+  alias WandererApp.Zkb.Provider.{Cache, HttpClient, Parser}
+
+  @type killmail_id :: pos_integer()
+  @type system_id    :: pos_integer()
+  @type killmail     :: map()
+  @type fetch_opts   :: [
+          limit: pos_integer(),
+          force: boolean(),
+          since_hours: pos_integer()
+        ]
+
+  @default_limit       5
+  @default_since_hours 24
+
+  #-------------------------------------------------
+  # Single killmail
+  #-------------------------------------------------
+
+  @doc """
+  Fetch and parse a single killmail by ID.
+  Returns `{:ok, enriched_killmail}` or `{:error, reason}`.
+  """
+  @spec fetch_killmail(killmail_id()) :: {:ok, killmail()} | {:error, term()}
+  def fetch_killmail(id) when is_integer(id) do
+    case Cache.get_killmail(id) do
+      {:ok, nil} ->
+        fetch_and_parse_killmail(id)
+
+      {:ok, enriched} ->
+        {:ok, enriched}
+
+      {:error, reason} ->
+        Logger.warning("[Fetcher] Cache error for #{id}, retrying: #{inspect(reason)}")
+        fetch_and_parse_killmail(id)
+    end
+  end
+
+  defp fetch_and_parse_killmail(id) do
+    # For individual killmail fetches, use a very old cutoff to avoid rejecting historical killmails
+    # Individual fetches are typically for specific killmails and shouldn't be time-restricted
+    cutoff = DateTime.utc_now() |> DateTime.add(-365 * 24 * 3600, :second)  # 1 year ago
+
+    with {:ok, raw}      <- HttpClient.get_killmail(id),
+         {:ok, enriched} <- Parser.parse_full_and_store(raw, raw, cutoff) do
+      {:ok, enriched}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  #-------------------------------------------------
+  # System-scoped killmails
+  #-------------------------------------------------
+
+  @doc """
+  Fetch and parse killmails for a given system_id.
+  Options:
+    • `:limit` (default #{@default_limit})
+    • `:force` (ignore recent cache)
+    • `:since_hours` (default #{@default_since_hours})
+
+  Returns `{:ok, [enriched_killmail]}` or `{:error, reason}`.
+  """
+  @spec fetch_killmails_for_system(system_id() | String.t(), fetch_opts()) ::
+          {:ok, [killmail()]} | {:error, term()}
+  def fetch_killmails_for_system(system_id, opts \\ [])
+
+  def fetch_killmails_for_system(system_id, opts) when is_binary(system_id) do
+    case Integer.parse(system_id) do
+      {id, ""} -> fetch_killmails_for_system(id, opts)
+      _ -> {:error, :invalid_system_id}
+    end
+  end
+
+  def fetch_killmails_for_system(system_id, opts) when is_integer(system_id) do
+    limit       = Keyword.get(opts, :limit, @default_limit)
+    force       = Keyword.get(opts, :force, false)
+    since_hours = Keyword.get(opts, :since_hours, @default_since_hours)
+
+
+    if force || not Cache.recently_fetched?(system_id) do
+      do_fetch_killmails_for_system(system_id, limit, since_hours)
+    else
+      case Cache.get_killmails_for_system(system_id) do
+        {:ok, killmails} ->
+          # Cache always contains enriched killmails, return as-is
+          {:ok, killmails}
+
+        {:error, reason} ->
+          Logger.warning("[Fetcher] Cache error for system #{system_id}, falling back to fresh fetch: #{inspect(reason)}")
+          do_fetch_killmails_for_system(system_id, limit, since_hours)
+      end
+    end
+  end
+
+  defp do_fetch_killmails_for_system(system_id, limit, since_hours) do
+    with {:ok, raws} <- HttpClient.get_system_killmails(system_id) do
+      # API always returns raw killmails, always process them
+      cutoff = DateTime.utc_now() |> DateTime.add(-since_hours * 3600, :second)
+
+      kills =
+        raws
+        |> Enum.take(limit)
+        |> parse_until_older(cutoff)
+
+      Cache.put_full_fetched_timestamp(system_id)
+      {:ok, kills}
+    else
+      {:error, reason} ->
+        Logger.error("[Fetcher] API error for system #{system_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  # Stop parsing as soon as we hit an "older" kill
+  defp parse_until_older([], _cutoff), do: []
+  defp parse_until_older(raws, cutoff) when is_list(raws) do
+    raws
+    |> Enum.reduce_while([], fn raw, acc ->
+      # API returns raw killmails, always parse them
+      case Parser.parse_partial(raw, cutoff) do
+        {:ok, enriched} when is_map(enriched) ->
+          {:cont, [enriched | acc]}
+
+        {:ok, :kill_skipped} ->
+          {:cont, acc}
+
+        :older ->
+          {:halt, acc}
+
+        {:error, {:enrichment_failed, _}} ->
+          Logger.warning("[Fetcher] Enrichment failed for killmail: #{inspect(raw["killmail_id"])}")
+          {:cont, acc}
+
+        {:error, reason} ->
+          Logger.error("[Fetcher] parse_partial failed for #{inspect(raw["killmail_id"])}: #{inspect(reason)}")
+          {:cont, acc}
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  #-------------------------------------------------
+  # Batch fetch
+  #-------------------------------------------------
+
+  @doc """
+  Fetch killmails for multiple systems in parallel.
+  Returns a map `%{system_id => {:ok, kills} | {:error, reason}}`.
+  """
+  @spec fetch_killmails_for_systems([system_id()], fetch_opts()) ::
+          %{system_id() => {:ok, [killmail()]} | {:error, term()}}
+  def fetch_killmails_for_systems(system_ids, opts \\ []) when is_list(system_ids) do
+    system_ids
+    |> Task.Supervisor.async_stream(
+      WandererApp.TaskSupervisor,
+      &safe_fetch_for_system(&1, opts),
+      max_concurrency: 8,
+      timeout: 30_000
+    )
+    |> Enum.map(fn
+      {:ok, {sid, result}} -> {sid, result}
+      {:exit, {sid, reason}} ->
+        Logger.error("[Fetcher] Task exit for system #{sid}: #{inspect(reason)}")
+        {sid, {:error, {:task_exit, reason}}}
+      {:exit, reason} ->
+        # This should not happen with our safe wrapper, but kept as fallback
+        Logger.error("[Fetcher] Unexpected task exit without system ID: #{inspect(reason)}")
+        {:unknown_system, {:error, {:unexpected_exit, reason}}}
+    end)
+    |> Enum.reject(fn {sid, _result} -> sid == :unknown_system end)
+    |> Map.new()
+  end
+
+  # Safe wrapper that ensures system ID is always preserved, even on crashes
+  defp safe_fetch_for_system(system_id, opts) do
+    try do
+      result = fetch_killmails_for_system(system_id, opts)
+      {system_id, result}
+    catch
+      kind, reason ->
+        Logger.error("[Fetcher] Task failed for system #{system_id}: #{inspect({kind, reason})}")
+        {system_id, {:error, {:task_failed, kind, reason}}}
+    rescue
+      error ->
+        Logger.error("[Fetcher] Task error for system #{system_id}: #{inspect(error)}")
+        {system_id, {:error, {:task_error, error}}}
+    end
+  end
+
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/http_client.ex">
+defmodule WandererApp.Zkb.Provider.HttpClient do
+  @moduledoc """
+  HTTP client for zKillboard API requests.
+  """
+
+  require Logger
+  alias WandererApp.Utils.HttpUtil
+
+  @base_url "https://zkillboard.com/api"
+  @user_agent "WandererApp/1.0"
+  @rate_limit_bucket "zkb"
+  @rate_limit 1
+  @rate_scale_ms 10_000
+
+  @doc """
+  Fetches a killmail by its ID.
+  """
+  @spec get_killmail(integer()) :: {:ok, [map()]} | {:error, term()}
+  def get_killmail(killmail_id) when is_integer(killmail_id) do
+    build_url("killID", killmail_id)
+    |> fetch_json()
+    |> wrap_single_result()
+  end
+
+  @doc """
+  Fetches all killmails for a system.
+  """
+  @spec get_system_killmails(integer()) :: {:ok, [map()]} | {:error, term()}
+  def get_system_killmails(system_id) when is_integer(system_id) do
+    build_url("systemID", system_id)
+    |> fetch_json()
+    |> wrap_single_result()
+  end
+
+  @spec fetch_json(String.t()) :: {:ok, map() | [map()]} | {:error, term()}
+  defp fetch_json(url) do
+    with {:ok, body} <- do_request(url),
+         {:ok, decoded} <- decode_json(body) do
+      {:ok, decoded}
+    else
+      {:error, _} = error ->
+        Logger.error("[ZkbHttpClient] Error fetching #{url}: #{inspect(error)}")
+        error
+      {:ok, unexpected} ->
+        Logger.warning("[ZkbHttpClient] Unexpected response for #{url}: #{inspect(unexpected, limit: 50)}")
+        {:error, :invalid_response}
+    end
+  end
+
+  @spec wrap_single_result({:ok, map() | [map()]} | {:error, term()}) :: {:ok, [map()]} | {:error, term()}
+  defp wrap_single_result({:ok, result}) when is_map(result), do: {:ok, [result]}
+  defp wrap_single_result({:ok, result}) when is_list(result), do: {:ok, result}
+  defp wrap_single_result(error), do: error
+
+  @spec do_request(String.t()) :: {:ok, String.t() | map() | [map()]} | {:error, term()}
+  defp do_request(url) do
+    HttpUtil.get_with_rate_limit(
+      url,
+      headers: default_headers(),
+      bucket: @rate_limit_bucket,
+      limit: @rate_limit,
+      scale_ms: @rate_scale_ms
+    )
+  end
+
+  @spec decode_json(String.t() | map() | [map()]) :: {:ok, map() | [map()]} | {:error, term()}
+  defp decode_json(body) when is_binary(body), do: Jason.decode(body)
+  defp decode_json(body) when is_map(body) or is_list(body), do: {:ok, body}
+  defp decode_json(_), do: {:error, :invalid_response}
+
+  @spec default_headers() :: [{String.t(), String.t()}]
+  defp default_headers do
+    [
+      {"User-Agent", @user_agent},
+      {"Accept", "application/json"}
+    ]
+  end
+
+  @spec build_url(String.t(), integer()) :: String.t()
+  defp build_url("systemID", id), do: "#{@base_url}/systemID/#{id}/"
+  defp build_url(endpoint, id), do: "#{@base_url}/#{endpoint}/#{id}/"
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/key.ex">
+defmodule WandererApp.Zkb.Provider.Key do
+  @moduledoc """
+  Helper for generating cache keys for zKillboard data.
+  """
+
+  @doc """
+  Generates a cache key for a killmail.
+  """
+  def killmail_key(kill_id) do
+    "zkb_killmail_#{kill_id}"
+  end
+
+  @doc """
+  Generates a cache key for a system's kill count.
+  """
+  def kill_count_key(system_id) do
+    "zkb_kill_count_#{system_id}"
+  end
+
+  @doc """
+  Generates a cache key for a system's killmail ID list.
+  """
+  def system_kills_list_key(system_id) do
+    "zkb_system_kills_list_#{system_id}"
+  end
+
+  @doc """
+  Generates a cache key for a system's fetched timestamp.
+  """
+  def fetched_timestamp_key(system_id) do
+    "zkb_fetched_timestamp_#{system_id}"
+  end
+
+  @doc """
+  Returns the current time in milliseconds since the Unix epoch.
+  """
+  def current_time_ms do
+    System.system_time(:millisecond)
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/parser.ex">
+defmodule WandererApp.Zkb.Provider.Parser do
+  @moduledoc """
+  Parses and stores killmails from zKillboard (partial) or ESI (full).
+  Combines partial and full data, validates time, enriches, and caches results.
+  """
+
+  require Logger
+
+  alias WandererApp.Esi.ApiClient
+  alias WandererApp.Zkb.Provider.Parser.{Core, TimeHandler, Enricher, CacheHandler}
+  alias WandererApp.Utils.HttpUtil
+
+  @type killmail :: map()
+  @type parse_result :: {:ok, killmail()} | {:ok, :kill_skipped} | :older | :skip | {:error, term()}
+
+  # How far back to accept kills (in seconds)
+  @cutoff_seconds 3_600
+  # Number of retries for transient ESI failures
+  @api_retry_count 3
+  # Delay between retries in milliseconds
+  @retry_delay_ms 1_000
+
+  # HTTP status codes that indicate retriable errors
+  @retriable_http_codes [502, 503, 504]
+
+  @doc """
+  Entry-point for handling any killmail payload.
+  Calculates a cutoff timestamp (UTC now minus cutoff seconds) and parses.
+  """
+  @spec parse_and_store_killmail(killmail()) :: {:ok, killmail()} | :older | :skip
+  def parse_and_store_killmail(%{} = km) do
+    cutoff = DateTime.utc_now() |> DateTime.add(-@cutoff_seconds, :second)
+    do_parse(km, cutoff)
+  end
+  def parse_and_store_killmail(_), do: :skip
+
+  @doc """
+  Merges a full killmail with its partial zKB envelope and parses it.
+  """
+  @spec parse_full_and_store(killmail(), killmail(), DateTime.t()) ::
+          {:ok, killmail()} | :older | :skip
+  def parse_full_and_store(full, %{"zkb" => zkb}, cutoff) when is_map(full) do
+    full
+    |> Map.put("zkb", zkb)
+    |> do_parse(cutoff)
+  end
+  def parse_full_and_store(_, _, _), do: :skip
+
+  @doc """
+  Fetches and parses a partial killmail via ESI.
+  Retries on transient failures like timeouts or network errors.
+  """
+  @spec parse_partial(killmail(), DateTime.t()) :: parse_result()
+  def parse_partial(%{"killmail_id" => id, "zkb" => %{"hash" => hash}} = partial, cutoff) do
+    HttpUtil.retry_with_backoff(
+      fn ->
+        case ApiClient.get_killmail(id, hash) do
+          {:ok, full} ->
+            full
+            |> Map.put("zkb", partial["zkb"])
+            |> do_parse(cutoff)
+          {:error, reason} ->
+            Logger.error("[ZkbParser] parse_partial fetch failed for #{id}: #{inspect(reason)}")
+            # Convert retriable errors to exceptions so HttpUtil.retry_with_backoff can handle them
+            if is_retriable_error?(reason) do
+              raise %HttpUtil.ConnectionError{message: "#{inspect(reason)}"}
+            else
+              {:error, reason}
+            end
+        end
+      end,
+      max_retries: @api_retry_count,
+      base_delay: @retry_delay_ms,
+      rescue_only: [HttpUtil.ConnectionError, HttpUtil.TimeoutError, HttpUtil.RateLimitError]
+    )
+  end
+  def parse_partial(_, _), do: {:error, :invalid_killmail}
+
+  @doc """
+  Parses a full killmail directly, without any fetching.
+  """
+  @spec parse_full(killmail(), DateTime.t()) :: {:ok, killmail()} | :older | :skip
+  def parse_full(km, cutoff), do: do_parse(km, cutoff)
+
+  @spec do_parse(killmail(), DateTime.t()) :: parse_result()
+  defp do_parse(%{"killmail_id" => id} = km, cutoff) do
+    parse_result =
+      with {:ok, {km_with_time, time_dt}} <- TimeHandler.validate_killmail_time(km, cutoff),
+           {:ok, built}        <- Core.build_kill_data(km_with_time, time_dt),
+           {:ok, enriched}     <- Enricher.enrich_killmail(built) do
+        CacheHandler.store_killmail(enriched)
+      end
+
+    case parse_result do
+      {:ok, %{} = stored} ->
+        handle_count_update(stored, id)
+
+      {:ok, :kill_skipped} ->
+        {:ok, :kill_skipped}
+
+      :older ->
+        :older
+
+      :skip ->
+        {:ok, :kill_skipped}
+
+      {:error, reason} ->
+        Logger.error("[ZkbParser] parsing failed for #{id}: #{inspect(reason)}")
+        {:error, reason}
+
+      other ->
+        Logger.error("[ZkbParser] unexpected result for #{id}: #{inspect(other)}")
+        {:error, {:unexpected_result, other}}
+    end
+  end
+  defp do_parse(_, _), do: {:ok, :kill_skipped}
+
+  @spec handle_count_update(killmail(), integer() | binary()) :: {:ok, killmail()}
+  defp handle_count_update(stored, id) do
+    case CacheHandler.update_kill_count(stored) do
+      :ok -> {:ok, stored}
+      :skip -> {:ok, stored}
+      other ->
+        Logger.error("[ZkbParser] update_kill_count #{inspect(other)} for #{id}")
+        {:ok, stored}
+    end
+  end
+
+  # Check if an error should be retried - combines HttpUtil's network errors with ESI-specific errors
+  defp is_retriable_error?(reason) do
+    HttpUtil.retriable_error?(reason) ||
+      case reason do
+        :network_error -> true
+        :bad_gateway -> true
+        :service_unavailable -> true
+        :gateway_timeout -> true
+        {:http_error, code} when code in @retriable_http_codes -> true
+        _ -> false
+      end
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/provider/redisq.ex">
+defmodule WandererApp.Zkb.Provider.Redisq do
+  @moduledoc """
+  Handles real-time kills from zKillboard RedisQ.
+
+  • Idle (no kills): poll every @idle_interval_ms
+  • On kill:       poll again after @fast_interval_ms
+  • On error:      exponential backoff up to @max_backoff_ms
+  """
+
+  use GenServer
+  require Logger
+
+  alias WandererApp.Zkb.Provider.Parser
+  alias WandererApp.Utils.HttpUtil
+
+  @base_url           "https://zkillredisq.stream/listen.php"
+  @fast_interval_ms   1_000
+  @idle_interval_ms   5_000
+  @initial_backoff_ms 1_000
+  @max_backoff_ms     30_000
+  @backoff_factor     2
+  @task_timeout_ms    10_000
+
+  defmodule State do
+    @moduledoc false
+    defstruct [:queue_id, :backoff]
+  end
+
+  ## Public API
+
+  @doc """
+  Starts the RedisQ listener.
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts \\ []),
+    do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+
+  ## GenServer Callbacks
+
+  @impl true
+  def init(_opts) do
+    queue_id = build_queue_id()
+    state = %State{queue_id: queue_id, backoff: @initial_backoff_ms}
+    schedule_poll(@idle_interval_ms)
+    {:ok, state}
+  end
+
+  @impl true
+  # Single handle_info clause that drives both scheduling and backoff
+  def handle_info(:poll_kills, %State{queue_id: queue_id, backoff: backoff} = state) do
+    case poll_and_process(queue_id) do
+      {:ok, :kill_received} ->
+        schedule_poll(@fast_interval_ms)
+        {:noreply, %{state | backoff: @initial_backoff_ms}}
+
+      {:ok, :no_kills} ->
+        schedule_poll(@idle_interval_ms)
+        {:noreply, %{state | backoff: @initial_backoff_ms}}
+
+      {:ok, :kill_older} ->
+        schedule_poll(@idle_interval_ms)
+        {:noreply, %{state | backoff: @initial_backoff_ms}}
+
+      {:ok, :kill_skipped} ->
+        schedule_poll(@idle_interval_ms)
+        {:noreply, %{state | backoff: @initial_backoff_ms}}
+
+      {:error, _reason} ->
+        next_backoff = min(backoff * @backoff_factor, @max_backoff_ms)
+        schedule_poll(next_backoff)
+        {:noreply, %{state | backoff: next_backoff}}
+    end
+  end
+
+  @impl true
+  def terminate(_reason, _state), do: :ok
+
+  ## Internal
+
+  defp schedule_poll(ms) do
+    Process.send_after(self(), :poll_kills, ms)
+  end
+
+  # Combines polling the RedisQ endpoint with processing whatever comes back
+  defp poll_and_process(queue_id) do
+    url = "#{@base_url}?queueID=#{queue_id}"
+
+    case HttpUtil.get_with_rate_limit(url, bucket: "redisq", limit: 5, scale_ms: @fast_interval_ms) do
+      {:ok, %{"package" => nil}} ->
+        {:ok, :no_kills}
+
+      # new-format payload: inline killmail + zkb
+      {:ok, %{"package" => %{"killmail" => killmail, "zkb" => zkb}}} ->
+        case Parser.parse_and_store_killmail(Map.put(killmail, "zkb", zkb)) do
+          {:ok, _} -> {:ok, :kill_received}
+          :skip -> {:ok, :kill_skipped}
+          :older -> {:ok, :kill_older}
+          {:error, reason} -> {:error, reason}
+        end
+
+      # legacy-format payload: only killID + zkb; fetch full mail
+      {:ok, %{"killID" => id, "zkb" => zkb}} ->
+        fetch_and_process_full_kill(id, zkb)
+        {:ok, :kill_received}
+
+      {:ok, other} ->
+        Logger.warning("[RedisQ] Unexpected response: #{inspect(other)}")
+        {:error, :unexpected_format}
+
+      {:error, reason} ->
+        Logger.warning("[RedisQ] Poll error: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  # Fires off an async task under our TaskSupervisor, so crashes don't leak in here
+  defp fetch_and_process_full_kill(id, zkb) do
+    Task.Supervisor.async(WandererApp.TaskSupervisor, fn ->
+      case WandererApp.Esi.ApiClient.get_killmail(id, zkb["hash"]) do
+        {:ok, killmail} ->
+          case Parser.parse_and_store_killmail(Map.put(killmail, "zkb", zkb)) do
+            {:ok, _} -> {:ok, :kill_received}
+            :skip -> {:ok, :kill_skipped}
+            :older -> {:ok, :kill_older}
+            {:error, reason} ->
+              Logger.error("[RedisQ] Failed to parse and store killmail #{id}: #{inspect(reason)}")
+              {:error, reason}
+          end
+
+        {:error, reason} ->
+          Logger.warning("[RedisQ] Failed to fetch killmail #{id}: #{inspect(reason)}")
+          {:error, reason}
+      end
+    end)
+    |> Task.await(@task_timeout_ms)
+  catch
+    :exit, {:timeout, _} ->
+      Logger.error("[RedisQ] Task timeout while processing killmail #{id} after #{@task_timeout_ms}ms")
+      {:error, :timeout}
+    :exit, reason ->
+      Logger.error("[RedisQ] Task exited while processing killmail #{id}: #{inspect(reason)}")
+      {:error, {:task_exit, reason}}
+    kind, reason ->
+      Logger.error("[RedisQ] Task failed for killmail #{id}: #{inspect(reason)}")
+      {:error, {kind, reason}}
+  end
+
+  defp build_queue_id do
+    :crypto.strong_rand_bytes(8)
+    |> Base.encode16()
+    |> String.slice(0, 16)
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/api.ex">
+defmodule WandererZkbService.Api do
+  @moduledoc """
+  HTTP interface for ZKB functionality.  
+  Exposes the same high-level routes as the internal `Provider.Api`:
+
+    • GET  /ping
+    • GET  /killmail/:id
+    • GET  /system_killmails/:system_id
+    • GET  /kills_for_system/:system_id
+    • GET  /kill_count/:system_id
+
+  All routes return JSON (except /ping, which is a plain “pong”).
+  """
+
+  use Plug.Router
+  require Logger
+
+  alias WandererZkbService.Provider.Api, as: ZkbProvider
+
+  plug :match
+  plug :dispatch
+
+  @doc "Simple health check."
+  get "/ping" do
+    send_resp(conn, 200, "pong")
+  end
+
+  @doc """
+  GET /killmail/:id
+  Fetch a single killmail by its ID via `ZkbProvider.get_killmail/1`.
+  Returns `{"status": "ok", "killmail": <map>}` or `{"status": "error", "reason": <term>}`.
+  """
+  get "/killmail/:id" do
+    with {id, ""} <- Integer.parse(id),
+         {:ok, killmail} <- ZkbProvider.get_killmail(id) do
+      resp = %{status: "ok", killmail: killmail}
+      send_json(conn, 200, resp)
+    else
+      :error ->
+        send_json(conn, 400, %{status: "error", reason: "invalid id"})
+      {:error, reason} ->
+        send_json(conn, 500, %{status: "error", reason: inspect(reason)})
+    end
+  end
+
+  @doc """
+  GET /system_killmails/:system_id
+  Fetch all killmails for a given system via `ZkbProvider.get_system_killmails/1`.
+  Returns `{"status":"ok","killmails":[…]}` or `{"status":"error","reason":…}`.
+  """
+  get "/system_killmails/:system_id" do
+    with {system_id, ""} <- Integer.parse(system_id),
+         {:ok, killmails} <- ZkbProvider.get_system_killmails(system_id) do
+      resp = %{status: "ok", killmails: killmails}
+      send_json(conn, 200, resp)
+    else
+      :error ->
+        send_json(conn, 400, %{status: "error", reason: "invalid system_id"})
+      {:error, reason} ->
+        send_json(conn, 500, %{status: "error", reason: inspect(reason)})
+    end
+  end
+
+  @doc """
+  GET /kills_for_system/:system_id
+  Alias for `/system_killmails/:system_id` (backwards compatibility).
+  """
+  get "/kills_for_system/:system_id" do
+    # Simply forward to the other route’s logic:
+    conn
+    |> put_req_header("x-forwarded-for-kills_for_system", "true")
+    |> Phoenix.Controller.redirect(to: "/system_killmails/" <> system_id)
+  end
+
+  @doc """
+  GET /kill_count/:system_id
+  Retrieves the cached kill count for a system (or computes & caches it) via
+  `ZkbProvider.get_kill_count/1`. Returns `{"status":"ok","count":<integer>}` or
+  `{"status":"error","reason":…}`.
+  """
+  get "/kill_count/:system_id" do
+    with {system_id, ""} <- Integer.parse(system_id),
+         {:ok, count} <- ZkbProvider.get_kill_count(system_id) do
+      send_json(conn, 200, %{status: "ok", count: count})
+    else
+      :error ->
+        send_json(conn, 400, %{status: "error", reason: "invalid system_id"})
+      {:error, reason} ->
+        send_json(conn, 500, %{status: "error", reason: inspect(reason)})
+    end
+  end
+
+  match _ do
+    send_resp(conn, 404, "Not Found")
+  end
+
+  # Helper to set JSON content-type and encode the body
+  defp send_json(conn, status, body_map) do
+    json = Jason.encode!(body_map)
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, json)
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/application.ex">
+defmodule WandererKills.Application do
+  # See https://hexdocs.pm/elixir/Application.html
+  # for more information on OTP Applications
+  @moduledoc false
+
+  use Application
+
+  @impl true
+  def start(_type, _args) do
+    children = [
+      # Starts a worker by calling: WandererKills.Worker.start_link(arg)
+      # {WandererKills.Worker, arg}
+    ]
+
+    # See https://hexdocs.pm/elixir/Supervisor.html
+    # for other strategies and supported options
+    opts = [strategy: :one_for_one, name: WandererKills.Supervisor]
+    Supervisor.start_link(children, opts)
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/preloader.ex">
+defmodule WandererApp.Zkb.Preloader do
+  @moduledoc """
+  Preloads killmail data for active maps.
+
+  On startup:
+    1. Runs a one-off quick preload (last 1h, limit 5).
+    2. Exposes `run_preload_now/0` for an expanded preload (last 24h, limit 100).
+
+  Typically, expanded passes are triggered by WandererApp.Map.ZkbDataFetcher.
+  """
+
+  use GenServer
+  require Logger
+
+  alias WandererApp.{Api.MapState, MapSystemRepo}
+  alias WandererApp.Zkb.Provider.Fetcher
+
+  @type pass_type :: :quick | :expanded
+  @type fetch_result :: {integer(), non_neg_integer()}
+
+  @passes %{
+    quick:    %{hours: 1,  limit: 5},
+    expanded: %{hours: 24, limit: 100}
+  }
+
+  # how many minutes back we look for "active" maps
+  @last_active_cutoff_minutes 30
+
+  @default_max_concurrency 2
+  @task_timeout_ms        :timer.seconds(30)
+
+  ## Public API
+
+  @doc false
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker,
+      restart: :permanent,
+      shutdown: 5_000
+    }
+  end
+
+  @doc """
+  Starts the KillsPreloader GenServer.
+
+  Options:
+    - `:max_concurrency` (integer, default: #{@default_max_concurrency})
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @doc """
+  Triggers an expanded preload pass (last 24h, limit 100).
+  """
+  @spec run_preload_now() :: :ok
+  def run_preload_now do
+    GenServer.cast(__MODULE__, :run_expanded_pass)
+  end
+
+  ## GenServer callbacks
+
+  @impl true
+  def init(opts) do
+    max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
+    spawn_pass(:quick, max_concurrency)
+    {:ok, %{max_concurrency: max_concurrency}}
+  end
+
+  @impl true
+  def handle_cast(:run_expanded_pass, %{max_concurrency: max} = state) do
+    spawn_pass(:expanded, max)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
+    # Only log actual crashes, not normal exits or expected errors
+    case reason do
+      :normal -> :ok
+      :no_active_subscribed_maps -> :ok
+      :no_active_systems -> :ok
+      _ -> Logger.error("[ZkbPreloader] Preload task crashed: #{inspect(reason)}")
+    end
+    {:noreply, state}
+  end
+
+  ## Internal
+
+  defp spawn_pass(pass_type, max_concurrency) do
+    case Task.start(fn -> do_pass(pass_type, max_concurrency) end) do
+      {:ok, task} ->
+        Process.monitor(task)
+        :ok
+      {:error, reason} ->
+        Logger.error("[ZkbPreloader] Failed to start preload task: #{inspect(reason)}")
+        :error
+    end
+  end
+
+  @spec do_pass(pass_type(), pos_integer()) :: :ok
+  defp do_pass(pass_type, max_concurrency) do
+    %{hours: hours, limit: limit} = @passes[pass_type]
+    Logger.metadata(pass: pass_type)
+    start_time = System.monotonic_time(:millisecond)
+
+    case load_system_ids() do
+      {:ok, system_ids} ->
+        stats =
+          system_ids
+          |> Task.async_stream(
+               &fetch_system(&1, hours, limit),
+               max_concurrency: max_concurrency,
+               timeout: @task_timeout_ms,
+               on_timeout: :kill_task
+             )
+          |> Enum.reduce(%{success: 0, failed: 0, total_kills: 0}, &accumulate_results/2)
+
+        log_stats(pass_type, system_ids, stats, start_time)
+
+      {:error, reason} ->
+        Logger.error("Failed #{pass_type} preload: #{inspect(reason)}")
+    end
+
+    :ok
+  end
+
+  defp log_stats(type, ids, %{success: s, failed: f, total_kills: k}, start_ms) do
+    elapsed_s = (System.monotonic_time(:millisecond) - start_ms) / 1_000
+
+    Logger.info("""
+    Completed #{type} zkill preload:
+      • Systems: #{length(ids)}
+      • Success: #{s}
+      • Failed: #{f}
+      • Total Kills: #{k}
+      • Elapsed: #{Float.round(elapsed_s, 2)}s
+    """)
+  end
+
+  @spec accumulate_results(
+          {:ok, fetch_result()} | {:exit, any()} | {:error, any()},
+          %{success: integer(), failed: integer(), total_kills: integer()}
+        ) :: %{success: integer(), failed: integer(), total_kills: integer()}
+  defp accumulate_results({:ok, {_id, count}}, acc) do
+    %{acc | success: acc.success + 1, total_kills: acc.total_kills + count}
+  end
+  defp accumulate_results({:exit, _}, acc),  do: %{acc | failed: acc.failed + 1}
+  defp accumulate_results({:error, _}, acc), do: %{acc | failed: acc.failed + 1}
+
+  @spec fetch_system(integer(), pos_integer(), pos_integer()) :: fetch_result()
+  defp fetch_system(system_id, since_hours, limit) do
+    case Fetcher.fetch_killmails_for_system(system_id, since_hours: since_hours, limit: limit) do
+      {:ok, kills} ->
+        {system_id, length(kills)}
+
+      {:error, reason} ->
+        Logger.debug("Fetch error for system #{system_id}: #{inspect(reason)}")
+        {system_id, 0}
+    end
+  end
+
+  @doc """
+  Loads system IDs from active maps with active subscriptions.
+  """
+  @spec load_system_ids() :: {:ok, [integer()]} | {:error, term()}
+  def load_system_ids do
+    cutoff =
+      DateTime.utc_now()
+      |> DateTime.add(-@last_active_cutoff_minutes * 60, :second)
+
+    case MapState.get_last_active(cutoff) do
+      {:error, reason} ->
+        Logger.error("[ZkbPreloader] MapState.get_last_active failed: #{inspect(reason)}")
+        {:error, reason}
+
+      {:ok, maps} ->
+        maps
+        |> Enum.filter(&subscription_active?/1)
+        |> handle_active_maps()
+    end
+  end
+
+  defp handle_active_maps([]), do: {:error, :no_active_subscribed_maps}
+  defp handle_active_maps(active_maps) do
+    ids =
+      active_maps
+      |> Enum.flat_map(&fetch_ids_for_map/1)
+      |> Enum.uniq()
+
+    case ids do
+      [] -> {:error, :no_active_systems}
+      _  -> {:ok, ids}
+    end
+  end
+
+  defp fetch_ids_for_map(map) do
+    case MapSystemRepo.get_visible_by_map(map.map_id) do
+      {:ok, systems} -> Enum.map(systems, & &1.solar_system_id)
+      _              -> []
+    end
+  end
+
+  @spec subscription_active?(struct()) :: boolean()
+  defp subscription_active?(map) do
+    case WandererApp.Map.is_subscription_active?(map.id) do
+      {:ok, true} -> true
+      _           -> false
+    end
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills/supervisor.ex">
+defmodule WandererApp.Zkb.Supervisor do
+  @moduledoc """
+  Supervises the zKillboard-related processes.
+  """
+
+  use Supervisor
+
+  @type child_spec :: Supervisor.child_spec()
+  @type children :: [child_spec()]
+
+  @doc """
+  Start the supervisor.
+  """
+  @spec start_link(keyword()) :: Supervisor.on_start()
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @impl true
+  @spec init(keyword()) :: {:ok, {Supervisor.strategy(), children()}}
+  def init(_opts) do
+    children = [
+      # Static workers
+      WandererApp.Zkb.Preloader,
+      WandererApp.Zkb.Provider.Redisq
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+end
+</file>
+
+<file path="lib/wanderer_kills.ex">
+defmodule WandererKills do
+  @moduledoc """
+  Documentation for `WandererKills`.
+  """
+
+  @doc """
+  Hello world.
+
+  ## Examples
+
+      iex> WandererKills.hello()
+      :world
+
+  """
+  def hello do
+    :world
+  end
+end
+</file>
+
+<file path="test/test_helper.exs">
+ExUnit.start()
+</file>
+
+<file path="test/wanderer_kills_test.exs">
+defmodule WandererKillsTest do
+  use ExUnit.Case
+  doctest WandererKills
+
+  test "greets the world" do
+    assert WandererKills.hello() == :world
+  end
+end
+</file>
+
+<file path=".formatter.exs">
+# Used by "mix format"
+[
+  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
+]
+</file>
+
+<file path=".gitignore">
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# If you run "mix test --cover", coverage assets end up here.
+/cover/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# Where third-party dependencies like ExDoc output generated docs.
+/doc/
+
+# Ignore .fetch files in case you like to edit your project deps locally.
+/.fetch
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Also ignore archive artifacts (built via "mix archive.build").
+*.ez
+
+# Ignore package tarball (built via "mix hex.build").
+wanderer_kills-*.tar
+
+# Temporary files, for example, from tests.
+/tmp/
+</file>
+
+<file path="mix.exs">
+defmodule WandererKills.MixProject do
+  use Mix.Project
+
+
+  def project do
+    [
+      app: :wanderer_kills,
+      version: "0.1.0",
+      elixir: "~> 1.18",
+      start_permanent: Mix.env() == :prod,
+      deps: deps()
+    ]
+  end
+
+  # The OTP application entrypoint:
+  def application do
+    [
+      mod: {WandererKills.Application, []},
+      extra_applications: [:logger, :runtime_tools, :cachex, :jason]
+    ]
+  end
+
+  defp deps do
+    [
+      {:plug_cowboy, "~> 2.6"},     # HTTP server for exposing APIs
+      {:cachex, "~> 3.6"},          # local in-memory cache
+      {:redix, "~> 1.1"},           # Redis client (for cross-container cache, if desired)
+      {:httpoison, "~> 2.0"},       # HTTP client (for ESI calls)
+      {:jason, "~> 1.4"},           # JSON parsing
+      # Add any other dependencies you already use under wanderer_app/zkb:
+      # e.g. {:ecto_sql, "~> 3.10"}, {:postgrex, ">= 0.0.0"}, etc.
+    ]
+  end
+end
+</file>
+
+<file path="README.md">
+# WandererKills
+
+**TODO: Add description**
+
+## Installation
+
+If [available in Hex](https://hex.pm/docs/publish), the package can be installed
+by adding `wanderer_kills` to your list of dependencies in `mix.exs`:
+
+```elixir
+def deps do
+  [
+    {:wanderer_kills, "~> 0.1.0"}
+  ]
+end
+```
+
+Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
+and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
+be found at <https://hexdocs.pm/wanderer_kills>.
+</file>
+
+</files>

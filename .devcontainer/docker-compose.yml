@@ -1,0 +1,23 @@
+version: "0.1"
+
+services:
+  wanderer-kills:
+    environment:
+      PORT: 4004
+      WEB_APP_URL: "http://localhost:4004"
+      ERL_AFLAGS: "-kernel shell_history enabled"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 4004:4004
+    volumes:
+      - ..:/app:delegated
+      - ~/.gitconfig:/root/.gitconfig
+      - ~/.gitignore:/root/.gitignore
+      - ~/.ssh:/root/.ssh
+      - elixir-artifacts:/opt/elixir-artifacts
+    command: sleep infinity
+
+volumes:
+  elixir-artifacts: {}

@@ -1,0 +1,30 @@
+{
+  "name": "wanderer-kills-dev",
+  "dockerComposeFile": ["./docker-compose.yml"],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "jakebecker.elixir-ls",
+        "JakeBecker.elixir-ls",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "search.exclude": {
+          "**/doc": true
+        },
+        "elixirLS.dialyzerEnabled": false
+      }
+    }
+  },
+  "service": "wanderer-kills",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "networkArgs": ["--add-host=host.docker.internal:host-gateway"]
+    }
+  },
+  "forwardPorts": [4004]
+}
