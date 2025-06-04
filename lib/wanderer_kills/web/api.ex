@@ -158,6 +158,15 @@ defmodule WandererKills.Web.Api do
     end
   end
 
+  # Killfeed endpoints
+  get "/api/killfeed" do
+    WandererKills.Web.Api.KillfeedController.poll(conn, conn.query_params)
+  end
+
+  get "/api/killfeed/next" do
+    WandererKills.Web.Api.KillfeedController.next(conn, conn.query_params)
+  end
+
   # Catch-all route
   match _ do
     Logger.warning("Invalid request path", %{

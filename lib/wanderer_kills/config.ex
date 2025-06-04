@@ -255,4 +255,29 @@ defmodule WandererKills.Config do
         }
     end
   end
+
+  @doc """
+  Gets killmail store configuration settings.
+  """
+  @spec killmail_store() :: %{
+          gc_interval_ms: integer(),
+          max_events_per_system: integer()
+        }
+  def killmail_store do
+    config = Application.get_env(:wanderer_kills, :killmail_store, [])
+
+    case config do
+      config when is_map(config) ->
+        %{
+          gc_interval_ms: Map.get(config, :gc_interval_ms, 60_000),
+          max_events_per_system: Map.get(config, :max_events_per_system, 10_000)
+        }
+
+      config when is_list(config) ->
+        %{
+          gc_interval_ms: Keyword.get(config, :gc_interval_ms, 60_000),
+          max_events_per_system: Keyword.get(config, :max_events_per_system, 10_000)
+        }
+    end
+  end
 end

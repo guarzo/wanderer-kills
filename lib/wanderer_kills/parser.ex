@@ -106,8 +106,13 @@ defmodule WandererKills.Parser do
     with {:ok, merged} <- Core.merge_killmail_data(full, %{"zkb" => zkb}),
          {:ok, built} <- Core.build_kill_data(merged, cutoff),
          {:ok, enriched} <- enrich_killmail(built) do
+      # INTEGRATION POINT: Add to KillmailStore
+      system_id = enriched["solar_system_id"] || enriched["system_id"]
+      :ok = WandererKills.KillmailStore.insert_event(system_id, enriched)
+
       Logger.info("Successfully enriched and stored killmail", %{
         killmail_id: full["killmail_id"],
+        system_id: system_id,
         operation: :process_killmail,
         status: :success
       })

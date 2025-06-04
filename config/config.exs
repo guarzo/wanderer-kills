@@ -53,6 +53,11 @@ config :wanderer_kills,
     backoff_factor: 2,
     task_timeout_ms: 10_000
   },
+  # Killmail store configuration
+  killmail_store: %{
+    gc_interval_ms: 60_000,
+    max_events_per_system: 10_000
+  },
   # HTTP status code mappings
   http_status_codes: %{
     success: 200..299,
@@ -165,3 +170,6 @@ config :logger, :console,
 
 # Import environment specific config
 import_config "#{config_env()}.exs"
+
+# Phoenix PubSub configuration
+config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG2

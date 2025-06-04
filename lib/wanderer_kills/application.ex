@@ -24,6 +24,8 @@ defmodule WandererKills.Application do
     # 2) Build the supervision tree
     base_children = [
       {Task.Supervisor, name: WandererKills.TaskSupervisor},
+      {Phoenix.PubSub, name: WandererKills.PubSub},
+      WandererKills.KillmailStore,
       WandererKills.Cache.Supervisor,
       WandererKills.Infrastructure.Monitoring,
       {Plug.Cowboy,

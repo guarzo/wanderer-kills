@@ -1,12 +1,36 @@
-# MyApp.KillmailStore Implementation Guide
+# WandererKills.KillmailStore Implementation Guide
 
-This document outlines the implementation of a GenServer-based killmail storage and distribution system using ETS tables, Phoenix PubSub, and HTTP endpoints.
+This document outlines the implementation of a GenServer-based killmail storage and distribution system using ETS tables, Phoenix PubSub, and HTTP endpoints for the WandererKills project.
+
+## Project Context & Integration Points
+
+**Current Application Structure:**
+
+- **Project Name:** `wanderer_kills`
+- **Main Module:** `WandererKills`
+- **HTTP API:** Uses Plug.Router in `WandererKills.Web.Api`
+- **Application:** Supervised by `WandererKills.Application`
+- **Killmail Processing:** Currently handled by `WandererKills.Parser` and ingested via `WandererKills.Preloader.RedisQ`
+
+## Dependencies Updates
+
+**Add to `mix.exs`:**
+
+```elixir
+defp deps do
+  [
+    # ... existing deps ...
+    {:phoenix_pubsub, "~> 2.1"},  # Add this line
+    # ... rest of deps ...
+  ]
+end
+```
 
 ## Core GenServer Module
 
 ### Create the GenServer Module
 
-Create a new GenServer module `MyApp.KillmailStore` that implements the following initialization:
+Create a new GenServer module `WandererKills.KillmailStore` that implements the following initialization:
 
 #### `init/1` Implementation
 
@@ -89,7 +113,7 @@ fetch_one_event(client_id :: String.t(), system_ids :: [integer()]) :: {:ok, {ev
 
 ### Periodic Cleanup Process
 
-Add a periodic "garbage-collection" process (`GenServer.cast/2`) inside `MyApp.KillmailStore` that:
+Add a periodic "garbage-collection" process (`GenServer.cast/2`) inside `WandererKills.KillmailStore` that:
 
 - Runs every 60 seconds (via `Process.send_after/3`)
 - Performs the following operations:
@@ -103,38 +127,104 @@ Add a periodic "garbage-collection" process (`GenServer.cast/2`) inside `MyApp.K
 
 ### Supervision Tree
 
-Register `MyApp.KillmailStore` in the application supervision tree (e.g., in `lib/my_app/application.ex`):
+Register `WandererKills.KillmailStore` in the application supervision tree in `lib/wanderer_kills/application.ex`:
 
 ```elixir
-children = [
-  MyApp.KillmailStore,
-  {Phoenix.PubSub, name: MyApp.PubSub},
-  # … other children …
-]
+defp base_children do
+  [
+    {Task.Supervisor, name: WandererKills.TaskSupervisor},
+    {Phoenix.PubSub, name: WandererKills.PubSub},  # Add this
+    WandererKills.KillmailStore,                    # Add this
+    WandererKills.Cache.Supervisor,
+    # ... rest of existing children ...
+  ]
+end
 ```
 
-### Dependencies
+### Dependencies & Configuration
 
-Ensure `:phoenix_pubsub` is listed as an application dependency in `mix.exs`, and verify `config/config.exs` contains:
+Update `config/config.exs`:
 
 ```elixir
-config :my_app, MyApp.PubSub,
+# Add Phoenix PubSub configuration
+config :wanderer_kills, WandererKills.PubSub,
   adapter: Phoenix.PubSub.PG2
+
+# Add killmail store configuration
+config :wanderer_kills,
+  # ... existing config ...
+  killmail_store: %{
+    gc_interval_ms: 60_000,
+    max_events_per_system: 10_000
+  }
 ```
 
-## Phoenix Controller
+## Parser Integration
+
+### Integration Points
+
+**In `lib/wanderer_kills/parser.ex`** - Modify `process_killmail/3`:
+
+```elixir
+defp process_killmail(full, zkb, cutoff) do
+  with {:ok, merged} <- Core.merge_killmail_data(full, %{"zkb" => zkb}),
+       {:ok, built} <- Core.build_kill_data(merged, cutoff),
+       {:ok, enriched} <- enrich_killmail(built) do
+
+    # INTEGRATION POINT: Add to KillmailStore
+    system_id = enriched["solar_system_id"] || enriched["system_id"]
+    :ok = WandererKills.KillmailStore.insert_event(system_id, enriched)
+
+    Logger.info("Successfully enriched and stored killmail", %{
+      killmail_id: full["killmail_id"],
+      system_id: system_id,
+      operation: :process_killmail,
+      status: :success
+    })
+
+    {:ok, enriched}
+  else
+    # ... existing error handling ...
+  end
+end
+```
+
+**Data Structure Considerations:**
+
+- Normalize system_id field: `killmail["solar_system_id"] || killmail["system_id"]`
+- Preserve full killmail structure as received from parser
+- Handle varying field names (`killmail_id` vs `killID`)
+
+## HTTP API Integration
+
+### Update Existing API Router
+
+**Update `lib/wanderer_kills/web/api.ex`:**
+
+Add new routes before the catch-all `match _ do`:
+
+```elixir
+# Killfeed endpoints
+get "/api/killfeed" do
+  WandererKills.Web.Api.KillfeedController.poll(conn, conn.query_params)
+end
+
+get "/api/killfeed/next" do
+  WandererKills.Web.Api.KillfeedController.next(conn, conn.query_params)
+end
+```
 
 ### Create KillfeedController
 
-Create a Phoenix Controller `MyAppWeb.KillfeedController` with two actions:
+Create `lib/wanderer_kills/web/api/killfeed_controller.ex` with two actions:
 
 #### 1. `poll/2` - Batch Fetch
 
 - **Purpose:** Batch fetch for multiple events
-- **Route:** `GET /killfeed?client_id=foo&systems[]=30000142&systems[]=30000143`
+- **Route:** `GET /api/killfeed?client_id=foo&systems[]=30000142&systems[]=30000143`
 - **Behavior:**
   - Accepts `client_id` and `systems` as query params
-  - Calls `MyApp.KillmailStore.fetch_for_client(client_id, system_list)`
+  - Calls `WandererKills.KillmailStore.fetch_for_client(client_id, system_list)`
   - Returns 200 with JSON `events: [...]`
   - If events is empty, can return 204 No Content or 200 with an empty array
 
@@ -143,7 +233,7 @@ Create a Phoenix Controller `MyAppWeb.KillfeedController` with two actions:
 - **Purpose:** Single-event fetch
 - **Route:** Same query params as `poll/2`
 - **Behavior:**
-  - Calls `MyApp.KillmailStore.fetch_one_event(client_id, system_list)`
+  - Calls `WandererKills.KillmailStore.fetch_one_event(client_id, system_list)`
   - If `:empty`, returns 204 No Content
   - If `{:ok, {event_id, sys_id, km}}`, returns 200 with JSON:
     ```json
@@ -154,36 +244,49 @@ Create a Phoenix Controller `MyAppWeb.KillfeedController` with two actions:
     }
     ```
 
-### Router Configuration
+## Configuration Enhancements
 
-Add routes in `lib/my_app_web/router.ex` under an API scope:
+### Update Config Module
+
+**Update `lib/wanderer_kills/config.ex`:**
 
 ```elixir
-scope "/api", MyAppWeb do
-  get "/killfeed", KillfeedController, :poll
-  get "/killfeed/next", KillfeedController, :next
+@doc """
+Gets killmail store configuration settings.
+"""
+@spec killmail_store() :: %{
+        gc_interval_ms: integer(),
+        max_events_per_system: integer()
+      }
+def killmail_store do
+  config = Application.get_env(:wanderer_kills, :killmail_store, [])
+
+  case config do
+    config when is_map(config) ->
+      %{
+        gc_interval_ms: Map.get(config, :gc_interval_ms, 60_000),
+        max_events_per_system: Map.get(config, :max_events_per_system, 10_000)
+      }
+
+    config when is_list(config) ->
+      %{
+        gc_interval_ms: Keyword.get(config, :gc_interval_ms, 60_000),
+        max_events_per_system: Keyword.get(config, :max_events_per_system, 10_000)
+      }
+  end
 end
 ```
-
-## Integration
-
-### Killmail Ingestion
-
-In any place where raw killmail ingestion happens (e.g., inside your existing zKillBoard listener or ESI fetcher):
-
-- Replace the old RedisQ insertion with a call to `MyApp.KillmailStore.insert_event(system_id, killmail_map)`
-- This ensures each new killmail both goes into ETS and is broadcast over PubSub
 
 ## Client Usage
 
 ### Example Implementation
 
-Write a client example (in `doc/killfeed_example.md`) showing how to:
+Write a client example showing how to:
 
 1. **Real-time Subscription:**
 
    - Open a Phoenix Channel or PubSub subscription to `"system:<system_id>"`
-   - Use `Phoenix.PubSub.subscribe(MyApp.PubSub, "system:30000142")` to receive `{:new_killmail, 30000142, killmail}` messages in real time
+   - Use `Phoenix.PubSub.subscribe(WandererKills.PubSub, "system:30000142")` to receive `{:new_killmail, 30000142, killmail}` messages in real time
 
 2. **Backfill Process:**
    - If the client disconnects or starts fresh, call `GET /api/killfeed?client_id=<id>&systems[]=30000142` to backfill any missed events
@@ -193,11 +296,11 @@ Write a client example (in `doc/killfeed_example.md`) showing how to:
 
 ### Test Suite
 
-Add tests under `test/my_app/killmail_store_test.exs` that:
+Add tests under `test/wanderer_kills/killmail_store_test.exs` following existing patterns from `test/wanderer_kills/api_test.exs`:
 
 1. **Basic Functionality:**
 
-   - Start `MyApp.KillmailStore` in isolation
+   - Start `WandererKills.KillmailStore` in isolation
    - Call `insert_event/2` three times with the same `system_id` and different dummy killmail maps
    - Call `fetch_for_client("test-client", [same_system_id])` and assert you get a list of all three events, each with increasing `event_id`
 
@@ -219,24 +322,45 @@ Add tests under `test/my_app/killmail_store_test.exs` that:
    - Call the internal GC function via `GenServer.cast/2`
    - Verify ETS rows with `event_id <= min_offset` are gone
 
-## Documentation
+**Create:** `test/wanderer_kills/web/api/killfeed_controller_test.exs`
 
-### README.md Section
+## Monitoring Integration
 
-Add documentation in `README.md` under a section "Killfeed API" that explains:
+**Integrate with existing telemetry:**
 
-1. **HTTP Endpoints:**
+```elixir
+# Add to lib/wanderer_kills/infrastructure/telemetry.ex
+def count_killmail_store_operations do
+  # Count ETS operations, PubSub broadcasts, etc.
+end
+```
 
-   - The two HTTP endpoints (`/api/killfeed` and `/api/killfeed/next`)
-   - Their query parameters and example responses
+## Migration Considerations
 
-2. **Real-time Updates:**
+**Backward Compatibility:**
 
-   - How to subscribe to PubSub topics (`"system:<system_id>"`) for real-time updates
+- Existing endpoints (`/killmail/:id`, `/system_killmails/:system_id`, etc.) remain unchanged
+- New killfeed endpoints are additive
+- No changes to existing cache behavior
+- Parser continues to cache killmails as before
 
-3. **Expected Behavior:**
-   - Clients always call back to fetch missed events if they dropped the socket
-   - Then resume real-time updates
+**Performance Considerations:**
+
+- ETS tables are in-memory only (as specified)
+- Garbage collection every 60 seconds to prevent memory bloat
+- Client offset tracking prevents duplicate deliveries
+- Integration with existing rate limiting and monitoring
+
+## Implementation Order
+
+1. Add Phoenix PubSub dependency and configuration
+2. Create basic KillmailStore GenServer with ETS tables
+3. Add integration point in Parser module
+4. Create KillfeedController with basic endpoints
+5. Add routes to main API module
+6. Write comprehensive tests
+7. Add telemetry and monitoring
+8. Update documentation
 
 ## Optional: Mnesia Persistence
 
@@ -253,7 +377,7 @@ If you need to persist across restarts, replace the ETS tables with Mnesia table
 
 2. **Initialization:**
 
-   - In `MyApp.KillmailStore.init/1`, call `:mnesia.create_table/2` for each table if not exists
+   - In `WandererKills.KillmailStore.init/1`, call `:mnesia.create_table/2` for each table if not exists
    - Wait for the schema
 
 3. **Data Operations:**
