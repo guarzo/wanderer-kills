@@ -54,7 +54,8 @@ defmodule WandererKills.KillmailStore do
   ## Returns
   - `{:ok, events}` - List of `{event_id, system_id, killmail}` tuples
   """
-  @spec fetch_for_client(client_id(), [system_id()]) :: {:ok, [{event_id(), system_id(), killmail_map()}]}
+  @spec fetch_for_client(client_id(), [system_id()]) ::
+          {:ok, [{event_id(), system_id(), killmail_map()}]}
   def fetch_for_client(client_id, system_ids) do
     GenServer.call(__MODULE__, {:fetch, client_id, system_ids})
   end
@@ -71,7 +72,7 @@ defmodule WandererKills.KillmailStore do
   - `:empty` - No new events available
   """
   @spec fetch_one_event(client_id(), [system_id()]) ::
-    {:ok, {event_id(), system_id(), killmail_map()}} | :empty
+          {:ok, {event_id(), system_id(), killmail_map()}} | :empty
   def fetch_one_event(client_id, system_ids) do
     GenServer.call(__MODULE__, {:fetch_one, client_id, system_ids})
   end
@@ -128,13 +129,18 @@ defmodule WandererKills.KillmailStore do
     client_offsets = get_client_offsets(client_id)
 
     # Collect matching events
-    events = :ets.foldl(fn {event_id, sys_id, km}, acc ->
-      if sys_id in system_ids and event_id > get_offset_for_system(sys_id, client_offsets) do
-        [{event_id, sys_id, km} | acc]
-      else
-        acc
-      end
-    end, [], :killmail_events)
+    events =
+      :ets.foldl(
+        fn {event_id, sys_id, km}, acc ->
+          if sys_id in system_ids and event_id > get_offset_for_system(sys_id, client_offsets) do
+            [{event_id, sys_id, km} | acc]
+          else
+            acc
+          end
+        end,
+        [],
+        :killmail_events
+      )
 
     # Sort by event_id ascending
     sorted_events = Enum.sort_by(events, &elem(&1, 0))
@@ -158,17 +164,22 @@ defmodule WandererKills.KillmailStore do
     client_offsets = get_client_offsets(client_id)
 
     # Find the single event with the smallest event_id
-    result = :ets.foldl(fn {event_id, sys_id, km}, acc ->
-      if sys_id in system_ids and event_id > get_offset_for_system(sys_id, client_offsets) do
-        case acc do
-          nil -> {event_id, sys_id, km}
-          {current_event_id, _, _} when event_id < current_event_id -> {event_id, sys_id, km}
-          _ -> acc
-        end
-      else
-        acc
-      end
-    end, nil, :killmail_events)
+    result =
+      :ets.foldl(
+        fn {event_id, sys_id, km}, acc ->
+          if sys_id in system_ids and event_id > get_offset_for_system(sys_id, client_offsets) do
+            case acc do
+              nil -> {event_id, sys_id, km}
+              {current_event_id, _, _} when event_id < current_event_id -> {event_id, sys_id, km}
+              _ -> acc
+            end
+          else
+            acc
+          end
+        end,
+        nil,
+        :killmail_events
+      )
 
     case result do
       nil ->
@@ -218,16 +229,19 @@ defmodule WandererKills.KillmailStore do
     Map.get(offsets, system_id, 0)
   end
 
-  @spec update_client_offsets(client_offsets(), [{event_id(), system_id(), killmail_map()}]) :: client_offsets()
+  @spec update_client_offsets(client_offsets(), [{event_id(), system_id(), killmail_map()}]) ::
+          client_offsets()
   defp update_client_offsets(current_offsets, events) do
     # Group events by system_id and take the max event_id for each system
-    max_event_ids = events
-    |> Enum.group_by(&elem(&1, 1))  # Group by system_id
-    |> Enum.map(fn {sys_id, sys_events} ->
-      max_event_id = sys_events |> Enum.map(&elem(&1, 0)) |> Enum.max()
-      {sys_id, max_event_id}
-    end)
-    |> Enum.into(%{})
+    max_event_ids =
+      events
+      # Group by system_id
+      |> Enum.group_by(&elem(&1, 1))
+      |> Enum.map(fn {sys_id, sys_events} ->
+        max_event_id = sys_events |> Enum.map(&elem(&1, 0)) |> Enum.max()
+        {sys_id, max_event_id}
+      end)
+      |> Enum.into(%{})
 
     Map.merge(current_offsets, max_event_ids)
   end
@@ -245,24 +259,27 @@ defmodule WandererKills.KillmailStore do
     all_offsets = :ets.tab2list(:client_offsets)
 
     # Find the global minimum offset across all systems
-    min_offset = case all_offsets do
-      [] ->
-        0  # No clients, don't delete anything yet
+    min_offset =
+      case all_offsets do
+        [] ->
+          # No clients, don't delete anything yet
+          0
 
-      offset_list ->
-        offset_list
-        |> Enum.flat_map(fn {_client_id, offsets} -> Map.values(offsets) end)
-        |> case do
-          [] -> 0
-          values -> Enum.min(values)
-        end
-    end
+        offset_list ->
+          offset_list
+          |> Enum.flat_map(fn {_client_id, offsets} -> Map.values(offsets) end)
+          |> case do
+            [] -> 0
+            values -> Enum.min(values)
+          end
+      end
 
     # Delete events with event_id <= min_offset
     if min_offset > 0 do
-      deleted_count = :ets.select_delete(:killmail_events, [
-        {{:"$1", :"$2", :"$3"}, [{:"=<", :"$1", min_offset}], [true]}
-      ])
+      deleted_count =
+        :ets.select_delete(:killmail_events, [
+          {{:"$1", :"$2", :"$3"}, [{:"=<", :"$1", min_offset}], [true]}
+        ])
 
       Logger.info("Garbage collected killmail events", %{
         min_offset: min_offset,

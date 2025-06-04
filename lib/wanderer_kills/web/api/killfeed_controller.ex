@@ -30,7 +30,6 @@ defmodule WandererKills.Web.Api.KillfeedController do
     with {:ok, client_id} <- validate_client_id(params),
          {:ok, system_ids} <- validate_system_ids(params),
          {:ok, events} <- KillmailStore.fetch_for_client(client_id, system_ids) do
-
       case events do
         [] ->
           Logger.debug("No new events for client", %{
@@ -52,13 +51,14 @@ defmodule WandererKills.Web.Api.KillfeedController do
           })
 
           # Transform events to API format
-          api_events = Enum.map(events, fn {event_id, system_id, killmail} ->
-            %{
-              event_id: event_id,
-              system_id: system_id,
-              killmail: killmail
-            }
-          end)
+          api_events =
+            Enum.map(events, fn {event_id, system_id, killmail} ->
+              %{
+                event_id: event_id,
+                system_id: system_id,
+                killmail: killmail
+              }
+            end)
 
           send_json_resp(conn, 200, %{events: api_events})
       end
@@ -100,7 +100,6 @@ defmodule WandererKills.Web.Api.KillfeedController do
   def next(conn, params) do
     with {:ok, client_id} <- validate_client_id(params),
          {:ok, system_ids} <- validate_system_ids(params) do
-
       case KillmailStore.fetch_one_event(client_id, system_ids) do
         :empty ->
           Logger.debug("No new events for client", %{
@@ -152,7 +151,8 @@ defmodule WandererKills.Web.Api.KillfeedController do
   # Private helper functions
 
   @spec validate_client_id(map()) :: {:ok, String.t()} | {:error, :missing_client_id}
-  defp validate_client_id(%{"client_id" => client_id}) when is_binary(client_id) and client_id != "" do
+  defp validate_client_id(%{"client_id" => client_id})
+       when is_binary(client_id) and client_id != "" do
     {:ok, client_id}
   end
 
@@ -160,20 +160,24 @@ defmodule WandererKills.Web.Api.KillfeedController do
     {:error, :missing_client_id}
   end
 
-  @spec validate_system_ids(map()) :: {:ok, [integer()]} | {:error, :missing_systems | :invalid_systems}
+  @spec validate_system_ids(map()) ::
+          {:ok, [integer()]} | {:error, :missing_systems | :invalid_systems}
   defp validate_system_ids(%{"systems" => systems}) when is_list(systems) do
     try do
-      system_ids = Enum.map(systems, fn
-        system when is_binary(system) ->
-          case Integer.parse(system) do
-            {id, ""} when id > 0 -> id
-            _ -> throw(:invalid_system_id)
-          end
-        system when is_integer(system) and system > 0 ->
-          system
-        _ ->
-          throw(:invalid_system_id)
-      end)
+      system_ids =
+        Enum.map(systems, fn
+          system when is_binary(system) ->
+            case Integer.parse(system) do
+              {id, ""} when id > 0 -> id
+              _ -> throw(:invalid_system_id)
+            end
+
+          system when is_integer(system) and system > 0 ->
+            system
+
+          _ ->
+            throw(:invalid_system_id)
+        end)
 
       {:ok, system_ids}
     catch

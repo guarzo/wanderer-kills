@@ -3,8 +3,8 @@ defmodule WandererKills.KillmailStoreTest do
 
   alias WandererKills.KillmailStore
 
-  @system_id_1 30000142
-  @system_id_2 30000143
+  @system_id_1 30_000_142
+  @system_id_2 30_000_143
 
   @test_killmail_1 %{
     "killmail_id" => 12345,
@@ -60,7 +60,8 @@ defmodule WandererKills.KillmailStoreTest do
       assert Enum.all?(event_ids, &(&1 > 0))
 
       # Verify event structure
-      [{event_id_1, sys_id_1, km_1}, {event_id_2, sys_id_2, km_2}, {event_id_3, sys_id_3, km_3}] = events
+      [{event_id_1, sys_id_1, km_1}, {event_id_2, sys_id_2, km_2}, {event_id_3, sys_id_3, km_3}] =
+        events
 
       assert sys_id_1 == @system_id_1
       assert sys_id_2 == @system_id_1
@@ -122,12 +123,16 @@ defmodule WandererKills.KillmailStoreTest do
       :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
 
       # First fetch_one should return earliest event
-      {:ok, {event_id_1, sys_id, killmail_1}} = KillmailStore.fetch_one_event(client_id, [@system_id_1])
+      {:ok, {event_id_1, sys_id, killmail_1}} =
+        KillmailStore.fetch_one_event(client_id, [@system_id_1])
+
       assert sys_id == @system_id_1
       assert killmail_1["killmail_id"] == 12345
 
       # Second fetch_one should return next event
-      {:ok, {event_id_2, sys_id, killmail_2}} = KillmailStore.fetch_one_event(client_id, [@system_id_1])
+      {:ok, {event_id_2, sys_id, killmail_2}} =
+        KillmailStore.fetch_one_event(client_id, [@system_id_1])
+
       assert sys_id == @system_id_1
       assert killmail_2["killmail_id"] == 12346
       assert event_id_2 > event_id_1
@@ -155,11 +160,15 @@ defmodule WandererKills.KillmailStoreTest do
       assert length(events_2) == 2
 
       # Client 1 second fetch should be empty
-      {:ok, events_1_again} = KillmailStore.fetch_for_client(client_1, [@system_id_1, @system_id_2])
+      {:ok, events_1_again} =
+        KillmailStore.fetch_for_client(client_1, [@system_id_1, @system_id_2])
+
       assert events_1_again == []
 
       # Client 2 second fetch should also be empty
-      {:ok, events_2_again} = KillmailStore.fetch_for_client(client_2, [@system_id_1, @system_id_2])
+      {:ok, events_2_again} =
+        KillmailStore.fetch_for_client(client_2, [@system_id_1, @system_id_2])
+
       assert events_2_again == []
     end
 
@@ -245,7 +254,7 @@ defmodule WandererKills.KillmailStoreTest do
 
     test "handles non-existent system" do
       client_id = "missing-system-client"
-      non_existent_system = 99999999
+      non_existent_system = 99_999_999
 
       # Insert events for existing system
       :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
@@ -265,7 +274,8 @@ defmodule WandererKills.KillmailStoreTest do
 
       # Insert events in specific order
       :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(1)  # Ensure different timestamps
+      # Ensure different timestamps
+      Process.sleep(1)
       :ok = KillmailStore.insert_event(@system_id_2, @test_killmail_2)
       Process.sleep(1)
       :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_3)
@@ -281,9 +291,12 @@ defmodule WandererKills.KillmailStoreTest do
 
       # Verify the order matches insertion order
       [first, second, third] = events
-      assert elem(first, 2)["killmail_id"] == 12345  # @test_killmail_1
-      assert elem(second, 2)["killmail_id"] == 12346 # @test_killmail_2
-      assert elem(third, 2)["killmail_id"] == 12347  # @test_killmail_3
+      # @test_killmail_1
+      assert elem(first, 2)["killmail_id"] == 12345
+      # @test_killmail_2
+      assert elem(second, 2)["killmail_id"] == 12346
+      # @test_killmail_3
+      assert elem(third, 2)["killmail_id"] == 12347
     end
   end
 end
