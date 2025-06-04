@@ -1,157 +1,264 @@
-Create a new GenServer module MyApp.KillmailStore that, on init/1, does the following:
+# MyApp.KillmailStore Implementation Guide
 
-Creates an ETS table named :killmail_events of type :ordered_set, public, named table.
+This document outlines the implementation of a GenServer-based killmail storage and distribution system using ETS tables, Phoenix PubSub, and HTTP endpoints.
 
-Creates an ETS table named :client_offsets of type :set, public, named table.
+## Core GenServer Module
 
-Creates an ETS table named :counters of type :set, public, named table, and inserts {:killmail_seq, 0}.
+### Create the GenServer Module
 
-Returns {:ok, %{}} as its initial state.
+Create a new GenServer module `MyApp.KillmailStore` that implements the following initialization:
 
-Implement a public function insert_event(system_id :: integer(), killmail_map :: map()) :: :ok in MyApp.KillmailStore that:
+#### `init/1` Implementation
 
-Calls GenServer.call(**MODULE**, {:insert, system_id, killmail_map}).
+On `init/1`, the module should:
 
-In the GenServer’s handle_call({:insert, system_id, killmail_map}, \_from, state), does the following:
+1. Create an ETS table named `:killmail_events` of type `:ordered_set`, public, named table
+2. Create an ETS table named `:client_offsets` of type `:set`, public, named table
+3. Create an ETS table named `:counters` of type `:set`, public, named table, and insert `{:killmail_seq, 0}`
+4. Return `{:ok, %{}}` as its initial state
 
-Reads the current counter from :counters (:killmail_seq), increments it by 1, and writes it back as the new :killmail_seq.
+## Public API Functions
 
-Inserts {new_seq, system_id, killmail_map} into ETS table :killmail_events.
+### 1. `insert_event/2`
 
-Broadcasts via Phoenix.PubSub.broadcast!/3 on topic "system:#{system_id}" with message {:new_killmail, system_id, killmail_map}.
+Implement a public function:
 
-Replies {:reply, :ok, state}.
+```elixir
+insert_event(system_id :: integer(), killmail_map :: map()) :: :ok
+```
 
-Implement a public function fetch_for_client(client_id :: String.t(), system_ids :: [integer()]) :: {:ok, [{integer(), integer(), map()}]} in MyApp.KillmailStore that:
+**Behavior:**
 
-Calls GenServer.call(**MODULE**, {:fetch, client_id, system_ids}).
+- Calls `GenServer.call(__MODULE__, {:insert, system_id, killmail_map})`
 
-In the GenServer’s handle_call({:fetch, client_id, system_ids}, \_from, state), does the following:
+**GenServer Handler:** `handle_call({:insert, system_id, killmail_map}, _from, state)`
 
-Looks up ETS :client_offsets for key client_id. If none, uses %{} as offsets.
+1. Read the current counter from `:counters` (`:killmail_seq`)
+2. Increment it by 1 and write it back as the new `:killmail_seq`
+3. Insert `{new_seq, system_id, killmail_map}` into ETS table `:killmail_events`
+4. Broadcast via `Phoenix.PubSub.broadcast!/3` on topic `"system:#{system_id}"` with message `{:new_killmail, system_id, killmail_map}`
+5. Reply `{:reply, :ok, state}`
 
-Iterates over every ETS row in :killmail_events (via :ets.foldl/3) to collect [{event_id, sys_id, km} | acc] where sys_id is in system_ids and event_id > offset_for(sys_id, offsets).
+### 2. `fetch_for_client/2`
 
-Sorts the resulting list ascending by event_id.
+Implement a public function:
 
-Builds updated_offsets by taking the max event_id per sys_id in that list and merging into the client’s offsets map.
+```elixir
+fetch_for_client(client_id :: String.t(), system_ids :: [integer()]) :: {:ok, [{integer(), integer(), map()}]}
+```
 
-Writes :ets.insert(:client_offsets, {client_id, updated_offsets}).
+**Behavior:**
 
-Replies {:reply, {:ok, sorted_events}, state}.
+- Calls `GenServer.call(__MODULE__, {:fetch, client_id, system_ids})`
 
-Implement a public function fetch_one_event(client_id :: String.t(), system_ids :: [integer()]) :: {:ok, {event_id :: integer(), system_id :: integer(), killmail_map :: map()}} | :empty in MyApp.KillmailStore that:
+**GenServer Handler:** `handle_call({:fetch, client_id, system_ids}, _from, state)`
 
-Calls GenServer.call(**MODULE**, {:fetch_one, client_id, system_ids}).
+1. Look up ETS `:client_offsets` for key `client_id`. If none, use `%{}` as offsets
+2. Iterate over every ETS row in `:killmail_events` (via `:ets.foldl/3`) to collect `[{event_id, sys_id, km} | acc]` where:
+   - `sys_id` is in `system_ids`
+   - `event_id > offset_for(sys_id, offsets)`
+3. Sort the resulting list ascending by `event_id`
+4. Build `updated_offsets` by taking the max `event_id` per `sys_id` in that list and merging into the client's offsets map
+5. Write `:ets.insert(:client_offsets, {client_id, updated_offsets})`
+6. Reply `{:reply, {:ok, sorted_events}, state}`
 
-In the GenServer’s handle_call({:fetch_one, client_id, system_ids}, \_from, state), does the following:
+### 3. `fetch_one_event/2`
 
-Reads ETS :client_offsets for client_id or defaults to %{}.
+Implement a public function:
 
-Uses :ets.foldl/3 to scan every {event_id, sys_id, km} in :killmail_events, and keeps only the single tuple with the smallest event_id such that sys_id in system_ids and event_id > offset_for(sys_id).
+```elixir
+fetch_one_event(client_id :: String.t(), system_ids :: [integer()]) :: {:ok, {event_id :: integer(), system_id :: integer(), killmail_map :: map()}} | :empty
+```
 
-If no matching row is found, replies {:reply, :empty, state}.
+**Behavior:**
 
-Otherwise, updates the offset for that single sys_id in ETS :client_offsets to the returned event_id.
+- Calls `GenServer.call(__MODULE__, {:fetch_one, client_id, system_ids})`
 
-Replies {:reply, {:ok, {event_id, sys_id, km}}, state}.
+**GenServer Handler:** `handle_call({:fetch_one, client_id, system_ids}, _from, state)`
 
-Add a periodic “garbage‐collection” process (GenServer.cast/2) inside MyApp.KillmailStore that runs every 60 seconds (via Process.send_after/3) and does:
+1. Read ETS `:client_offsets` for `client_id` or default to `%{}`
+2. Use `:ets.foldl/3` to scan every `{event_id, sys_id, km}` in `:killmail_events`
+3. Keep only the single tuple with the smallest `event_id` such that:
+   - `sys_id` in `system_ids`
+   - `event_id > offset_for(sys_id)`
+4. If no matching row is found, reply `{:reply, :empty, state}`
+5. Otherwise, update the offset for that single `sys_id` in ETS `:client_offsets` to the returned `event_id`
+6. Reply `{:reply, {:ok, {event_id, sys_id, km}}, state}`
 
-Reads all client‐offset maps from :client_offsets (via :ets.tab2list/1), merges them to find the global minimum min_offset across all systems.
+## Garbage Collection
 
-Deletes every ETS row in :killmail_events with event_id <= min_offset (use :ets.select_delete/2 or :ets.foldl/3 + :ets.delete_object/2).
+### Periodic Cleanup Process
 
-Schedules itself to run again in 60_000 ms.
+Add a periodic "garbage-collection" process (`GenServer.cast/2`) inside `MyApp.KillmailStore` that:
 
-Register MyApp.KillmailStore in the application supervision tree (e.g. in lib/my_app/application.ex) under children so it starts on boot, e.g.:
+- Runs every 60 seconds (via `Process.send_after/3`)
+- Performs the following operations:
 
-elixir
-Copy
-Edit
+1. Read all client-offset maps from `:client_offsets` (via `:ets.tab2list/1`)
+2. Merge them to find the global minimum `min_offset` across all systems
+3. Delete every ETS row in `:killmail_events` with `event_id <= min_offset` (use `:ets.select_delete/2` or `:ets.foldl/3` + `:ets.delete_object/2`)
+4. Schedule itself to run again in 60,000 ms
+
+## Application Setup
+
+### Supervision Tree
+
+Register `MyApp.KillmailStore` in the application supervision tree (e.g., in `lib/my_app/application.ex`):
+
+```elixir
 children = [
-MyApp.KillmailStore,
-{Phoenix.PubSub, name: MyApp.PubSub},
-
-# … other children …
-
+  MyApp.KillmailStore,
+  {Phoenix.PubSub, name: MyApp.PubSub},
+  # … other children …
 ]
-Ensure :phoenix_pubsub is listed as an application dependency in mix.exs, and verify config/config.exs contains:
+```
 
-elixir
-Copy
-Edit
+### Dependencies
+
+Ensure `:phoenix_pubsub` is listed as an application dependency in `mix.exs`, and verify `config/config.exs` contains:
+
+```elixir
 config :my_app, MyApp.PubSub,
-adapter: Phoenix.PubSub.PG2
-Create a Phoenix Controller MyAppWeb.KillfeedController with two actions:
+  adapter: Phoenix.PubSub.PG2
+```
 
-poll/2 for batch fetch:
+## Phoenix Controller
 
-Accepts client_id and systems as query params (e.g. GET /killfeed?client_id=foo&systems[]=30000142&systems[]=30000143).
+### Create KillfeedController
 
-Calls MyApp.KillmailStore.fetch_for_client(client_id, system_list) and returns 200 with JSON events: [...].
+Create a Phoenix Controller `MyAppWeb.KillfeedController` with two actions:
 
-If events is an empty list, can return 204 No Content or 200 with an empty array.
+#### 1. `poll/2` - Batch Fetch
 
-next/2 for single‐event fetch:
+- **Purpose:** Batch fetch for multiple events
+- **Route:** `GET /killfeed?client_id=foo&systems[]=30000142&systems[]=30000143`
+- **Behavior:**
+  - Accepts `client_id` and `systems` as query params
+  - Calls `MyApp.KillmailStore.fetch_for_client(client_id, system_list)`
+  - Returns 200 with JSON `events: [...]`
+  - If events is empty, can return 204 No Content or 200 with an empty array
 
-Accepts same query params.
+#### 2. `next/2` - Single Event Fetch
 
-Calls MyApp.KillmailStore.fetch_one_event(client_id, system_list).
+- **Purpose:** Single-event fetch
+- **Route:** Same query params as `poll/2`
+- **Behavior:**
+  - Calls `MyApp.KillmailStore.fetch_one_event(client_id, system_list)`
+  - If `:empty`, returns 204 No Content
+  - If `{:ok, {event_id, sys_id, km}}`, returns 200 with JSON:
+    ```json
+    {
+      "event_id": event_id,
+      "system_id": sys_id,
+      "killmail": km
+    }
+    ```
 
-If :empty, returns 204 No Content.
+### Router Configuration
 
-If {:ok, {event_id, sys_id, km}}, returns 200 with JSON %{event_id: event_id, system_id: sys_id, killmail: km}.
+Add routes in `lib/my_app_web/router.ex` under an API scope:
 
-Add routes in lib/my_app_web/router.ex under an API scope:
-
-elixir
-Copy
-Edit
+```elixir
 scope "/api", MyAppWeb do
-get "/killfeed", KillfeedController, :poll
-get "/killfeed/next", KillfeedController, :next
+  get "/killfeed", KillfeedController, :poll
+  get "/killfeed/next", KillfeedController, :next
 end
-In any place where raw killmail ingestion happens (e.g. inside your existing zKillBoard listener or ESI fetcher), replace the old RedisQ insertion with a call to MyApp.KillmailStore.insert_event(system_id, killmail_map) so that each new killmail both goes into ETS and is broadcast over PubSub.
+```
 
-Write a client example (in doc/killfeed_example.md) showing how to:
+## Integration
 
-Open a Phoenix Channel or PubSub subscription to "system:<system_id>", using Phoenix.PubSub.subscribe(MyApp.PubSub, "system:30000142") to receive {:new_killmail, 30000142, killmail} messages in real time.
+### Killmail Ingestion
 
-If the client disconnects or starts fresh, call GET /api/killfeed?client_id=<id>&systems[]=30000142 to backfill any missed events.
+In any place where raw killmail ingestion happens (e.g., inside your existing zKillBoard listener or ESI fetcher):
 
-After backfill, resume listening on PubSub for real‐time updates.
+- Replace the old RedisQ insertion with a call to `MyApp.KillmailStore.insert_event(system_id, killmail_map)`
+- This ensures each new killmail both goes into ETS and is broadcast over PubSub
 
-Add tests under test/my_app/killmail_store_test.exs that:
+## Client Usage
 
-Start MyApp.KillmailStore in isolation.
+### Example Implementation
 
-Call insert_event/2 three times with the same system_id and different dummy killmail maps.
+Write a client example (in `doc/killfeed_example.md`) showing how to:
 
-Call fetch_for_client("test-client", [same_system_id]) and assert you get a list of all three events, each with increasing event_id.
+1. **Real-time Subscription:**
 
-Call fetch_for_client("test-client", [same_system_id]) again and assert you get an empty list (since offsets have been updated).
+   - Open a Phoenix Channel or PubSub subscription to `"system:<system_id>"`
+   - Use `Phoenix.PubSub.subscribe(MyApp.PubSub, "system:30000142")` to receive `{:new_killmail, 30000142, killmail}` messages in real time
 
-Insert one more killmail, then call fetch_one_event("test-client", [sys_id]) and assert it returns only that single new event, and next call returns :empty.
+2. **Backfill Process:**
+   - If the client disconnects or starts fresh, call `GET /api/killfeed?client_id=<id>&systems[]=30000142` to backfill any missed events
+   - After backfill, resume listening on PubSub for real-time updates
 
-Create two different clients with overlapping systems, insert multiple events across two systems, and assert each client’s offsets are tracked independently.
+## Testing
 
-Simulate “garbage collection” by inserting events with low IDs and high IDs, artificially setting multiple client offsets to a high minimum, then call the internal GC function via GenServer.cast/2 and verify ETS rows with event_id <= min_offset are gone.
+### Test Suite
 
-Add documentation in README.md under a section “Killfeed API” that explains:
+Add tests under `test/my_app/killmail_store_test.exs` that:
 
-The two HTTP endpoints (/api/killfeed and /api/killfeed/next), their query parameters, and example responses.
+1. **Basic Functionality:**
 
-How to subscribe to PubSub topics ("system:<system_id>") for real‐time updates.
+   - Start `MyApp.KillmailStore` in isolation
+   - Call `insert_event/2` three times with the same `system_id` and different dummy killmail maps
+   - Call `fetch_for_client("test-client", [same_system_id])` and assert you get a list of all three events, each with increasing `event_id`
 
-The expected behavior: clients always call back to fetch missed events if they dropped the socket, then resume real‐time.
+2. **Offset Tracking:**
 
-(Optional) If you need to persist across restarts, replace the ETS tables with Mnesia tables following the same schema:
+   - Call `fetch_for_client("test-client", [same_system_id])` again and assert you get an empty list (since offsets have been updated)
+   - Insert one more killmail, then call `fetch_one_event("test-client", [sys_id])` and assert it returns only that single new event
+   - Next call should return `:empty`
 
-Create a Mnesia schema with tables :killmail_events (disc_copies, ordered by :event_id), :client_offsets (disc_copies), and :counters (disc_copies).
+3. **Multi-client Support:**
 
-In MyApp.KillmailStore.init/1, call :mnesia.create_table/2 for each table if not exists and wait for the schema.
+   - Create two different clients with overlapping systems
+   - Insert multiple events across two systems
+   - Assert each client's offsets are tracked independently
 
-Swap all :ets.\* calls to :mnesia.transaction(fn -> … end) + :mnesia.read, :mnesia.write, :mnesia.select as appropriate.
+4. **Garbage Collection:**
+   - Insert events with low IDs and high IDs
+   - Artificially set multiple client offsets to a high minimum
+   - Call the internal GC function via `GenServer.cast/2`
+   - Verify ETS rows with `event_id <= min_offset` are gone
 
-Verify that after a node restart, both stored events and per‐client offsets survive.
+## Documentation
+
+### README.md Section
+
+Add documentation in `README.md` under a section "Killfeed API" that explains:
+
+1. **HTTP Endpoints:**
+
+   - The two HTTP endpoints (`/api/killfeed` and `/api/killfeed/next`)
+   - Their query parameters and example responses
+
+2. **Real-time Updates:**
+
+   - How to subscribe to PubSub topics (`"system:<system_id>"`) for real-time updates
+
+3. **Expected Behavior:**
+   - Clients always call back to fetch missed events if they dropped the socket
+   - Then resume real-time updates
+
+## Optional: Mnesia Persistence
+
+### Database Persistence
+
+If you need to persist across restarts, replace the ETS tables with Mnesia tables:
+
+1. **Schema Creation:**
+
+   - Create a Mnesia schema with tables:
+     - `:killmail_events` (disc_copies, ordered by `:event_id`)
+     - `:client_offsets` (disc_copies)
+     - `:counters` (disc_copies)
+
+2. **Initialization:**
+
+   - In `MyApp.KillmailStore.init/1`, call `:mnesia.create_table/2` for each table if not exists
+   - Wait for the schema
+
+3. **Data Operations:**
+
+   - Swap all `:ets.*` calls to `:mnesia.transaction(fn -> … end)` + `:mnesia.read`, `:mnesia.write`, `:mnesia.select` as appropriate
+
+4. **Verification:**
+   - Verify that after a node restart, both stored events and per-client offsets survive
