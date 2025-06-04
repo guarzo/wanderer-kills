@@ -1,0 +1,254 @@
+# lib/wanderer_kills/data/ship_type_updater.ex
+defmodule WandererKills.Data.ShipTypeUpdater do
+  @moduledoc """
+  Coordinates ship type updates from multiple sources.
+
+  This module provides a unified interface for updating ship type data by
+  delegating to source implementations that follow the ShipTypeSource behaviour:
+  - CSV-based updates via `CsvSource`
+  - ESI-based updates via `EsiSource`
+
+  The module tries CSV first for efficiency, then falls back to ESI if needed.
+
+  ## Usage
+
+  ```elixir
+  # Update ship types with automatic fallback
+  case WandererKills.Data.ShipTypeUpdater.update_ship_types() do
+    :ok -> Logger.info("Ship types updated successfully")
+    {:error, _reason} -> Logger.error("Failed to update ship types")
+  end
+
+  # Force update from specific source
+  WandererKills.Data.ShipTypeUpdater.update_with_csv()
+  WandererKills.Data.ShipTypeUpdater.update_with_esi()
+  ```
+
+  ## Strategy
+
+  1. **CSV First**: Attempts to update from local/downloaded CSV files for speed
+  2. **ESI Fallback**: Falls back to ESI API if CSV update fails
+  3. **Error Handling**: Provides detailed error reporting for each method
+
+  ## Dependencies
+
+  - `WandererKills.Data.Sources.CsvSource` - CSV-based updates
+  - `WandererKills.Data.Sources.EsiSource` - ESI-based updates
+  """
+
+  require Logger
+  alias WandererKills.Data.Sources.{CsvSource, EsiSource}
+
+  @doc """
+  Updates ship types by first trying CSV download, then falling back to ESI.
+
+  This is the main entry point for ship type updates. It implements a fallback
+  strategy where CSV is attempted first for efficiency, and ESI is used as a
+  backup if CSV fails.
+
+  ## Returns
+  - `:ok` - If update completed successfully (from either source)
+  - `{:error, reason}` - If both update methods failed
+
+  ## Examples
+
+  ```elixir
+  case update_ship_types() do
+    :ok ->
+      Logger.info("Ship types updated successfully")
+    {:error, _reason} ->
+      Logger.error("All update methods failed")
+  end
+  ```
+  """
+  @spec update_ship_types() :: :ok | {:error, term()}
+  def update_ship_types do
+    Logger.info("Starting ship type update with fallback strategy")
+
+    case update_with_csv() do
+      :ok ->
+        Logger.info("Ship type update completed successfully using CSV data")
+        :ok
+
+      {:error, csv_reason} ->
+        Logger.warning("CSV update failed: #{inspect(csv_reason)}, falling back to ESI")
+
+        case update_with_esi() do
+          :ok ->
+            Logger.info("Ship type update completed successfully using ESI fallback")
+            :ok
+
+          {:error, esi_reason} ->
+            Logger.error("Both CSV and ESI updates failed", %{
+              csv_error: csv_reason,
+              esi_error: esi_reason
+            })
+
+            {:error, {:all_methods_failed, csv_reason, esi_reason}}
+        end
+    end
+  end
+
+  @doc """
+  Updates ship types using CSV data from EVE DB dumps.
+
+  This method downloads (if needed) and processes CSV files containing
+  ship type information. It's generally faster than ESI but requires
+  external file downloads.
+
+  ## Returns
+  - `:ok` - If CSV update completed successfully
+  - `{:error, reason}` - If CSV update failed
+
+  ## Examples
+
+  ```elixir
+  case update_with_csv() do
+    :ok -> Logger.info("CSV update successful")
+    {:error, :download_failed} -> Logger.error("Failed to download CSV files")
+    {:error, :parse_failed} -> Logger.error("Failed to parse CSV data")
+  end
+  ```
+  """
+  @spec update_with_csv() :: :ok | {:error, term()}
+  def update_with_csv do
+    Logger.info("Attempting ship type update from CSV")
+
+    case CsvSource.update() do
+      :ok ->
+        Logger.info("CSV ship type update completed successfully")
+        :ok
+
+      {:error, reason} ->
+        Logger.error("CSV ship type update failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Updates ship types using ESI API data.
+
+  This method fetches ship type information directly from the EVE Swagger
+  Interface. It's slower than CSV but more reliable for getting current data.
+
+  ## Returns
+  - `:ok` - If ESI update completed successfully
+  - `{:error, reason}` - If ESI update failed
+
+  ## Examples
+
+  ```elixir
+  case update_with_esi() do
+    :ok -> Logger.info("ESI update successful")
+    {:error, :batch_processing_failed} -> Logger.error("Some ship types failed to process")
+    {:error, _reason} -> Logger.error("ESI update failed")
+  end
+  ```
+  """
+  @spec update_with_esi() :: :ok | {:error, term()}
+  def update_with_esi do
+    Logger.info("Attempting ship type update from ESI")
+
+    case EsiSource.update() do
+      :ok ->
+        Logger.info("ESI ship type update completed successfully")
+        :ok
+
+      {:error, reason} ->
+        Logger.error("ESI ship type update failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Updates ship types for specific ship groups using ESI.
+
+  This method allows targeted updates of specific ship categories rather
+  than processing all ship types.
+
+  ## Parameters
+  - `group_ids` - List of ship group IDs to update
+
+  ## Returns
+  - `:ok` - If update completed successfully
+  - `{:error, reason}` - If update failed
+
+  ## Examples
+
+  ```elixir
+  # Update only frigates and cruisers
+  update_ship_groups([23, 16])
+
+  # Update all known ship groups
+  update_ship_groups(EsiSource.ship_group_ids())
+  ```
+  """
+  @spec update_ship_groups([integer()]) :: :ok | {:error, term()}
+  def update_ship_groups(group_ids) when is_list(group_ids) do
+    Logger.info("Updating specific ship groups: #{inspect(group_ids)}")
+    EsiSource.update(group_ids: group_ids)
+  end
+
+  @doc """
+  Downloads CSV files for offline processing.
+
+  This is a utility function to pre-download CSV files without processing them.
+  Useful for ensuring files are available before attempting CSV updates.
+
+  ## Returns
+  - `:ok` - If download completed successfully
+  - `{:error, reason}` - If download failed
+
+  ## Examples
+
+  ```elixir
+  case download_csv_files() do
+    :ok -> Logger.info("CSV files downloaded and ready")
+    {:error, _reason} -> Logger.error("Download failed")
+  end
+  ```
+  """
+  @spec download_csv_files() :: :ok | {:error, term()}
+  def download_csv_files do
+    Logger.info("Downloading CSV files for ship type data")
+
+    case CsvSource.download(force_download: true) do
+      {:ok, _file_paths} ->
+        Logger.info("CSV files downloaded successfully")
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Failed to download CSV files: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets configuration information for ship type updates.
+
+  ## Returns
+  Map containing configuration details
+
+  ## Examples
+
+  ```elixir
+  config = get_configuration()
+  # => %{
+  #   ship_groups: [6, 7, 9, 11, 16, 17, 23],
+  #   sources: %{csv: "CSV", esi: "ESI"},
+  #   csv_files: ["invGroups.csv", "invTypes.csv"]
+  # }
+  ```
+  """
+  @spec get_configuration() :: map()
+  def get_configuration do
+    %{
+      ship_groups: EsiSource.ship_group_ids(),
+      sources: %{
+        csv: CsvSource.source_name(),
+        esi: EsiSource.source_name()
+      },
+      csv_files: ["invGroups.csv", "invTypes.csv"]
+    }
+  end
+end

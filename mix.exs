@@ -1,34 +1,99 @@
 defmodule WandererKills.MixProject do
   use Mix.Project
 
-
   def project do
     [
       app: :wanderer_kills,
       version: "0.1.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      description:
+        "A standalone service for retrieving and caching EVE Online killmails from zKillboard",
+      package: package(),
+      elixirc_paths: elixirc_paths(Mix.env()),
+      aliases: aliases(),
+
+      # Coverage configuration
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "coveralls.json": :test,
+        "coveralls.xml": :test
+      ]
     ]
   end
 
   # The OTP application entrypoint:
   def application do
     [
-      mod: {WandererKills.Application, []},
-      extra_applications: [:logger, :runtime_tools, :cachex, :jason]
+      extra_applications: [
+        :logger,
+        :telemetry_poller
+      ],
+      mod: {WandererKills.Application, []}
     ]
   end
 
+  # Specifies which paths to compile per environment.
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
   defp deps do
     [
-      {:plug_cowboy, "~> 2.6"},     # HTTP server for exposing APIs
-      {:cachex, "~> 3.6"},          # local in-memory cache
-      {:redix, "~> 1.1"},           # Redis client (for cross-container cache, if desired)
-      {:httpoison, "~> 2.0"},       # HTTP client (for ESI calls)
-      {:jason, "~> 1.4"},           # JSON parsing
-      # Add any other dependencies you already use under wanderer_app/zkb:
-      # e.g. {:ecto_sql, "~> 3.10"}, {:postgrex, ">= 0.0.0"}, etc.
+      # HTTP server and routing
+      {:plug_cowboy, "~> 2.7"},
+
+      # JSON parsing
+      {:jason, "~> 1.4"},
+
+      # Caching
+      {:cachex, "~> 4.1"},
+
+      # HTTP client with retry support
+      {:req, "~> 0.5"},
+      {:retry, "~> 0.19"},
+      {:backoff, "~> 1.1"},
+      {:httpoison, "~> 2.2"},
+
+      # CSV parsing
+      {:nimble_csv, "~> 1.2"},
+
+      # Telemetry
+      {:telemetry_poller, "~> 1.2"},
+      {:uuid, "~> 1.1"},
+
+      # Development and test tools
+      {:credo, "~> 1.7.6", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4.3", only: [:dev], runtime: false},
+      {:mox, "~> 1.2.0", only: :test},
+
+      # Code coverage
+      {:excoveralls, "~> 0.18", only: :test}
+    ]
+  end
+
+  defp package do
+    [
+      name: "wanderer_kills",
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/yourusername/wanderer_kills"}
+    ]
+  end
+
+  defp aliases do
+    [
+      test: ["test"],
+      check: [
+        "format --check-formatted",
+        "credo --strict",
+        "dialyzer"
+      ],
+      "test.coverage": ["coveralls.html"],
+      "test.coverage.ci": ["coveralls.json"]
     ]
   end
 end

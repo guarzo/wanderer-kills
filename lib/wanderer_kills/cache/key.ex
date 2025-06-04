@@ -1,0 +1,242 @@
+defmodule WandererKills.Cache.Key do
+  @moduledoc """
+  Module for managing cache keys and TTLs.
+
+  This module provides functions for generating and validating cache keys,
+  as well as managing TTLs for different types of cached data.
+
+  ## Features
+
+  - Cache key generation with DRY macros
+  - TTL management
+  - Key validation
+
+  ## Configuration
+
+  Cache TTLs are managed through application config:
+
+  ```elixir
+  config :wanderer_kills,
+    cache: %{
+      killmails: [name: :killmails_cache, ttl: :timer.hours(24)],
+      system: [name: :system_cache, ttl: :timer.hours(1)],
+      esi: [name: :esi_cache, ttl: :timer.hours(48)]
+    }
+  ```
+  """
+
+  alias WandererKills.Config
+
+  @prefix "wanderer_kills"
+
+  @type cache_type :: :killmails | :system | :esi
+  @type cache_key :: String.t()
+  @type cache_value :: term()
+
+  @doc """
+  Generates a cache key for the given cache type and parameters.
+
+  ## Parameters
+  - `cache_type` - The type of cache (:killmails, :system, or :esi)
+  - `parts` - List of key parts to join
+
+  ## Returns
+  A formatted cache key string.
+
+  ## Example
+
+  ```elixir
+  key = generate(:killmails, ["killmail", "123"])
+  # "wanderer_kills:killmails:killmail:123"
+  ```
+  """
+  @spec generate(cache_type(), [String.t()]) :: cache_key()
+  def generate(cache_type, parts) do
+    [@prefix, Atom.to_string(cache_type) | parts]
+    |> Enum.join(":")
+  end
+
+  @doc """
+  Gets the TTL for a given cache type.
+
+  ## Parameters
+  - `cache_type` - The type of cache (:killmails, :system, or :esi)
+
+  ## Returns
+  The TTL in milliseconds.
+
+  ## Example
+
+  ```elixir
+  ttl = get_ttl(:killmails)
+  # 86400000
+  ```
+  """
+  @spec get_ttl(cache_type()) :: pos_integer()
+  def get_ttl(cache_type) do
+    case cache_type do
+      :killmails -> Config.cache().killmails[:ttl]
+      :system -> Config.cache().system[:ttl]
+      :esi -> Config.cache().esi[:ttl]
+    end
+  end
+
+  @doc """
+  Validates a cache key format.
+
+  ## Parameters
+  - `key` - The cache key to validate
+
+  ## Returns
+  - `true` if the key is valid
+  - `false` otherwise
+
+  ## Example
+
+  ```elixir
+  valid? = validate_key("wanderer_kills:killmails:killmail:123")
+  # true
+  ```
+  """
+  @spec validate_key(cache_key()) :: boolean()
+  def validate_key(key) do
+    case String.split(key, ":") do
+      [@prefix, _cache_type | _parts] -> true
+      _ -> false
+    end
+  end
+
+  # Killmail cache keys
+
+  @doc """
+  Generates a cache key for a killmail.
+  """
+  @spec killmail_key(integer()) :: cache_key()
+  def killmail_key(id) do
+    generate(:killmails, ["killmail", to_string(id)])
+  end
+
+  @doc """
+  Generates a cache key for a system's killmail list.
+  """
+  @spec system_list_key(integer()) :: cache_key()
+  def system_list_key(system_id) do
+    generate(:killmails, ["system", to_string(system_id)])
+  end
+
+  @doc """
+  Generates a cache key for a character's killmail list.
+  """
+  @spec character_list_key(integer()) :: cache_key()
+  def character_list_key(character_id) do
+    generate(:killmails, ["character", to_string(character_id)])
+  end
+
+  @doc """
+  Generates a cache key for a corporation's killmail list.
+  """
+  @spec corporation_list_key(integer()) :: cache_key()
+  def corporation_list_key(corporation_id) do
+    generate(:killmails, ["corporation", to_string(corporation_id)])
+  end
+
+  @doc """
+  Generates a cache key for an alliance's killmail list.
+  """
+  @spec alliance_list_key(integer()) :: cache_key()
+  def alliance_list_key(alliance_id) do
+    generate(:killmails, ["alliance", to_string(alliance_id)])
+  end
+
+  # System cache keys
+
+  @doc """
+  Generates a cache key for system data.
+  """
+  @spec system_data_key(integer()) :: cache_key()
+  def system_data_key(system_id) do
+    generate(:system, ["data", to_string(system_id)])
+  end
+
+  @doc """
+  Generates a cache key for active systems.
+  """
+  @spec active_systems_key() :: cache_key()
+  def active_systems_key do
+    generate(:system, ["active"])
+  end
+
+  @doc """
+  Generates a cache key for a system's fetch timestamp.
+  """
+  @spec system_fetch_ts_key(integer()) :: cache_key()
+  def system_fetch_ts_key(system_id) do
+    generate(:system, [to_string(system_id), "fetch_ts"])
+  end
+
+  @doc """
+  Generates a cache key for a system's kill count.
+  """
+  @spec system_kill_count_key(integer()) :: cache_key()
+  def system_kill_count_key(system_id) do
+    generate(:system, [to_string(system_id), "kill_count"])
+  end
+
+  @doc """
+  Generates a cache key for a system's TTL.
+  """
+  @spec system_ttl_key(integer()) :: cache_key()
+  def system_ttl_key(system_id) do
+    generate(:system, [to_string(system_id), "ttl"])
+  end
+
+  # ESI cache keys
+
+  @doc """
+  Generates a cache key for type info.
+  """
+  @spec type_info_key(integer()) :: cache_key()
+  def type_info_key(type_id) do
+    generate(:esi, ["type", to_string(type_id)])
+  end
+
+  @doc """
+  Generates a cache key for group info.
+  """
+  @spec group_info_key(integer()) :: cache_key()
+  def group_info_key(group_id) do
+    generate(:esi, ["group", to_string(group_id)])
+  end
+
+  @doc """
+  Generates a cache key for character info.
+  """
+  @spec character_info_key(integer()) :: cache_key()
+  def character_info_key(character_id) do
+    generate(:esi, ["character", to_string(character_id)])
+  end
+
+  @doc """
+  Generates a cache key for corporation info.
+  """
+  @spec corporation_info_key(integer()) :: cache_key()
+  def corporation_info_key(corporation_id) do
+    generate(:esi, ["corporation", to_string(corporation_id)])
+  end
+
+  @doc """
+  Generates a cache key for alliance info.
+  """
+  @spec alliance_info_key(integer()) :: cache_key()
+  def alliance_info_key(alliance_id) do
+    generate(:esi, ["alliance", to_string(alliance_id)])
+  end
+
+  @doc """
+  Generates a cache key for system info.
+  """
+  @spec system_info_key(integer()) :: cache_key()
+  def system_info_key(system_id) do
+    generate(:esi, ["system", to_string(system_id)])
+  end
+end

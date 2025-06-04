@@ -1,0 +1,31 @@
+# This file defines code ownership and review requirements for the WandererKills project.
+
+# Default owners for everything in the repo
+* @project-maintainer
+
+# Core application code
+/lib/ @core-team
+/test/ @core-team
+
+# Configuration files
+/config/ @devops-team
+/.github/ @devops-team
+
+# Documentation
+/docs/ @documentation-team
+*.md @documentation-team
+
+# Docker and deployment
+/Dockerfile* @devops-team
+/docker-compose* @devops-team
+
+# Dependencies
+/mix.exs @core-team
+/mix.lock @core-team
+
+# Tests
+/test/ @core-team
+/spec/ @core-team
+
+# CI/CD
+/.github/workflows/ @devops-team 
