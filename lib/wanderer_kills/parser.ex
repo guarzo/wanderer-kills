@@ -106,18 +106,44 @@ defmodule WandererKills.Parser do
     with {:ok, merged} <- Core.merge_killmail_data(full, %{"zkb" => zkb}),
          {:ok, built} <- Core.build_kill_data(merged, cutoff),
          {:ok, enriched} <- enrich_killmail(built) do
-      # INTEGRATION POINT: Add to KillmailStore
+      # Get system_id with nil check
       system_id = enriched["solar_system_id"] || enriched["system_id"]
-      :ok = WandererKills.KillmailStore.insert_event(system_id, enriched)
 
-      Logger.info("Successfully enriched and stored killmail", %{
-        killmail_id: full["killmail_id"],
-        system_id: system_id,
-        operation: :process_killmail,
-        status: :success
-      })
+      if system_id do
+        # Make insert_event asynchronous using Task
+        Task.start(fn ->
+          try do
+            :ok = WandererKills.KillmailStore.insert_event(system_id, enriched)
 
-      {:ok, enriched}
+            Logger.info("Successfully enriched and stored killmail", %{
+              killmail_id: full["killmail_id"],
+              system_id: system_id,
+              operation: :process_killmail,
+              status: :success
+            })
+          rescue
+            error ->
+              Logger.error("Failed to store killmail", %{
+                killmail_id: full["killmail_id"],
+                system_id: system_id,
+                operation: :process_killmail,
+                error: Exception.message(error),
+                stacktrace: Exception.format_stacktrace(__STACKTRACE__),
+                status: :error
+              })
+          end
+        end)
+
+        {:ok, enriched}
+      else
+        Logger.error("Missing system_id in enriched killmail", %{
+          killmail_id: full["killmail_id"],
+          operation: :process_killmail,
+          status: :error
+        })
+
+        {:error, :missing_system_id}
+      end
     else
       :older ->
         Logger.debug("Killmail is older than cutoff", %{

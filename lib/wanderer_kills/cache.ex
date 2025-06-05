@@ -43,6 +43,7 @@ defmodule WandererKills.Cache do
 
   # Import specialized cache modules
   alias WandererKills.Cache.Specialized.{KillmailCache, SystemCache, EsiCache}
+  alias WandererKills.Cache.Key
 
   # Type definitions
   @type cache_type :: :killmails | :system | :esi
@@ -55,6 +56,7 @@ defmodule WandererKills.Cache do
   @type killmail :: map()
   @type system_data :: map()
   @type cache_result :: {:ok, term()} | {:error, term()}
+  @type cache_status :: :ok | {:error, term()}
 
   # ===== KILLMAIL CACHE OPERATIONS =====
 
@@ -62,32 +64,94 @@ defmodule WandererKills.Cache do
   Gets a killmail by ID from the cache.
   """
   @spec get_killmail(killmail_id()) :: {:ok, killmail()} | {:error, term()}
-  def get_killmail(killmail_id), do: KillmailCache.get_killmail(killmail_id)
+  def get_killmail(killmail_id) do
+    case Cachex.get(:killmails_cache, Key.killmail_key(killmail_id)) do
+      {:ok, nil} -> {:ok, nil}
+      {:ok, value} -> {:ok, value}
+      error -> error
+    end
+  end
 
   @doc """
   Sets a killmail in the cache.
   """
   @spec set_killmail(killmail_id(), killmail()) :: :ok | {:error, term()}
-  def set_killmail(killmail_id, killmail), do: KillmailCache.set_killmail(killmail_id, killmail)
+  def set_killmail(killmail_id, killmail) do
+    Cachex.put(:killmails_cache, Key.killmail_key(killmail_id), killmail)
+  end
+
+  @doc """
+  Deletes a killmail by ID from the cache.
+  """
+  @spec delete_killmail(killmail_id()) :: :ok | {:error, term()}
+  def delete_killmail(killmail_id) do
+    Cachex.del(:killmails_cache, Key.killmail_key(killmail_id))
+  end
+
+  @doc """
+  Gets all killmail IDs from the cache.
+  """
+  @spec get_killmail_ids() :: {:ok, [killmail_id()]} | {:error, term()}
+  def get_killmail_ids(), do: KillmailCache.get_killmail_ids()
+
+  @doc """
+  Adds a killmail ID to the killmail list.
+  """
+  @spec add_killmail_id(killmail_id()) :: :ok | {:error, term()}
+  def add_killmail_id(killmail_id), do: KillmailCache.add_killmail_id(killmail_id)
+
+  @doc """
+  Removes a killmail ID from the killmail list.
+  """
+  @spec remove_killmail_id(killmail_id()) :: :ok | {:error, term()}
+  def remove_killmail_id(killmail_id), do: KillmailCache.remove_killmail_id(killmail_id)
 
   @doc """
   Gets all killmails for a system - delegates to system cache.
   """
   @spec get_system_killmails(system_id()) :: {:ok, [killmail_id()]} | {:error, term()}
-  def get_system_killmails(system_id), do: SystemCache.get_killmails(system_id)
+  def get_system_killmails(system_id) do
+    case Cachex.get(:system_cache, Key.system_killmails_key(system_id)) do
+      {:ok, nil} -> {:ok, []}
+      {:ok, value} -> {:ok, value}
+      error -> error
+    end
+  end
 
   @doc """
-  Gets killmail IDs for a system - alias for get_system_killmails for backward compatibility.
+  Gets all killmail IDs for a system - delegates to system cache.
   """
   @spec get_system_killmail_ids(system_id()) :: {:ok, [killmail_id()]} | {:error, term()}
-  def get_system_killmail_ids(system_id), do: SystemCache.get_killmail_ids(system_id)
+  def get_system_killmail_ids(system_id), do: SystemCache.get_system_killmail_ids(system_id)
 
   @doc """
   Adds a killmail to a system's killmail list.
   """
   @spec add_system_killmail(system_id(), killmail_id()) :: :ok | {:error, term()}
   def add_system_killmail(system_id, killmail_id) do
-    SystemCache.add_killmail(system_id, killmail_id)
+    case get_system_killmails(system_id) do
+      {:ok, killmails} ->
+        new_killmails = killmails ++ [killmail_id]
+        Cachex.put(:system_cache, Key.system_killmails_key(system_id), new_killmails)
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Removes a killmail from a system's killmail list.
+  """
+  @spec remove_system_killmail(system_id(), killmail_id()) :: :ok | {:error, term()}
+  def remove_system_killmail(system_id, killmail_id) do
+    case get_system_killmails(system_id) do
+      {:ok, killmails} ->
+        new_killmails = Enum.reject(killmails, &(&1 == killmail_id))
+        Cachex.put(:system_cache, Key.system_killmails_key(system_id), new_killmails)
+
+      error ->
+        error
+    end
   end
 
   @doc "Placeholder for character killmails - not implemented in specialized cache"
@@ -112,7 +176,12 @@ defmodule WandererKills.Cache do
   Clears killmails cache.
   """
   @spec clear_killmails() :: :ok | {:error, term()}
-  def clear_killmails(), do: KillmailCache.clear()
+  def clear_killmails() do
+    case Cachex.clear(:killmails_cache) do
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
 
   # ===== SYSTEM CACHE OPERATIONS =====
 
@@ -147,10 +216,18 @@ defmodule WandererKills.Cache do
   Sets the timestamp when a system was last fetched.
   """
   @spec set_system_fetch_timestamp(system_id()) :: :ok | {:error, term()}
-  def set_system_fetch_timestamp(system_id), do: SystemCache.set_fetch_timestamp(system_id)
+  def set_system_fetch_timestamp(system_id) do
+    timestamp = System.system_time(:second)
+    Cachex.put(:system_cache, Key.system_fetch_ts_key(system_id), timestamp)
+  end
 
-  @doc "Placeholder - not implemented in specialized cache"
-  def set_system_fetch_timestamp(_system_id, _timestamp), do: {:error, :not_implemented}
+  @doc """
+  Sets the timestamp when a system was last fetched with a specific timestamp.
+  """
+  @spec set_system_fetch_timestamp(system_id(), integer()) :: :ok | {:error, term()}
+  def set_system_fetch_timestamp(system_id, timestamp) do
+    Cachex.put(:system_cache, Key.system_fetch_ts_key(system_id), timestamp)
+  end
 
   @doc """
   Gets system data from the cache.
@@ -165,19 +242,43 @@ defmodule WandererKills.Cache do
   def set_system_data(system_id, data), do: SystemCache.cache_system_data(system_id, data)
 
   @doc "Placeholder - not implemented in specialized cache"
-  def get_system_fetch_timestamp(_system_id), do: {:error, :not_implemented}
+  def get_system_fetch_timestamp(system_id) do
+    Cachex.get(:system_cache, Key.system_fetch_ts_key(system_id))
+  end
 
   @doc """
   Gets the kill count for a system.
   """
   @spec get_system_kill_count(system_id()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def get_system_kill_count(system_id), do: SystemCache.get_kill_count(system_id)
+  def get_system_kill_count(system_id) do
+    case Cachex.get(:system_cache, Key.system_kill_count_key(system_id)) do
+      {:ok, nil} -> {:ok, 0}
+      {:ok, value} -> {:ok, value}
+      error -> error
+    end
+  end
 
   @doc """
   Increments the kill count for a system.
   """
   @spec increment_system_kill_count(system_id()) :: :ok | {:error, term()}
-  def increment_system_kill_count(system_id), do: SystemCache.increment_kill_count(system_id)
+  def increment_system_kill_count(system_id) do
+    case Cachex.incr(:system_cache, Key.system_kill_count_key(system_id)) do
+      {:ok, _} -> {:ok, true}
+      error -> error
+    end
+  end
+
+  @doc """
+  Decrements the kill count for a system.
+  """
+  @spec decrement_system_kill_count(system_id()) :: :ok | {:error, term()}
+  def decrement_system_kill_count(system_id) do
+    case Cachex.decr(:system_cache, Key.system_kill_count_key(system_id)) do
+      {:ok, _} -> {:ok, true}
+      error -> error
+    end
+  end
 
   @doc "Placeholder - not implemented in specialized cache"
   def get_system_ttl(_system_id), do: {:error, :not_implemented}
@@ -293,5 +394,27 @@ defmodule WandererKills.Cache do
   def get_metrics do
     # Delegate to the new health check system
     WandererKills.Infrastructure.Health.get_metrics(components: [:cache])
+  end
+
+  @doc """
+  Clears the system cache.
+  """
+  @spec clear_system() :: :ok | {:error, term()}
+  def clear_system() do
+    case Cachex.clear(:system_cache) do
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
+
+  @doc """
+  Clears the ESI cache.
+  """
+  @spec clear_esi() :: :ok | {:error, term()}
+  def clear_esi() do
+    case Cachex.clear(:esi_cache) do
+      {:ok, _} -> :ok
+      error -> error
+    end
   end
 end

@@ -28,6 +28,25 @@ defmodule WandererKills.TestHelpers do
   """
 
   @doc """
+  Cleans up any existing processes before tests.
+  """
+  def cleanup_processes do
+    # Stop KillmailStore if it's running
+    if pid = Process.whereis(WandererKills.KillmailStore) do
+      Process.exit(pid, :normal)
+      # Give it a moment to shut down
+      Process.sleep(10)
+    end
+
+    # Clear test caches
+    Cachex.clear(:killmails_cache_test)
+    Cachex.clear(:system_cache_test)
+    Cachex.clear(:esi_cache_test)
+
+    :ok
+  end
+
+  @doc """
   Clears all caches used in the application.
 
   This function clears both test-specific and production cache instances
@@ -206,64 +225,40 @@ defmodule WandererKills.TestHelpers do
   end
 
   @doc """
-  Creates a sample killmail for testing.
-
-  ## Parameters
-  - `opts` - Options to override default values
-
-  ## Returns
-  A map representing a killmail suitable for testing.
-
-  ## Example
-
-  ```elixir
-  killmail = create_test_killmail(killmail_id: 12345, system_id: 30000142)
-  ```
+  Creates a test killmail with the given ID.
   """
-  @spec create_test_killmail(keyword()) :: map()
-  def create_test_killmail(opts \\ []) do
-    defaults = %{
-      "killmail_id" => Keyword.get(opts, :killmail_id, 12_345),
-      "killmail_time" => Keyword.get(opts, :killmail_time, "2024-01-01T12:00:00Z"),
-      "solar_system_id" => Keyword.get(opts, :system_id, 30_000_142),
+  def create_test_killmail(killmail_id) do
+    %{
+      "killmail_id" => killmail_id,
+      "killID" => killmail_id,
+      "killTime" => "2024-01-01T00:00:00Z",
+      "solarSystemID" => 30_000_142,
       "victim" => %{
-        "character_id" => Keyword.get(opts, :character_id, 98_765),
-        "corporation_id" => Keyword.get(opts, :corporation_id, 54_321),
-        "ship_type_id" => Keyword.get(opts, :ship_type_id, 670)
+        "characterID" => 12_345,
+        "corporationID" => 67_890,
+        "allianceID" => 54_321,
+        "shipTypeID" => 1234
       },
       "attackers" => [
         %{
-          "character_id" => Keyword.get(opts, :attacker_character_id, 11_111),
-          "corporation_id" => Keyword.get(opts, :attacker_corporation_id, 22_222),
-          "final_blow" => true
+          "characterID" => 11_111,
+          "corporationID" => 22_222,
+          "allianceID" => 33_333,
+          "shipTypeID" => 5678,
+          "finalBlow" => true
         }
       ],
       "zkb" => %{
-        "hash" => Keyword.get(opts, :hash, "abc123def456"),
-        "fittedValue" => Keyword.get(opts, :fitted_value, 1_000_000),
-        "totalValue" => Keyword.get(opts, :total_value, 1_500_000)
+        "locationID" => 50_000_001,
+        "hash" => "abc123",
+        "fittedValue" => 1_000_000.0,
+        "totalValue" => 1_500_000.0,
+        "points" => 1,
+        "npc" => false,
+        "solo" => true,
+        "awox" => false
       }
     }
-
-    # Merge any additional options
-    additional_opts =
-      Keyword.drop(opts, [
-        :killmail_id,
-        :killmail_time,
-        :system_id,
-        :character_id,
-        :corporation_id,
-        :ship_type_id,
-        :attacker_character_id,
-        :attacker_corporation_id,
-        :hash,
-        :fitted_value,
-        :total_value
-      ])
-
-    Enum.reduce(additional_opts, defaults, fn {key, value}, acc ->
-      Map.put(acc, to_string(key), value)
-    end)
   end
 
   @doc """
@@ -322,5 +317,16 @@ defmodule WandererKills.TestHelpers do
       group_id: Keyword.get(opts, :group_id, 25),
       published: Keyword.get(opts, :published, true)
     }
+  end
+
+  @doc """
+  Stops the KillmailStore process if it's running.
+  """
+  def stop_killmail_store do
+    if pid = Process.whereis(WandererKills.KillmailStore) do
+      Process.exit(pid, :normal)
+      # Give it time to shut down
+      :timer.sleep(10)
+    end
   end
 end

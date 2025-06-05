@@ -1,0 +1,176 @@
+openapi: 3.0.0
+info:
+  title: WandererKills API
+  description: |
+    Real-time killmail event streaming API for EVE Online.
+    Provides access to killmail events with client offset tracking and system filtering.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@wandererkills.com
+
+servers:
+  - url: https://api.wandererkills.com/v1
+    description: Production server
+  - url: https://staging-api.wandererkills.com/v1
+    description: Staging server
+
+tags:
+  - name: Killfeed
+    description: Real-time killmail event streaming
+
+paths:
+  /killfeed/poll:
+    get:
+      tags:
+        - Killfeed
+      summary: Poll for multiple killmail events
+      description: |
+        Fetches all new killmail events for a client across multiple systems.
+        Events are returned in chronological order and client offsets are automatically tracked.
+      operationId: pollKillfeed
+      parameters:
+        - name: client_id
+          in: query
+          description: Unique identifier for the client
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: systems[]
+          in: query
+          description: Array of system IDs to fetch events for
+          required: true
+          schema:
+            type: array
+            items:
+              type: integer
+              minimum: 1
+              maximum: 1000000
+      responses:
+        "200":
+          description: Successfully retrieved events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KillmailEvent"
+        "204":
+          description: No new events available
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /killfeed/next:
+    get:
+      tags:
+        - Killfeed
+      summary: Fetch next single killmail event
+      description: |
+        Fetches the next single killmail event for a client across multiple systems.
+        The event with the lowest event_id that hasn't been seen by the client is returned.
+      operationId: nextKillmail
+      parameters:
+        - name: client_id
+          in: query
+          description: Unique identifier for the client
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: systems[]
+          in: query
+          description: Array of system IDs to fetch events for
+          required: true
+          schema:
+            type: array
+            items:
+              type: integer
+              minimum: 1
+              maximum: 1000000
+      responses:
+        "200":
+          description: Successfully retrieved event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KillmailEvent"
+        "204":
+          description: No new events available
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    KillmailEvent:
+      type: object
+      required:
+        - event_id
+        - system_id
+        - killmail
+      properties:
+        event_id:
+          type: integer
+          description: Unique identifier for the event
+          minimum: 1
+        system_id:
+          type: integer
+          description: Solar system ID where the killmail occurred
+          minimum: 1
+          maximum: 1000000
+        killmail:
+          type: object
+          description: The killmail data
+          properties:
+            killmail_id:
+              type: integer
+              description: Unique identifier for the killmail
+            killmail_time:
+              type: string
+              format: date-time
+              description: When the killmail occurred
+            victim:
+              type: object
+              description: Information about the destroyed ship
+            attackers:
+              type: array
+              description: List of attackers involved
+              items:
+                type: object
+            zkb:
+              type: object
+              description: zKillboard specific information
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong

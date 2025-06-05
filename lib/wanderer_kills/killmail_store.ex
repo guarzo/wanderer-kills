@@ -19,6 +19,18 @@ defmodule WandererKills.KillmailStore do
   @type client_id :: String.t()
   @type killmail_map :: map()
   @type client_offsets :: %{system_id() => event_id()}
+  @type killmail :: map()
+  @type killmail_id :: integer()
+  @type timestamp :: DateTime.t()
+
+  # Table names as module attributes for easy reference
+  @killmail_events :killmail_events
+  @client_offsets :client_offsets
+  @counters :counters
+  @killmails :killmails
+  @system_killmails :system_killmails
+  @system_kill_counts :system_kill_counts
+  @system_fetch_timestamps :system_fetch_timestamps
 
   # Public API
 
@@ -26,7 +38,31 @@ defmodule WandererKills.KillmailStore do
   Starts the KillmailStore GenServer.
   """
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
+
+  @doc """
+  Cleans up ETS tables for testing.
+  """
+  def cleanup_tables do
+    safe_delete_all_objects(@killmail_events)
+    safe_delete_all_objects(@client_offsets)
+    safe_delete_all_objects(@counters)
+    safe_delete_all_objects(@killmails)
+    safe_delete_all_objects(@system_killmails)
+    safe_delete_all_objects(@system_kill_counts)
+    safe_delete_all_objects(@system_fetch_timestamps)
+
+    # Safely insert counter if table exists
+    try do
+      case :ets.whereis(@counters) do
+        :undefined -> :ok
+        _ -> :ets.insert(@counters, {:killmail_seq, 0})
+      end
+    rescue
+      ArgumentError -> :ok
+    end
   end
 
   @doc """
@@ -41,7 +77,11 @@ defmodule WandererKills.KillmailStore do
   """
   @spec insert_event(system_id(), killmail_map()) :: :ok
   def insert_event(system_id, killmail_map) do
-    GenServer.call(__MODULE__, {:insert, system_id, killmail_map})
+    GenServer.call(
+      __MODULE__,
+      {:insert, system_id, killmail_map},
+      WandererKills.Constants.timeout(:gen_server_call)
+    )
   end
 
   @doc """
@@ -57,7 +97,11 @@ defmodule WandererKills.KillmailStore do
   @spec fetch_for_client(client_id(), [system_id()]) ::
           {:ok, [{event_id(), system_id(), killmail_map()}]}
   def fetch_for_client(client_id, system_ids) do
-    GenServer.call(__MODULE__, {:fetch, client_id, system_ids})
+    GenServer.call(
+      __MODULE__,
+      {:fetch, client_id, system_ids},
+      WandererKills.Constants.timeout(:gen_server_call)
+    )
   end
 
   @doc """
@@ -71,10 +115,88 @@ defmodule WandererKills.KillmailStore do
   - `{:ok, {event_id, system_id, killmail}}` - The next event
   - `:empty` - No new events available
   """
-  @spec fetch_one_event(client_id(), [system_id()]) ::
+  @spec fetch_one_event(client_id(), system_id() | [system_id()]) ::
           {:ok, {event_id(), system_id(), killmail_map()}} | :empty
-  def fetch_one_event(client_id, system_ids) do
-    GenServer.call(__MODULE__, {:fetch_one, client_id, system_ids})
+  def fetch_one_event(client_id, system_ids) when is_integer(system_ids) do
+    fetch_one_event(client_id, [system_ids])
+  end
+
+  def fetch_one_event(client_id, system_ids) when is_list(system_ids) do
+    GenServer.call(
+      __MODULE__,
+      {:fetch_one, client_id, system_ids},
+      WandererKills.Constants.timeout(:gen_server_call)
+    )
+  end
+
+  @doc """
+  Stores a killmail in the store.
+  """
+  def store_killmail(killmail) do
+    GenServer.call(__MODULE__, {:store_killmail, killmail})
+  end
+
+  @doc """
+  Retrieves a killmail by ID.
+  """
+  def get_killmail(killmail_id) do
+    GenServer.call(__MODULE__, {:get_killmail, killmail_id})
+  end
+
+  @doc """
+  Deletes a killmail by ID.
+  """
+  def delete_killmail(killmail_id) do
+    GenServer.call(__MODULE__, {:delete_killmail, killmail_id})
+  end
+
+  @doc """
+  Adds a killmail to a system's list.
+  """
+  def add_system_killmail(system_id, killmail_id) do
+    GenServer.call(__MODULE__, {:add_system_killmail, system_id, killmail_id})
+  end
+
+  @doc """
+  Gets all killmails for a system.
+  """
+  def get_system_killmails(system_id) do
+    GenServer.call(__MODULE__, {:get_system_killmails, system_id})
+  end
+
+  @doc """
+  Removes a killmail from a system's list.
+  """
+  def remove_system_killmail(system_id, killmail_id) do
+    GenServer.call(__MODULE__, {:remove_system_killmail, system_id, killmail_id})
+  end
+
+  @doc """
+  Increments the kill count for a system.
+  """
+  def increment_system_kill_count(system_id) do
+    GenServer.call(__MODULE__, {:increment_system_kill_count, system_id})
+  end
+
+  @doc """
+  Gets the kill count for a system.
+  """
+  def get_system_kill_count(system_id) do
+    GenServer.call(__MODULE__, {:get_system_kill_count, system_id})
+  end
+
+  @doc """
+  Sets the fetch timestamp for a system.
+  """
+  def set_system_fetch_timestamp(system_id, timestamp) do
+    GenServer.call(__MODULE__, {:set_system_fetch_timestamp, system_id, timestamp})
+  end
+
+  @doc """
+  Gets the fetch timestamp for a system.
+  """
+  def get_system_fetch_timestamp(system_id) do
+    GenServer.call(__MODULE__, {:get_system_fetch_timestamp, system_id})
   end
 
   # GenServer Callbacks
@@ -83,13 +205,20 @@ defmodule WandererKills.KillmailStore do
   def init(_opts) do
     Logger.info("Starting KillmailStore with ETS tables")
 
-    # Create ETS tables
-    :ets.new(:killmail_events, [:ordered_set, :public, :named_table])
-    :ets.new(:client_offsets, [:set, :public, :named_table])
-    :ets.new(:counters, [:set, :public, :named_table])
+    # Create ETS tables if they don't exist
+    create_table_if_not_exists(@killmail_events, [:ordered_set, :public, :named_table])
+    create_table_if_not_exists(@client_offsets, [:set, :public, :named_table])
+    create_table_if_not_exists(@counters, [:set, :public, :named_table])
+    create_table_if_not_exists(@killmails, [:named_table, :set, :public])
+    create_table_if_not_exists(@system_killmails, [:named_table, :set, :public])
+    create_table_if_not_exists(@system_kill_counts, [:named_table, :set, :public])
+    create_table_if_not_exists(@system_fetch_timestamps, [:named_table, :set, :public])
 
-    # Initialize sequence counter
-    :ets.insert(:counters, {:killmail_seq, 0})
+    # Initialize sequence counter if not exists
+    case :ets.lookup(@counters, :killmail_seq) do
+      [] -> :ets.insert(@counters, {:killmail_seq, 0})
+      _ -> :ok
+    end
 
     # Schedule garbage collection
     schedule_garbage_collection()
@@ -97,28 +226,51 @@ defmodule WandererKills.KillmailStore do
     {:ok, %{}}
   end
 
+  # Helper function to create table if it doesn't exist
+  defp create_table_if_not_exists(table_name, options) do
+    case :ets.whereis(table_name) do
+      :undefined ->
+        case :ets.new(table_name, options) do
+          ^table_name -> :ok
+          error -> {:error, error}
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
   @impl true
   def handle_call({:insert, system_id, killmail_map}, _from, state) do
-    # Get and increment sequence counter
-    [{:killmail_seq, current_seq}] = :ets.lookup(:counters, :killmail_seq)
-    new_seq = current_seq + 1
-    :ets.insert(:counters, {:killmail_seq, new_seq})
+    # Get next event ID
+    [{:killmail_seq, event_id}] = :ets.lookup(:counters, :killmail_seq)
+    :ets.insert(:counters, {:killmail_seq, event_id + 1})
 
-    # Insert event into events table
-    :ets.insert(:killmail_events, {new_seq, system_id, killmail_map})
+    # Store the killmail
+    killmail_id = killmail_map["killmail_id"]
+    :ets.insert(:killmails, {killmail_id, killmail_map})
 
-    # Broadcast to PubSub
-    Phoenix.PubSub.broadcast!(
+    # Add to system killmails
+    case :ets.lookup(:system_killmails, system_id) do
+      [] ->
+        :ets.insert(:system_killmails, {system_id, [killmail_id]})
+
+      [{^system_id, existing_ids}] ->
+        # Ensure we don't add duplicates
+        if killmail_id not in existing_ids do
+          :ets.insert(:system_killmails, {system_id, [killmail_id | existing_ids]})
+        end
+    end
+
+    # Insert event
+    :ets.insert(:killmail_events, {event_id, system_id, killmail_map})
+
+    # Broadcast via PubSub
+    Phoenix.PubSub.broadcast(
       WandererKills.PubSub,
       "system:#{system_id}",
       {:new_killmail, system_id, killmail_map}
     )
-
-    Logger.debug("Inserted killmail event", %{
-      event_id: new_seq,
-      system_id: system_id,
-      killmail_id: killmail_map["killmail_id"]
-    })
 
     {:reply, :ok, state}
   end
@@ -128,32 +280,36 @@ defmodule WandererKills.KillmailStore do
     # Get client offsets
     client_offsets = get_client_offsets(client_id)
 
-    # Collect matching events
-    events =
-      :ets.foldl(
-        fn {event_id, sys_id, km}, acc ->
-          if sys_id in system_ids and event_id > get_offset_for_system(sys_id, client_offsets) do
-            [{event_id, sys_id, km} | acc]
-          else
-            acc
-          end
-        end,
-        [],
-        :killmail_events
-      )
+    # Create match specification for :ets.select
+    match_spec = [
+      {
+        {:"$1", :"$2", :"$3"},
+        [
+          {:orelse,
+           Enum.map(system_ids, fn sys_id ->
+             {:andalso, {:==, :"$2", sys_id},
+              {:>, :"$1", get_offset_for_system(sys_id, client_offsets)}}
+           end)}
+        ],
+        [{{:"$1", :"$2", :"$3"}}]
+      }
+    ]
+
+    # Get all matching events
+    events = :ets.select(:killmail_events, match_spec)
 
     # Sort by event_id ascending
     sorted_events = Enum.sort_by(events, &elem(&1, 0))
 
-    # Update client offsets
-    updated_offsets = update_client_offsets(client_offsets, sorted_events)
-    :ets.insert(:client_offsets, {client_id, updated_offsets})
+    # Update client offsets for each system
+    updated_offsets =
+      Enum.reduce(sorted_events, client_offsets, fn {event_id, sys_id, _}, acc ->
+        current_offset = Map.get(acc, sys_id, 0)
+        if event_id > current_offset, do: Map.put(acc, sys_id, event_id), else: acc
+      end)
 
-    Logger.debug("Fetched events for client", %{
-      client_id: client_id,
-      system_ids: system_ids,
-      event_count: length(sorted_events)
-    })
+    # Store updated offsets
+    :ets.insert(:client_offsets, {client_id, updated_offsets})
 
     {:reply, {:ok, sorted_events}, state}
   end
@@ -163,40 +319,136 @@ defmodule WandererKills.KillmailStore do
     # Get client offsets
     client_offsets = get_client_offsets(client_id)
 
-    # Find the single event with the smallest event_id
-    result =
-      :ets.foldl(
-        fn {event_id, sys_id, km}, acc ->
-          if sys_id in system_ids and event_id > get_offset_for_system(sys_id, client_offsets) do
-            case acc do
-              nil -> {event_id, sys_id, km}
-              {current_event_id, _, _} when event_id < current_event_id -> {event_id, sys_id, km}
-              _ -> acc
-            end
-          else
-            acc
-          end
-        end,
-        nil,
-        :killmail_events
-      )
+    # Create match specification for :ets.select
+    match_spec = [
+      {
+        {:"$1", :"$2", :"$3"},
+        [
+          {:orelse,
+           Enum.map(system_ids, fn sys_id ->
+             {:andalso, {:==, :"$2", sys_id},
+              {:>, :"$1", get_offset_for_system(sys_id, client_offsets)}}
+           end)}
+        ],
+        [{{:"$1", :"$2", :"$3"}}]
+      }
+    ]
 
-    case result do
-      nil ->
-        {:reply, :empty, state}
-
-      {event_id, sys_id, km} ->
+    # Use :ets.select to get matching events
+    case :ets.select(:killmail_events, match_spec, 1) do
+      {[{event_id, sys_id, km}], _continuation} ->
         # Update offset for this system only
         updated_offsets = Map.put(client_offsets, sys_id, event_id)
         :ets.insert(:client_offsets, {client_id, updated_offsets})
 
-        Logger.debug("Fetched single event for client", %{
-          client_id: client_id,
-          event_id: event_id,
-          system_id: sys_id
-        })
-
         {:reply, {:ok, {event_id, sys_id, km}}, state}
+
+      {[], _continuation} ->
+        {:reply, :empty, state}
+
+      :"$end_of_table" ->
+        {:reply, :empty, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:store_killmail, killmail}, _from, state) when is_map(killmail) do
+    killmail_id = killmail["killmail_id"]
+
+    if killmail_id do
+      :ets.insert(:killmails, {killmail_id, killmail})
+      {:reply, :ok, state}
+    else
+      {:reply, {:error, :invalid_killmail_id}, state}
+    end
+  end
+
+  def handle_call({:store_killmail, _invalid}, _from, state) do
+    {:reply, {:error, :invalid_killmail}, state}
+  end
+
+  @impl true
+  def handle_call({:get_killmail, killmail_id}, _from, state) do
+    case :ets.lookup(:killmails, killmail_id) do
+      [{^killmail_id, killmail}] -> {:reply, {:ok, killmail}, state}
+      [] -> {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:delete_killmail, killmail_id}, _from, state) do
+    :ets.delete(:killmails, killmail_id)
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:add_system_killmail, system_id, killmail_id}, _from, state) do
+    case :ets.lookup(:system_killmails, system_id) do
+      [] ->
+        :ets.insert(:system_killmails, {system_id, [killmail_id]})
+
+      [{^system_id, existing_ids}] ->
+        # Ensure we don't add duplicates
+        if killmail_id not in existing_ids do
+          :ets.insert(:system_killmails, {system_id, [killmail_id | existing_ids]})
+        end
+    end
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:get_system_killmails, system_id}, _from, state) do
+    case :ets.lookup(:system_killmails, system_id) do
+      [{^system_id, killmail_ids}] -> {:reply, {:ok, killmail_ids}, state}
+      [] -> {:reply, {:ok, []}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:remove_system_killmail, system_id, killmail_id}, _from, state) do
+    case :ets.lookup(:system_killmails, system_id) do
+      [] ->
+        :ok
+
+      [{^system_id, existing_ids}] ->
+        new_ids = Enum.reject(existing_ids, &(&1 == killmail_id))
+
+        if Enum.empty?(new_ids) do
+          :ets.delete(:system_killmails, system_id)
+        else
+          :ets.insert(:system_killmails, {system_id, new_ids})
+        end
+    end
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:increment_system_kill_count, system_id}, _from, state) do
+    _count = :ets.update_counter(:system_kill_counts, system_id, {2, 1}, {system_id, 0})
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:get_system_kill_count, system_id}, _from, state) do
+    case :ets.lookup(:system_kill_counts, system_id) do
+      [{^system_id, count}] -> {:reply, {:ok, count}, state}
+      [] -> {:reply, {:ok, 0}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:set_system_fetch_timestamp, system_id, timestamp}, _from, state) do
+    :ets.insert(:system_fetch_timestamps, {system_id, timestamp})
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:get_system_fetch_timestamp, system_id}, _from, state) do
+    case :ets.lookup(:system_fetch_timestamps, system_id) do
+      [{^system_id, timestamp}] -> {:reply, {:ok, timestamp}, state}
+      [] -> {:reply, {:error, :not_found}, state}
     end
   end
 
@@ -227,23 +479,6 @@ defmodule WandererKills.KillmailStore do
   @spec get_offset_for_system(system_id(), client_offsets()) :: event_id()
   defp get_offset_for_system(system_id, offsets) do
     Map.get(offsets, system_id, 0)
-  end
-
-  @spec update_client_offsets(client_offsets(), [{event_id(), system_id(), killmail_map()}]) ::
-          client_offsets()
-  defp update_client_offsets(current_offsets, events) do
-    # Group events by system_id and take the max event_id for each system
-    max_event_ids =
-      events
-      # Group by system_id
-      |> Enum.group_by(&elem(&1, 1))
-      |> Enum.map(fn {sys_id, sys_events} ->
-        max_event_id = sys_events |> Enum.map(&elem(&1, 0)) |> Enum.max()
-        {sys_id, max_event_id}
-      end)
-      |> Enum.into(%{})
-
-    Map.merge(current_offsets, max_event_ids)
   end
 
   @spec schedule_garbage_collection() :: :ok
@@ -288,5 +523,17 @@ defmodule WandererKills.KillmailStore do
     end
 
     :ok
+  end
+
+  # Helper function to safely delete all objects from a table
+  defp safe_delete_all_objects(table_name) do
+    try do
+      case :ets.whereis(table_name) do
+        :undefined -> :ok
+        _ -> :ets.delete_all_objects(table_name)
+      end
+    rescue
+      ArgumentError -> :ok
+    end
   end
 end

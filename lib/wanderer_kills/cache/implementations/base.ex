@@ -93,24 +93,19 @@ defmodule WandererKills.Cache.Base do
   {:ok, nil} = get_value(:killmails, "non_existent_key")
   ```
   """
-  @spec get_value(cache_type(), cache_key()) :: {:ok, cache_value()} | {:error, term()}
+  @spec get_value(cache_type(), cache_key()) :: cache_result()
   def get_value(cache_type, key) do
-    %{name: cache_name} = get_cache_config(cache_type)
-
-    case Cachex.get(cache_name, key) do
-      {:ok, nil} -> {:ok, nil}
-      {:ok, value} -> {:ok, value}
-      {:error, reason} -> {:error, reason}
-    end
+    Cachex.get(cache_name(cache_type), key)
   end
 
   @doc """
-  Sets a value in the cache with the configured TTL.
+  Sets a value in the cache with TTL.
 
   ## Parameters
   - `cache_type` - The type of cache (:killmails, :system, or :esi)
   - `key` - The cache key
   - `value` - The value to store
+  - `ttl` - The TTL in milliseconds
 
   ## Returns
   - `:ok` - On success
@@ -122,45 +117,10 @@ defmodule WandererKills.Cache.Base do
   :ok = set_value(:killmails, "key", value)
   ```
   """
-  @spec set_value(cache_type(), cache_key(), cache_value()) :: cache_status()
-  def set_value(cache_type, key, value) do
-    %{name: cache_name, ttl: ttl} = get_cache_config(cache_type)
-
-    case Cachex.put(cache_name, key, value, ttl: ttl) do
-      {:ok, true} -> :ok
-      {:ok, false} -> {:error, :put_failed}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc """
-  Sets a value in the cache with a custom TTL.
-
-  ## Parameters
-  - `cache_type` - The type of cache (:killmails, :system, or :esi)
-  - `key` - The cache key
-  - `value` - The value to store
-  - `ttl` - Custom TTL in milliseconds
-
-  ## Returns
-  - `:ok` - On success
-  - `{:error, reason}` - On failure
-
-  ## Example
-
-  ```elixir
-  :ok = set_value(:killmails, "key", value, :timer.minutes(30))
-  ```
-  """
-  @spec set_value(cache_type(), cache_key(), cache_value(), pos_integer()) :: cache_status()
-  def set_value(cache_type, key, value, ttl) do
-    %{name: cache_name} = get_cache_config(cache_type)
-
-    case Cachex.put(cache_name, key, value, ttl: ttl) do
-      {:ok, true} -> :ok
-      {:ok, false} -> {:error, :put_failed}
-      {:error, reason} -> {:error, reason}
-    end
+  @spec set_value(cache_type(), cache_key(), cache_value(), pos_integer() | nil) :: cache_status()
+  def set_value(cache_type, key, value, ttl \\ nil) do
+    ttl_ms = if ttl, do: ttl * 1000, else: get_ttl(cache_type) * 1000
+    Cachex.put(cache_name(cache_type), key, value, ttl: ttl_ms)
   end
 
   @doc """
@@ -182,72 +142,7 @@ defmodule WandererKills.Cache.Base do
   """
   @spec delete_value(cache_type(), cache_key()) :: cache_status()
   def delete_value(cache_type, key) do
-    %{name: cache_name} = get_cache_config(cache_type)
-
-    case Cachex.del(cache_name, key) do
-      {:ok, _} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc """
-  Updates a value in the cache using a function.
-
-  ## Parameters
-  - `cache_type` - The type of cache (:killmails, :system, or :esi)
-  - `key` - The cache key
-  - `update_fn` - Function to update the value
-
-  ## Returns
-  - `{:ok, new_value}` - On success
-  - `{:error, reason}` - On failure
-
-  ## Example
-
-  ```elixir
-  {:ok, new_value} = update_value(:killmails, "key", &Map.put(&1, :count, 1))
-  ```
-  """
-  @spec update_value(cache_type(), cache_key(), (cache_value() -> cache_value())) ::
-          {:ok, cache_value()} | {:error, term()}
-  def update_value(cache_type, key, update_fn) do
-    %{name: cache_name, ttl: ttl} = get_cache_config(cache_type)
-
-    case Cachex.update(cache_name, key, update_fn, ttl: ttl) do
-      {:ok, new_value} -> {:ok, new_value}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc """
-  Increments a numeric value in the cache.
-
-  ## Parameters
-  - `cache_type` - The type of cache (:killmails, :system, or :esi)
-  - `key` - The cache key
-  - `amount` - The amount to increment by (default: 1)
-  - `initial` - Initial value if key doesn't exist (default: 0)
-
-  ## Returns
-  - `{:ok, new_value}` - On success
-  - `{:error, reason}` - On failure
-
-  ## Example
-
-  ```elixir
-  {:ok, 1} = increment_value(:system, "kill_count", 1, 0)
-  {:ok, 3} = increment_value(:system, "kill_count", 2)
-  ```
-  """
-  @spec increment_value(cache_type(), cache_key(), integer(), integer()) ::
-          {:ok, integer()} | {:error, term()}
-  def increment_value(cache_type, key, amount \\ 1, initial \\ 0) do
-    %{name: cache_name, ttl: ttl} = get_cache_config(cache_type)
-
-    case Cachex.incr(cache_name, key, amount, initial: initial, ttl: ttl) do
-      {:ok, new_value} -> {:ok, new_value}
-      {:error, reason} -> {:error, reason}
-    end
+    Cachex.del(cache_name(cache_type), key)
   end
 
   @doc """
@@ -268,23 +163,23 @@ defmodule WandererKills.Cache.Base do
   {:ok, [1, 2, 3]} = get_list(:system, "list_key")
   ```
   """
-  @spec get_list(cache_type(), cache_key()) :: {:ok, list()} | {:error, term()}
+  @spec get_list(cache_type(), cache_key()) :: cache_result()
   def get_list(cache_type, key) do
     case get_value(cache_type, key) do
       {:ok, nil} -> {:ok, []}
       {:ok, list} when is_list(list) -> {:ok, list}
-      {:ok, _non_list} -> {:ok, []}
-      error -> error
+      _ -> {:ok, []}
     end
   end
 
   @doc """
-  Adds a value to a list in the cache, ensuring uniqueness.
+  Adds a value to a list in the cache with TTL.
 
   ## Parameters
   - `cache_type` - The type of cache (:killmails, :system, or :esi)
   - `key` - The cache key
   - `value` - The value to add
+  - `ttl` - The TTL in milliseconds
 
   ## Returns
   - `:ok` - On success
@@ -296,16 +191,18 @@ defmodule WandererKills.Cache.Base do
   :ok = add_to_list(:killmails, "key", value)
   ```
   """
-  @spec add_to_list(cache_type(), cache_key(), cache_value()) :: cache_status()
-  def add_to_list(cache_type, key, value) do
-    case get_list(cache_type, key) do
-      {:ok, list} ->
-        new_list = [value | list] |> Enum.uniq()
-        set_value(cache_type, key, new_list)
+  @spec add_to_list(cache_type(), cache_key(), cache_value(), pos_integer() | nil) ::
+          cache_status()
+  def add_to_list(cache_type, key, value, ttl \\ nil) do
+    ttl_ms = if ttl, do: ttl * 1000, else: get_ttl(cache_type) * 1000
 
-      error ->
-        error
-    end
+    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
+      case Cachex.get(worker, key) do
+        {:ok, nil} -> Cachex.put(worker, key, [value], ttl: ttl_ms)
+        {:ok, list} when is_list(list) -> Cachex.put(worker, key, [value | list], ttl: ttl_ms)
+        _ -> Cachex.put(worker, key, [value], ttl: ttl_ms)
+      end
+    end)
   end
 
   @doc """
@@ -328,14 +225,18 @@ defmodule WandererKills.Cache.Base do
   """
   @spec remove_from_list(cache_type(), cache_key(), cache_value()) :: cache_status()
   def remove_from_list(cache_type, key, value) do
-    case get_list(cache_type, key) do
-      {:ok, list} ->
-        new_list = Enum.reject(list, &(&1 == value))
-        set_value(cache_type, key, new_list)
+    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
+      case Cachex.get(worker, key) do
+        {:ok, nil} ->
+          {:ok, []}
 
-      error ->
-        error
-    end
+        {:ok, list} when is_list(list) ->
+          Cachex.put(worker, key, Enum.reject(list, &(&1 == value)))
+
+        _ ->
+          {:ok, []}
+      end
+    end)
   end
 
   @doc """
@@ -343,11 +244,9 @@ defmodule WandererKills.Cache.Base do
   """
   @spec clear(atom()) :: cache_status()
   def clear(cache_type) do
-    %{name: cache_name} = get_cache_config(cache_type)
-
-    case Cachex.clear(cache_name) do
+    case Cachex.clear(cache_name(cache_type)) do
       {:ok, _} -> :ok
-      {:error, reason} -> {:error, reason}
+      error -> error
     end
   end
 
@@ -367,5 +266,163 @@ defmodule WandererKills.Cache.Base do
   def stats(cache_type) do
     %{name: cache_name} = get_cache_config(cache_type)
     Cachex.stats(cache_name)
+  end
+
+  @doc """
+  Gets a counter value from the cache.
+
+  ## Parameters
+  - `cache_type` - The type of cache (:killmails, :system, or :esi)
+  - `key` - The cache key
+
+  ## Returns
+  - `{:ok, count}` - On success
+  - `{:error, reason}` - On failure
+
+  ## Example
+
+  ```elixir
+  {:ok, count} = get_counter(:killmails, "key")
+  ```
+  """
+  @spec get_counter(cache_type(), cache_key()) :: cache_result()
+  def get_counter(cache_type, key) do
+    case get_value(cache_type, key) do
+      {:ok, nil} -> {:ok, 0}
+      {:ok, count} when is_integer(count) -> {:ok, count}
+      _ -> {:ok, 0}
+    end
+  end
+
+  @doc """
+  Increments a counter in the cache.
+
+  ## Parameters
+  - `cache_type` - The type of cache (:killmails, :system, or :esi)
+  - `key` - The cache key
+
+  ## Returns
+  - `{:ok, count}` - On success
+  - `{:error, reason}` - On failure
+
+  ## Example
+
+  ```elixir
+  {:ok, count} = increment_counter(:killmails, "key")
+  ```
+  """
+  @spec increment_counter(cache_type(), cache_key(), pos_integer() | nil) :: cache_status()
+  def increment_counter(cache_type, key, ttl \\ nil) do
+    ttl_ms = if ttl, do: ttl * 1000, else: get_ttl(cache_type) * 1000
+
+    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
+      case Cachex.get(worker, key) do
+        {:ok, nil} -> Cachex.put(worker, key, 1, ttl: ttl_ms)
+        {:ok, count} when is_integer(count) -> Cachex.put(worker, key, count + 1, ttl: ttl_ms)
+        _ -> Cachex.put(worker, key, 1, ttl: ttl_ms)
+      end
+    end)
+  end
+
+  @doc """
+  Decrements a counter in the cache.
+
+  ## Parameters
+  - `cache_type` - The type of cache (:killmails, :system, or :esi)
+  - `key` - The cache key
+
+  ## Returns
+  - `{:ok, count}` - On success
+  - `{:error, reason}` - On failure
+
+  ## Example
+
+  ```elixir
+  {:ok, count} = decrement_counter(:killmails, "key")
+  ```
+  """
+  @spec decrement_counter(cache_type(), cache_key()) :: cache_status()
+  def decrement_counter(cache_type, key) do
+    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
+      case Cachex.get(worker, key) do
+        {:ok, nil} -> {:ok, 0}
+        {:ok, count} when is_integer(count) and count > 0 -> Cachex.put(worker, key, count - 1)
+        _ -> {:ok, 0}
+      end
+    end)
+  end
+
+  @doc """
+  Checks if a key exists in the cache.
+
+  ## Parameters
+  - `cache_type` - The type of cache (:killmails, :system, or :esi)
+  - `key` - The cache key
+
+  ## Returns
+  - `{:ok, true}` - If the key exists
+  - `{:ok, false}` - If the key does not exist
+  - `{:error, reason}` - On failure
+
+  ## Example
+
+  ```elixir
+  {:ok, true} = exists?(:killmails, "key")
+  {:ok, false} = exists?(:killmails, "non_existent_key")
+  ```
+  """
+  @spec exists?(cache_type(), cache_key()) :: {:ok, boolean()} | {:error, term()}
+  def exists?(cache_type, key) do
+    %{name: cache_name} = get_cache_config(cache_type)
+
+    case Cachex.exists?(cache_name, key) do
+      {:ok, exists} -> {:ok, exists}
+      error -> error
+    end
+  end
+
+  @doc """
+  Gets the TTL of a key in the cache.
+
+  ## Parameters
+  - `cache_type` - The type of cache (:killmails, :system, or :esi)
+  - `key` - The cache key
+
+  ## Returns
+  - `{:ok, ttl}` - On success
+  - `{:error, reason}` - On failure
+
+  ## Example
+
+  ```elixir
+  {:ok, ttl} = ttl(:killmails, "key")
+  ```
+  """
+  @spec ttl(cache_type(), cache_key()) :: {:ok, pos_integer()} | {:error, term()}
+  def ttl(cache_type, key) do
+    %{name: cache_name} = get_cache_config(cache_type)
+
+    case Cachex.ttl(cache_name, key) do
+      {:ok, ttl} -> {:ok, ttl}
+      error -> error
+    end
+  end
+
+  defp cache_name(cache_type) do
+    case cache_type do
+      :killmails -> :killmail_cache
+      :system -> :system_cache
+      :esi -> :esi_cache
+    end
+  end
+
+  @doc false
+  @spec get_ttl(cache_type()) :: pos_integer()
+  defp get_ttl(cache_type) do
+    case cache_type do
+      :killmails -> Config.cache(:killmails, :ttl) || 3600
+      :system -> Config.cache(:system, :ttl) || 3600
+      :esi -> Config.cache(:esi, :ttl) || 3600
+    end
   end
 end

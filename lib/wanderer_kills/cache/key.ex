@@ -25,11 +25,9 @@ defmodule WandererKills.Cache.Key do
   ```
   """
 
-  alias WandererKills.Config
-
   @prefix "wanderer_kills"
 
-  @type cache_type :: :killmails | :system | :esi
+  @type cache_type :: :killmails | :system | :esi | :corporation | :character | :alliance
   @type cache_key :: String.t()
   @type cache_value :: term()
 
@@ -75,9 +73,9 @@ defmodule WandererKills.Cache.Key do
   @spec get_ttl(cache_type()) :: pos_integer()
   def get_ttl(cache_type) do
     case cache_type do
-      :killmails -> Config.cache().killmails[:ttl]
-      :system -> Config.cache().system[:ttl]
-      :esi -> Config.cache().esi[:ttl]
+      :killmails -> 3600
+      :system -> 3600
+      :esi -> 3600
     end
   end
 
@@ -111,41 +109,15 @@ defmodule WandererKills.Cache.Key do
   @doc """
   Generates a cache key for a killmail.
   """
-  @spec killmail_key(integer()) :: cache_key()
-  def killmail_key(id) do
-    generate(:killmails, ["killmail", to_string(id)])
+  def killmail_key(killmail_id) do
+    generate(:killmails, [to_string(killmail_id)])
   end
 
   @doc """
-  Generates a cache key for a system's killmail list.
+  Generates a key for the list of all killmail IDs.
   """
-  @spec system_list_key(integer()) :: cache_key()
-  def system_list_key(system_id) do
-    generate(:killmails, ["system", to_string(system_id)])
-  end
-
-  @doc """
-  Generates a cache key for a character's killmail list.
-  """
-  @spec character_list_key(integer()) :: cache_key()
-  def character_list_key(character_id) do
-    generate(:killmails, ["character", to_string(character_id)])
-  end
-
-  @doc """
-  Generates a cache key for a corporation's killmail list.
-  """
-  @spec corporation_list_key(integer()) :: cache_key()
-  def corporation_list_key(corporation_id) do
-    generate(:killmails, ["corporation", to_string(corporation_id)])
-  end
-
-  @doc """
-  Generates a cache key for an alliance's killmail list.
-  """
-  @spec alliance_list_key(integer()) :: cache_key()
-  def alliance_list_key(alliance_id) do
-    generate(:killmails, ["alliance", to_string(alliance_id)])
+  def killmail_ids_key() do
+    generate(:killmails, ["killmail_ids"])
   end
 
   # System cache keys
@@ -153,39 +125,35 @@ defmodule WandererKills.Cache.Key do
   @doc """
   Generates a cache key for system data.
   """
-  @spec system_data_key(integer()) :: cache_key()
   def system_data_key(system_id) do
-    generate(:system, ["data", to_string(system_id)])
+    generate(:system, [to_string(system_id), "data"])
   end
 
   @doc """
-  Generates a cache key for active systems.
+  Generates a key for the list of active systems.
   """
   @spec active_systems_key() :: cache_key()
-  def active_systems_key do
+  def active_systems_key() do
     generate(:system, ["active"])
   end
 
   @doc """
-  Generates a cache key for a system's fetch timestamp.
+  Generates a key for a system's kill count.
   """
-  @spec system_fetch_ts_key(integer()) :: cache_key()
-  def system_fetch_ts_key(system_id) do
-    generate(:system, [to_string(system_id), "fetch_ts"])
-  end
-
-  @doc """
-  Generates a cache key for a system's kill count.
-  """
-  @spec system_kill_count_key(integer()) :: cache_key()
   def system_kill_count_key(system_id) do
-    generate(:system, [to_string(system_id), "kill_count"])
+    generate(:killmails, ["system", to_string(system_id), "kill_count"])
   end
 
   @doc """
-  Generates a cache key for a system's TTL.
+  Generates a key for a system's fetch timestamp.
   """
-  @spec system_ttl_key(integer()) :: cache_key()
+  def system_fetch_timestamp_key(system_id) do
+    generate(:killmails, ["system", to_string(system_id), "fetch_timestamp"])
+  end
+
+  @doc """
+  Generates a key for a system's TTL.
+  """
   def system_ttl_key(system_id) do
     generate(:system, [to_string(system_id), "ttl"])
   end
@@ -213,7 +181,7 @@ defmodule WandererKills.Cache.Key do
   """
   @spec character_info_key(integer()) :: cache_key()
   def character_info_key(character_id) do
-    generate(:esi, ["character", to_string(character_id)])
+    generate(:character, [to_string(character_id), "info"])
   end
 
   @doc """
@@ -221,7 +189,7 @@ defmodule WandererKills.Cache.Key do
   """
   @spec corporation_info_key(integer()) :: cache_key()
   def corporation_info_key(corporation_id) do
-    generate(:esi, ["corporation", to_string(corporation_id)])
+    generate(:corporation, [to_string(corporation_id), "info"])
   end
 
   @doc """
@@ -229,7 +197,101 @@ defmodule WandererKills.Cache.Key do
   """
   @spec alliance_info_key(integer()) :: cache_key()
   def alliance_info_key(alliance_id) do
+    generate(:alliance, [to_string(alliance_id), "info"])
+  end
+
+  @doc """
+  Generates a key for a system's killmails.
+  """
+  def system_killmails_key(system_id) do
+    generate(:killmails, ["system", to_string(system_id)])
+  end
+
+  @doc """
+  Generates a key for a system's killmail IDs.
+  """
+  def system_killmail_ids_key(system_id) do
+    generate(:killmails, ["system", to_string(system_id), "killmail_ids"])
+  end
+
+  @doc """
+  Alias for system_fetch_timestamp_key/1 for backward compatibility.
+  """
+  def system_fetch_ts_key(system_id) do
+    system_fetch_timestamp_key(system_id)
+  end
+
+  @doc """
+  Generates a key for ESI rate limit tracking.
+  """
+  def esi_rate_limit_key do
+    generate(:esi, ["rate_limit"])
+  end
+
+  @doc """
+  Generates a key for ESI error tracking.
+  """
+  def esi_error_key do
+    generate(:esi, ["error"])
+  end
+
+  @doc """
+  Generates a key for ESI killmail tracking.
+  """
+  def esi_killmail_key(killmail_id) do
+    generate(:esi, ["killmail", to_string(killmail_id)])
+  end
+
+  @doc """
+  Generates a key for ESI system killmails tracking.
+  """
+  def esi_system_killmails_key(system_id) do
+    generate(:esi, ["system", to_string(system_id), "killmails"])
+  end
+
+  @doc """
+  Generates a cache key for ESI character info.
+  """
+  @spec esi_character_info_key(integer()) :: cache_key()
+  def esi_character_info_key(character_id) do
+    generate(:esi, ["character", to_string(character_id)])
+  end
+
+  @doc """
+  Generates a key for ESI corporation info tracking.
+  """
+  @spec esi_corporation_info_key(integer()) :: cache_key()
+  def esi_corporation_info_key(corporation_id) do
+    generate(:esi, ["corporation", to_string(corporation_id)])
+  end
+
+  @doc """
+  Generates a cache key for ESI alliance info.
+  """
+  @spec esi_alliance_info_key(integer()) :: cache_key()
+  def esi_alliance_info_key(alliance_id) do
     generate(:esi, ["alliance", to_string(alliance_id)])
+  end
+
+  @doc """
+  Generates a key for a character's killmails.
+  """
+  def character_killmails_key(character_id) do
+    generate(:killmails, ["character", to_string(character_id)])
+  end
+
+  @doc """
+  Generates a key for a corporation's killmails.
+  """
+  def corporation_killmails_key(corporation_id) do
+    generate(:killmails, ["corporation", to_string(corporation_id)])
+  end
+
+  @doc """
+  Generates a key for an alliance's killmails.
+  """
+  def alliance_killmails_key(alliance_id) do
+    generate(:killmails, ["alliance", to_string(alliance_id)])
   end
 
   @doc """
@@ -237,6 +299,6 @@ defmodule WandererKills.Cache.Key do
   """
   @spec system_info_key(integer()) :: cache_key()
   def system_info_key(system_id) do
-    generate(:esi, ["system", to_string(system_id)])
+    generate(:system, [to_string(system_id), "info"])
   end
 end

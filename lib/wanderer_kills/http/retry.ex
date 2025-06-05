@@ -40,10 +40,11 @@ defmodule WandererKills.Http.Retry do
   @spec retry_with_backoff((-> term()), retry_opts()) :: {:ok, term()} | {:error, term()}
   def retry_with_backoff(fun, opts \\ []) do
     retry_config = Config.retry()
+    http_config = Map.get(retry_config, :http, %{})
 
-    max_retries = Keyword.get(opts, :max_retries, retry_config.max_retries)
-    base_delay = Keyword.get(opts, :base_delay, retry_config.base_backoff)
-    max_delay = Keyword.get(opts, :max_delay, retry_config.max_backoff)
+    max_retries = Keyword.get(opts, :max_retries, Map.get(http_config, :max_retries, 3))
+    base_delay = Keyword.get(opts, :base_delay, Map.get(http_config, :base_delay, 1000))
+    max_delay = Keyword.get(opts, :max_delay, Map.get(http_config, :max_delay, 30000))
 
     rescue_only =
       Keyword.get(opts, :rescue_only, [

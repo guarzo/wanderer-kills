@@ -4,12 +4,12 @@ config :wanderer_kills,
   port: String.to_integer(System.get_env("PORT") || "4004"),
   # Cache configuration
   cache: %{
-    killmails: [name: :killmails_cache, ttl: :timer.hours(24)],
-    system: [name: :system_cache, ttl: :timer.hours(1)],
-    esi: [name: :esi_cache, ttl: :timer.hours(48)]
+    killmails: %{ttl: 3600},
+    system: %{ttl: 1800},
+    esi: %{ttl: 3600}
   },
   # System cache thresholds
-  recent_fetch_threshold_ms: 300_000,
+  cache_system_recent_fetch_threshold: 5,
   # Parser configuration
   parser: %{
     cutoff_seconds: 3_600,
@@ -23,9 +23,8 @@ config :wanderer_kills,
   },
   # Concurrency configuration for batch operations
   concurrency: %{
-    max_concurrent: 10,
-    batch_size: 50,
-    timeout_ms: 30_000
+    batch_size: 100,
+    max_workers: 10
   },
   # ESI API configuration
   esi: %{
@@ -38,11 +37,10 @@ config :wanderer_kills,
   # HTTP client configuration
   http_client: WandererKills.Http.Client,
   # Retry configuration
-  retry: [
-    max_retries: 3,
-    base_backoff: 1000,
-    max_backoff: 30_000
-  ],
+  retry: %{
+    http: %{max_retries: 3, base_delay: 1000},
+    redisq: %{max_retries: 5, base_delay: 500}
+  },
   # RedisQ stream configuration
   redisq: %{
     base_url: "https://zkillredisq.stream/listen.php",
@@ -55,7 +53,9 @@ config :wanderer_kills,
   },
   # Killmail store configuration
   killmail_store: %{
+    # How often to run garbage collection to remove old events (in milliseconds)
     gc_interval_ms: 60_000,
+    # Maximum number of events to keep per system before older ones are removed
     max_events_per_system: 10_000
   },
   # HTTP status code mappings
@@ -90,6 +90,26 @@ config :wanderer_kills,
       431,
       451
     ]
+  },
+  # Circuit breaker configuration
+  circuit_breaker: %{
+    zkb: %{failure_threshold: 10},
+    esi: %{failure_threshold: 5}
+  },
+  # Telemetry configuration
+  telemetry: %{
+    # Enable/disable specific metric types
+    enabled_metrics: [
+      :cache,
+      :api,
+      :circuit,
+      :event
+    ],
+    # Sampling rate for metrics (1.0 = 100%)
+    sampling_rate: 1.0,
+    # Metric retention period in milliseconds
+    # 7 days in seconds
+    retention_period: 604_800
   }
 
 # Cachex default configuration
@@ -165,11 +185,25 @@ config :logger, :console,
     :cache_value,
     :from,
     :max_concurrency,
-    :timeout
+    :timeout,
+    :endpoint,
+    :client_id,
+    :systems,
+    :system_ids,
+    :event_id,
+    :killmail_id,
+    :killmail,
+    :killmail_count,
+    :service,
+    :method,
+    :cache,
+    :key,
+    :client_id,
+    :event_count
   ]
 
 # Import environment specific config
 import_config "#{config_env()}.exs"
 
 # Phoenix PubSub configuration
-config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG2
+config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG

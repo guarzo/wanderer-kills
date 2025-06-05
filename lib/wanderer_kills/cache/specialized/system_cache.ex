@@ -41,9 +41,6 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   alias WandererKills.Config
   alias Cachex
 
-  # Get the recent fetch threshold from centralized config
-  @recent_fetch_threshold_ms Config.recent_fetch_threshold()
-
   @type cache_result :: {:ok, term()} | {:error, term()}
   @type cache_status :: :ok | {:error, term()}
   @type system_id :: pos_integer()
@@ -52,25 +49,34 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   @doc """
   Gets all killmails for a system.
   """
-  @spec get_killmails(integer()) :: cache_result()
-  def get_killmails(system_id) do
-    Base.get_list(:system, Key.system_list_key(system_id))
+  @spec get_system_killmails(integer()) :: cache_result()
+  def get_system_killmails(system_id) do
+    Base.get_list(:system, Key.system_killmails_key(system_id))
   end
 
   @doc """
   Gets all killmail IDs for a system.
   """
-  @spec get_killmail_ids(integer()) :: cache_result()
-  def get_killmail_ids(system_id) do
-    get_killmails(system_id)
+  @spec get_system_killmail_ids(integer()) :: cache_result()
+  def get_system_killmail_ids(system_id) do
+    Base.get_list(:system, Key.system_killmail_ids_key(system_id))
   end
 
   @doc """
   Adds a killmail ID to a system's killmail list using configured TTL.
   """
-  @spec add_killmail(integer(), integer()) :: cache_status()
-  def add_killmail(system_id, killmail_id) do
-    Base.add_to_list(:system, Key.system_list_key(system_id), killmail_id)
+  @spec add_system_killmail(integer(), integer()) :: cache_status()
+  def add_system_killmail(system_id, killmail_id) do
+    ttl = Config.cache(:system, :ttl)
+    Base.add_to_list(:system, Key.system_killmails_key(system_id), killmail_id, ttl)
+  end
+
+  @doc """
+  Removes a killmail ID from a system's killmail list using configured TTL.
+  """
+  @spec remove_system_killmail(integer(), integer()) :: cache_status()
+  def remove_system_killmail(system_id, killmail_id) do
+    Base.remove_from_list(:system, Key.system_killmails_key(system_id), killmail_id)
   end
 
   @doc """
@@ -78,12 +84,14 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   """
   @spec recently_fetched?(integer()) :: {:ok, boolean()} | {:error, term()}
   def recently_fetched?(system_id) do
-    case Base.get_value(:system, Key.system_fetch_ts_key(system_id)) do
+    case Base.get_value(:system, Key.system_fetch_timestamp_key(system_id)) do
       {:ok, nil} ->
         {:ok, false}
 
-      {:ok, ts_ms} when is_integer(ts_ms) ->
-        {:ok, Clock.now_milliseconds() - ts_ms < @recent_fetch_threshold_ms}
+      {:ok, timestamp} ->
+        threshold = Config.recent_fetch_threshold()
+        now = System.system_time(:second)
+        {:ok, now - timestamp < threshold}
 
       error ->
         error
@@ -97,8 +105,8 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   def set_fetch_timestamp(system_id) do
     Base.set_value(
       :system,
-      Key.system_fetch_ts_key(system_id),
-      Clock.now_milliseconds()
+      Key.system_fetch_timestamp_key(system_id),
+      System.system_time(:second)
     )
   end
 
@@ -107,23 +115,23 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   """
   @spec increment_kill_count(integer()) :: cache_status()
   def increment_kill_count(system_id) do
-    # Use the centralized increment function from Base instead of calling Cachex directly
-    case Base.increment_value(:system, Key.system_kill_count_key(system_id), 1, 1) do
-      {:ok, _new_count} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    Base.increment_counter(:system, Key.system_kill_count_key(system_id))
+  end
+
+  @doc """
+  Decrements the kill count for a system using configured TTL.
+  """
+  @spec decrement_kill_count(integer()) :: cache_status()
+  def decrement_kill_count(system_id) do
+    Base.decrement_counter(:system, Key.system_kill_count_key(system_id))
   end
 
   @doc """
   Gets the kill count for a system.
   """
-  @spec get_kill_count(integer()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def get_kill_count(system_id) do
-    case Base.get_value(:system, Key.system_kill_count_key(system_id)) do
-      {:ok, nil} -> {:ok, 0}
-      {:ok, count} -> {:ok, count}
-      error -> error
-    end
+  @spec get_system_kill_count(integer()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def get_system_kill_count(system_id) do
+    Base.get_counter(:system, Key.system_kill_count_key(system_id))
   end
 
   @doc """
@@ -210,12 +218,8 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   @spec add_active_system(system_id()) :: cache_status()
   def add_active_system(system_id) do
     case Base.add_to_list(:system, Key.active_systems_key(), system_id) do
-      :ok ->
-        update_ttl(system_id)
-        :ok
-
-      error ->
-        error
+      {:ok, _} -> :ok
+      error -> error
     end
   end
 
@@ -237,6 +241,34 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   """
   @spec remove_active_system(system_id()) :: cache_status()
   def remove_active_system(system_id) do
-    Base.remove_from_list(:system, Key.active_systems_key(), system_id)
+    case Base.remove_from_list(:system, Key.active_systems_key(), system_id) do
+      {:ok, _} -> :ok
+      error -> error
+    end
+  end
+
+  @doc """
+  Adds a killmail ID to a system's killmail ID list using configured TTL.
+  """
+  @spec add_system_killmail_id(integer(), integer()) :: cache_status()
+  def add_system_killmail_id(system_id, killmail_id) do
+    ttl = Config.cache(:system, :ttl)
+    Base.add_to_list(:system, Key.system_killmail_ids_key(system_id), killmail_id, ttl)
+  end
+
+  @doc """
+  Removes a killmail ID from a system's killmail ID list using configured TTL.
+  """
+  @spec remove_system_killmail_id(integer(), integer()) :: cache_status()
+  def remove_system_killmail_id(system_id, killmail_id) do
+    Base.remove_from_list(:system, Key.system_killmail_ids_key(system_id), killmail_id)
+  end
+
+  @doc """
+  Clears the system cache.
+  """
+  @spec clear() :: cache_status()
+  def clear do
+    Base.clear(:system)
   end
 end

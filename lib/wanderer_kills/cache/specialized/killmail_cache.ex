@@ -8,6 +8,7 @@ defmodule WandererKills.Cache.Specialized.KillmailCache do
   require Logger
   alias WandererKills.Cache.Base
   alias WandererKills.Cache.Key
+  alias WandererKills.Config
 
   @type cache_result :: {:ok, term()} | {:error, term()}
   @type cache_status :: :ok | {:error, term()}
@@ -29,16 +30,17 @@ defmodule WandererKills.Cache.Specialized.KillmailCache do
   Gets a killmail from the cache.
   """
   @spec get_killmail(integer()) :: cache_result()
-  def get_killmail(id) do
-    Base.get_value(:killmails, Key.killmail_key(id))
+  def get_killmail(killmail_id) do
+    Base.get_value(:killmails, Key.killmail_key(killmail_id))
   end
 
   @doc """
   Stores a killmail in the cache using configured TTL.
   """
   @spec set_killmail(integer(), map()) :: cache_status()
-  def set_killmail(id, killmail) do
-    Base.set_value(:killmails, Key.killmail_key(id), killmail)
+  def set_killmail(killmail_id, data) do
+    ttl = Config.cache(:killmails, :ttl)
+    Base.set_value(:killmails, Key.killmail_key(killmail_id), data, ttl)
   end
 
   @doc """
@@ -52,4 +54,21 @@ defmodule WandererKills.Cache.Specialized.KillmailCache do
   """
   @spec clear() :: cache_status()
   def clear(), do: Base.clear(:killmails)
+
+  def delete_killmail(killmail_id) do
+    Base.delete_value(:killmails, Key.killmail_key(killmail_id))
+  end
+
+  def get_killmail_ids do
+    Base.get_list(:killmails, Key.killmail_ids_key())
+  end
+
+  def add_killmail_id(killmail_id) do
+    ttl = Config.cache(:killmails, :ttl)
+    Base.add_to_list(:killmails, Key.killmail_ids_key(), killmail_id, ttl)
+  end
+
+  def remove_killmail_id(killmail_id) do
+    Base.remove_from_list(:killmails, Key.killmail_ids_key(), killmail_id)
+  end
 end
