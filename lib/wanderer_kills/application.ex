@@ -19,15 +19,16 @@ defmodule WandererKills.Application do
   @impl true
   def start(_type, _args) do
     # 1) Attach telemetry handlers before starting measurements
-    WandererKills.Infrastructure.Telemetry.attach_handlers()
+    WandererKills.Observability.Telemetry.attach_handlers()
 
     # 2) Build the supervision tree
     base_children = [
       {Task.Supervisor, name: WandererKills.TaskSupervisor},
       {Phoenix.PubSub, name: WandererKills.PubSub},
       WandererKills.KillmailStore,
-      WandererKills.Cache.Supervisor,
-      WandererKills.Infrastructure.Monitoring,
+      # Direct Cachex supervision instead of single-child supervisor
+      {Cachex, name: :unified_cache, ttl: WandererKills.Config.cache_ttl(:killmails)},
+      WandererKills.Observability.Monitoring,
       {Plug.Cowboy,
        scheme: :http,
        plug: WandererKillsWeb.Api,
@@ -35,9 +36,10 @@ defmodule WandererKills.Application do
       WandererKills.Parser.Stats,
       {:telemetry_poller,
        measurements: [
-         {WandererKills.Infrastructure.Telemetry, :count_http_requests, []},
-         {WandererKills.Infrastructure.Telemetry, :count_cache_operations, []},
-         {WandererKills.Infrastructure.Telemetry, :count_fetch_operations, []}
+         {WandererKills.Observability.Monitoring, :measure_http_requests, []},
+         {WandererKills.Observability.Monitoring, :measure_cache_operations, []},
+         {WandererKills.Observability.Monitoring, :measure_fetch_operations, []},
+         {WandererKills.Observability.Monitoring, :measure_system_resources, []}
        ],
        period: :timer.seconds(10)}
     ]

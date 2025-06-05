@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.Behaviours.HealthCheck do
+defmodule WandererKills.Observability.Behaviours.HealthCheck do
   @moduledoc """
   Behaviour for health check implementations.
 
@@ -22,7 +22,7 @@ defmodule WandererKills.Infrastructure.Behaviours.HealthCheck do
 
   ```elixir
   defmodule MyApp.SomeHealthCheck do
-    @behaviour WandererKills.Infrastructure.Behaviours.HealthCheck
+    @behaviour WandererKills.Observability.Behaviours.HealthCheck
 
     @impl true
     def check_health(opts \\\\ []) do

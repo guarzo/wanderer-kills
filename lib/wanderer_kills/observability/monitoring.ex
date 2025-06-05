@@ -1,17 +1,18 @@
-defmodule WandererKills.Infrastructure.Monitoring do
+defmodule WandererKills.Observability.Monitoring do
   @moduledoc """
-  Unified monitoring and instrumentation for the WandererKills application.
+  Unified monitoring and observability for the WandererKills application.
 
-  This module consolidates health monitoring, metrics collection, and telemetry
-  functionality that was previously spread across multiple modules.
+  This module consolidates health monitoring, metrics collection, telemetry measurements,
+  and instrumentation functionality into a single observability interface.
 
   ## Features
 
   - Cache health monitoring and metrics collection
   - Application health status and uptime tracking
-  - Telemetry data gathering
+  - Telemetry measurements and periodic data gathering
   - Unified error handling and logging
   - Periodic health checks with configurable intervals
+  - System metrics collection (memory, CPU, processes)
 
   ## Usage
 
@@ -27,6 +28,11 @@ defmodule WandererKills.Infrastructure.Monitoring do
 
   # Get stats for a specific cache
   {:ok, stats} = Monitoring.get_cache_stats(:killmails_cache)
+
+  # Telemetry measurements (called by TelemetryPoller)
+  Monitoring.measure_http_requests()
+  Monitoring.measure_cache_operations()
+  Monitoring.measure_fetch_operations()
   ```
 
   ## Cache Names
@@ -147,6 +153,94 @@ defmodule WandererKills.Infrastructure.Monitoring do
     GenServer.call(__MODULE__, {:get_cache_stats, cache_name})
   end
 
+  # Telemetry measurement functions (called by TelemetryPoller)
+
+  @doc """
+  Measures HTTP request metrics for telemetry.
+
+  This function is called by TelemetryPoller to emit HTTP request metrics.
+  """
+  @spec measure_http_requests() :: :ok
+  def measure_http_requests do
+    :telemetry.execute(
+      [:wanderer_kills, :system, :http_requests],
+      %{count: :erlang.statistics(:reductions) |> elem(0)},
+      %{}
+    )
+  end
+
+  @doc """
+  Measures cache operation metrics for telemetry.
+
+  This function is called by TelemetryPoller to emit cache operation metrics.
+  """
+  @spec measure_cache_operations() :: :ok
+  def measure_cache_operations do
+    cache_metrics =
+      Enum.map(@cache_names, fn cache_name ->
+        case Cachex.size(cache_name) do
+          {:ok, size} -> size
+          _ -> 0
+        end
+      end)
+      |> Enum.sum()
+
+    :telemetry.execute(
+      [:wanderer_kills, :system, :cache_operations],
+      %{total_cache_size: cache_metrics},
+      %{}
+    )
+  end
+
+  @doc """
+  Measures fetch operation metrics for telemetry.
+
+  This function is called by TelemetryPoller to emit fetch operation metrics.
+  """
+  @spec measure_fetch_operations() :: :ok
+  def measure_fetch_operations do
+    process_count = :erlang.system_info(:process_count)
+
+    :telemetry.execute(
+      [:wanderer_kills, :system, :fetch_operations],
+      %{process_count: process_count},
+      %{}
+    )
+  end
+
+  @doc """
+  Measures system resource metrics for telemetry.
+
+  This function emits comprehensive system metrics including memory and CPU usage.
+  """
+  @spec measure_system_resources() :: :ok
+  def measure_system_resources do
+    memory_info = :erlang.memory()
+
+    :telemetry.execute(
+      [:wanderer_kills, :system, :memory],
+      %{
+        total_memory: memory_info[:total],
+        process_memory: memory_info[:processes],
+        atom_memory: memory_info[:atom],
+        binary_memory: memory_info[:binary]
+      },
+      %{}
+    )
+
+    # Process and scheduler metrics
+    :telemetry.execute(
+      [:wanderer_kills, :system, :cpu],
+      %{
+        process_count: :erlang.system_info(:process_count),
+        port_count: :erlang.system_info(:port_count),
+        schedulers: :erlang.system_info(:schedulers),
+        run_queue: :erlang.statistics(:run_queue)
+      },
+      %{}
+    )
+  end
+
   # Server Callbacks
 
   @impl true
@@ -203,7 +297,8 @@ defmodule WandererKills.Infrastructure.Monitoring do
       timestamp: Clock.now_iso8601(),
       version: get_app_version(),
       uptime_seconds: get_uptime_seconds(),
-      caches: cache_checks
+      caches: cache_checks,
+      system: get_system_info()
     }
   end
 
@@ -214,7 +309,12 @@ defmodule WandererKills.Infrastructure.Monitoring do
     %{
       timestamp: Clock.now_iso8601(),
       uptime_seconds: get_uptime_seconds(),
-      caches: cache_metrics
+      caches: cache_metrics,
+      system: get_system_info(),
+      aggregate: %{
+        total_cache_size: Enum.sum(Enum.map(cache_metrics, &Map.get(&1, :size, 0))),
+        average_hit_rate: calculate_average_hit_rate(cache_metrics)
+      }
     }
   end
 
@@ -270,6 +370,51 @@ defmodule WandererKills.Infrastructure.Monitoring do
     case Cachex.stats(cache_name) do
       {:ok, stats} -> {:ok, stats}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec get_system_info() :: map()
+  defp get_system_info do
+    try do
+      memory_info = :erlang.memory()
+
+      %{
+        memory: %{
+          total: memory_info[:total],
+          processes: memory_info[:processes],
+          atom: memory_info[:atom],
+          binary: memory_info[:binary]
+        },
+        processes: %{
+          count: :erlang.system_info(:process_count),
+          limit: :erlang.system_info(:process_limit)
+        },
+        ports: %{
+          count: :erlang.system_info(:port_count),
+          limit: :erlang.system_info(:port_limit)
+        },
+        schedulers: :erlang.system_info(:schedulers),
+        run_queue: :erlang.statistics(:run_queue),
+        ets_tables: length(:ets.all())
+      }
+    rescue
+      error ->
+        Logger.warning("Failed to collect system info: #{inspect(error)}")
+        %{error: "System info collection failed"}
+    end
+  end
+
+  @spec calculate_average_hit_rate([map()]) :: float()
+  defp calculate_average_hit_rate(cache_metrics) do
+    valid_metrics = Enum.reject(cache_metrics, &Map.has_key?(&1, :error))
+
+    case valid_metrics do
+      [] ->
+        0.0
+
+      metrics ->
+        hit_rates = Enum.map(metrics, &Map.get(&1, :hit_rate, 0.0))
+        Enum.sum(hit_rates) / length(hit_rates)
     end
   end
 

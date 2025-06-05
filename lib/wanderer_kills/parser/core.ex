@@ -7,7 +7,7 @@ defmodule WandererKills.Parser.Core do
   alias WandererKills.Parser.{CacheHandler, Stats, Flatten}
   alias WandererKills.Core.Clock
   alias WandererKills.Cache.Unified, as: Cache
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
 
   @type raw_km :: map()
   @type merged_km :: map()

@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.Health do
+defmodule WandererKills.Observability.Health do
   @moduledoc """
   Main health check module for the WandererKills application.
 
@@ -33,7 +33,7 @@ defmodule WandererKills.Infrastructure.Health do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.HealthChecks.{ApplicationHealth, CacheHealth}
+  alias WandererKills.Observability.HealthChecks.{ApplicationHealth, CacheHealth}
 
   @type health_component :: :application | :cache
   @type health_opts :: [

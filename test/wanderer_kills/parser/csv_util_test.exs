@@ -1,7 +1,7 @@
-defmodule WandererKills.Data.Parsers.CsvUtilTest do
+defmodule WandererKills.Parser.CsvUtilTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Data.Parsers.CsvUtil
+  alias WandererKills.Parser.CsvUtil
 
   describe "read_rows/2" do
     test "handles missing file" do

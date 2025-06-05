@@ -1,200 +1,442 @@
 defmodule WandererKills.Cache do
   @moduledoc """
-  Public API for the WandererKills Cache domain.
+  Simplified cache interface for WandererKills.
 
-  This module provides a unified interface to cache operations including:
-  - Killmail caching
-  - System data caching
-  - ESI data caching
-  - Cache key management
-  - Cache administration
+  This module provides a clean, direct interface to the unified Cachex instance,
+  replacing the complex hierarchy of Base → Unified → Specialized caches with
+  a single, straightforward API.
+
+  ## Features
+
+  - Direct Cachex operations with namespaced keys
+  - Consistent error handling and return patterns
+  - Type-safe operations with proper specs
+  - Simplified architecture without unnecessary abstractions
 
   ## Usage
 
   ```elixir
-  alias WandererKills.Cache
+  # Killmail operations
+  {:ok, killmail} = Cache.get_killmail(123)
+  :ok = Cache.set_killmail(123, killmail_data)
 
-  # Store a killmail
-  :ok = Cache.store_killmail(123456, killmail_data)
+  # System operations
+  {:ok, systems} = Cache.get_active_systems()
+  :ok = Cache.add_active_system(30000142)
 
-  # Get cached killmail
-  {:ok, killmail} = Cache.get_killmail(123456)
-
-  # Cache system data
-  :ok = Cache.store_system_data(30000142, system_data)
+  # ESI operations
+  {:ok, character} = Cache.get_character_info(123456)
+  :ok = Cache.set_type_info(456, type_data)
   ```
 
-  This reduces coupling between domains and provides a stable interface
-  for cache operations across the application.
+  ## Key Namespacing
+
+  All cache keys are namespaced to avoid conflicts:
+  - `killmails:*` - Killmail data
+  - `systems:*` - System-specific data
+  - `esi:*` - ESI API responses
   """
 
-  # Specialized Cache APIs
-  alias WandererKills.Cache.Specialized.{KillmailCache, SystemCache, EsiCache}
+  require Logger
+  alias WandererKills.{Config, Constants}
 
-  # Cache Infrastructure
-  alias WandererKills.Cache.Key
+  @cache_name :unified_cache
 
-  #
-  # Killmail Cache API
-  #
+  # Type definitions
+  @type killmail_id :: pos_integer()
+  @type system_id :: pos_integer()
+  @type character_id :: pos_integer()
+  @type corporation_id :: pos_integer()
+  @type alliance_id :: pos_integer()
+  @type type_id :: pos_integer()
+  @type cache_result(t) :: {:ok, t} | {:error, term()}
+
+  # =============================================================================
+  # Killmail Cache Operations
+  # =============================================================================
 
   @doc """
-  Gets a killmail from the cache.
+  Gets a killmail by ID from the cache.
   """
-  @spec get_killmail(integer()) :: {:ok, map()} | {:error, term()}
+  @spec get_killmail(killmail_id()) :: cache_result(map())
   def get_killmail(killmail_id) do
-    KillmailCache.get_killmail(killmail_id)
+    key = "killmails:#{killmail_id}"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Stores a killmail in the cache.
+  Sets a killmail in the cache.
   """
-  @spec store_killmail(integer(), map()) :: :ok | {:error, term()}
-  def store_killmail(killmail_id, killmail_data) do
-    KillmailCache.set_killmail(killmail_id, killmail_data)
+  @spec set_killmail(killmail_id(), map()) :: :ok | {:error, term()}
+  def set_killmail(killmail_id, killmail) do
+    key = "killmails:#{killmail_id}"
+    ttl = Config.cache_ttl(:killmails)
+
+    case Cachex.put(@cache_name, key, killmail, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Deletes a killmail from the cache.
+  Deletes a killmail by ID from the cache.
   """
-  @spec delete_killmail(integer()) :: :ok | {:error, term()}
+  @spec delete_killmail(killmail_id()) :: :ok | {:error, term()}
   def delete_killmail(killmail_id) do
-    KillmailCache.delete_killmail(killmail_id)
+    key = "killmails:#{killmail_id}"
+
+    case Cachex.del(@cache_name, key) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Gets all cached killmail IDs.
+  Gets all killmail IDs from the cache.
   """
-  @spec get_killmail_ids() :: {:ok, [integer()]} | {:error, term()}
-  def get_killmail_ids do
-    KillmailCache.get_killmail_ids()
-  end
+  @spec get_killmail_ids() :: cache_result([killmail_id()])
+  def get_killmail_ids() do
+    key = "killmails:ids"
 
-  #
-  # System Cache API
-  #
-
-  @doc """
-  Gets system data from the cache.
-  """
-  @spec get_system_data(integer()) :: {:ok, map()} | {:error, term()}
-  def get_system_data(system_id) do
-    SystemCache.get_system_data(system_id)
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:ok, []}
+      {:ok, ids} when is_list(ids) -> {:ok, ids}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Stores system data in the cache.
+  Adds a killmail ID to the tracked list.
   """
-  @spec store_system_data(integer(), map()) :: :ok | {:error, term()}
-  def store_system_data(system_id, system_data) do
-    SystemCache.cache_system_data(system_id, system_data)
+  @spec add_killmail_id(killmail_id()) :: :ok | {:error, term()}
+  def add_killmail_id(killmail_id) do
+    key = "killmails:ids"
+    ttl = Config.cache_ttl(:killmails)
+
+    case get_killmail_ids() do
+      {:ok, ids} ->
+        new_ids = [killmail_id | ids] |> Enum.uniq()
+
+        case Cachex.put(@cache_name, key, new_ids, ttl: ttl) do
+          {:ok, true} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
+
+  # =============================================================================
+  # System Cache Operations
+  # =============================================================================
 
   @doc """
   Gets active systems from the cache.
   """
-  @spec get_active_systems() :: {:ok, [integer()]} | {:error, term()}
-  def get_active_systems do
-    SystemCache.get_active_systems()
+  @spec get_active_systems() :: cache_result([system_id()])
+  def get_active_systems() do
+    key = "systems:active"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:ok, []}
+      {:ok, systems} when is_list(systems) -> {:ok, systems}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Adds a system to the active systems list.
+  """
+  @spec add_active_system(system_id()) :: :ok | {:error, term()}
+  def add_active_system(system_id) do
+    key = "systems:active"
+    ttl = Config.cache_ttl(:system)
+
+    case get_active_systems() do
+      {:ok, systems} ->
+        new_systems = [system_id | systems] |> Enum.uniq()
+
+        case Cachex.put(@cache_name, key, new_systems, ttl: ttl) do
+          {:ok, true} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets killmail IDs for a specific system.
+  """
+  @spec get_system_killmails(system_id()) :: cache_result([killmail_id()])
+  def get_system_killmails(system_id) do
+    key = "systems:#{system_id}:killmails"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:ok, []}
+      {:ok, killmail_ids} when is_list(killmail_ids) -> {:ok, killmail_ids}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Adds a killmail to a system's killmail list.
+  """
+  @spec add_system_killmail(system_id(), killmail_id()) :: :ok | {:error, term()}
+  def add_system_killmail(system_id, killmail_id) do
+    key = "systems:#{system_id}:killmails"
+    ttl = Config.cache_ttl(:system)
+
+    case get_system_killmails(system_id) do
+      {:ok, killmail_ids} ->
+        new_ids = [killmail_id | killmail_ids] |> Enum.uniq()
+
+        case Cachex.put(@cache_name, key, new_ids, ttl: ttl) do
+          {:ok, true} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
   Checks if a system was recently fetched.
   """
-  @spec recently_fetched?(integer()) :: boolean()
-  def recently_fetched?(system_id) do
-    SystemCache.recently_fetched?(system_id)
+  @spec system_recently_fetched?(system_id()) :: cache_result(boolean())
+  def system_recently_fetched?(system_id) do
+    key = "systems:#{system_id}:fetch_timestamp"
+    threshold = Constants.threshold(:recent_fetch)
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} ->
+        {:ok, false}
+
+      {:ok, timestamp} when is_struct(timestamp, DateTime) ->
+        seconds_ago = DateTime.diff(DateTime.utc_now(), timestamp)
+        {:ok, seconds_ago < threshold}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  #
-  # ESI Cache API
-  #
+  @doc """
+  Sets the fetch timestamp for a system.
+  """
+  @spec set_system_fetch_timestamp(system_id()) :: :ok | {:error, term()}
+  def set_system_fetch_timestamp(system_id) do
+    set_system_fetch_timestamp(system_id, DateTime.utc_now())
+  end
 
   @doc """
-  Gets character information from ESI cache.
+  Sets the fetch timestamp for a system to a specific time.
   """
-  @spec get_character_info(integer()) :: {:ok, map()} | {:error, term()}
+  @spec set_system_fetch_timestamp(system_id(), DateTime.t()) :: :ok | {:error, term()}
+  def set_system_fetch_timestamp(system_id, timestamp) do
+    key = "systems:#{system_id}:fetch_timestamp"
+    ttl = Config.cache_ttl(:system)
+
+    case Cachex.put(@cache_name, key, timestamp, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # =============================================================================
+  # ESI Cache Operations
+  # =============================================================================
+
+  @doc """
+  Gets character information from the cache.
+  """
+  @spec get_character_info(character_id()) :: cache_result(map())
   def get_character_info(character_id) do
-    EsiCache.get_character_info(character_id)
+    key = "esi:character:#{character_id}"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Gets corporation information from ESI cache.
+  Sets character information in the cache.
   """
-  @spec get_corporation_info(integer()) :: {:ok, map()} | {:error, term()}
+  @spec set_character_info(character_id(), map()) :: :ok | {:error, term()}
+  def set_character_info(character_id, character_info) do
+    key = "esi:character:#{character_id}"
+    ttl = Config.cache_ttl(:esi)
+
+    case Cachex.put(@cache_name, key, character_info, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets corporation information from the cache.
+  """
+  @spec get_corporation_info(corporation_id()) :: cache_result(map())
   def get_corporation_info(corporation_id) do
-    EsiCache.get_corporation_info(corporation_id)
+    key = "esi:corporation:#{corporation_id}"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Gets alliance information from ESI cache.
+  Sets corporation information in the cache.
   """
-  @spec get_alliance_info(integer()) :: {:ok, map()} | {:error, term()}
+  @spec set_corporation_info(corporation_id(), map()) :: :ok | {:error, term()}
+  def set_corporation_info(corporation_id, corp_info) do
+    key = "esi:corporation:#{corporation_id}"
+    ttl = Config.cache_ttl(:esi)
+
+    case Cachex.put(@cache_name, key, corp_info, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets alliance information from the cache.
+  """
+  @spec get_alliance_info(alliance_id()) :: cache_result(map())
   def get_alliance_info(alliance_id) do
-    EsiCache.get_alliance_info(alliance_id)
+    key = "esi:alliance:#{alliance_id}"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Gets ship type information from ESI cache.
+  Sets alliance information in the cache.
   """
-  @spec get_type_info(integer()) :: {:ok, map()} | {:error, term()}
+  @spec set_alliance_info(alliance_id(), map()) :: :ok | {:error, term()}
+  def set_alliance_info(alliance_id, alliance_info) do
+    key = "esi:alliance:#{alliance_id}"
+    ttl = Config.cache_ttl(:esi)
+
+    case Cachex.put(@cache_name, key, alliance_info, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets type information from the cache.
+  """
+  @spec get_type_info(type_id()) :: cache_result(map())
   def get_type_info(type_id) do
-    EsiCache.get_type_info(type_id)
+    key = "esi:type:#{type_id}"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Ensures data is cached for the specified entity type and ID.
+  Sets type information in the cache.
   """
-  @spec ensure_cached(atom(), integer()) :: :ok | {:error, term()}
-  def ensure_cached(type, id) do
-    EsiCache.ensure_cached(type, id)
-  end
+  @spec set_type_info(type_id(), map()) :: :ok | {:error, term()}
+  def set_type_info(type_id, type_info) do
+    key = "esi:type:#{type_id}"
+    ttl = Config.cache_ttl(:esi)
 
-  #
-  # Cache Administration API
-  #
-
-  @doc """
-  Clears all cache entries.
-  """
-  @spec clear_all() :: :ok
-  def clear_all do
-    KillmailCache.clear()
-    SystemCache.clear()
-    EsiCache.clear()
-    :ok
+    case Cachex.put(@cache_name, key, type_info, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Clears cache entries for a specific type.
+  Gets group information from the cache.
   """
-  @spec clear(atom()) :: :ok | {:error, term()}
-  def clear(:killmails), do: KillmailCache.clear()
-  def clear(:system), do: SystemCache.clear()
-  def clear(:esi), do: EsiCache.clear()
-  def clear(_), do: {:error, :invalid_cache_type}
+  @spec get_group_info(pos_integer()) :: cache_result(map())
+  def get_group_info(group_id) do
+    key = "esi:group:#{group_id}"
 
-  @doc """
-  Generates cache keys using the Key module.
-  """
-  @spec generate_key(atom(), [String.t()]) :: String.t()
-  def generate_key(cache_type, parts) do
-    Key.generate(cache_type, parts)
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
-  Gets TTL for a cache type.
+  Sets group information in the cache.
   """
-  @spec get_ttl(atom()) :: pos_integer()
-  def get_ttl(cache_type) do
-    Key.get_ttl(cache_type)
+  @spec set_group_info(pos_integer(), map()) :: :ok | {:error, term()}
+  def set_group_info(group_id, group_info) do
+    key = "esi:group:#{group_id}"
+    ttl = Config.cache_ttl(:esi)
+
+    case Cachex.put(@cache_name, key, group_info, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
-  #
-  # Type Definitions
-  #
+  # =============================================================================
+  # Utility Functions
+  # =============================================================================
 
-  @type cache_type :: :killmails | :system | :esi
-  @type cache_result :: {:ok, term()} | {:error, term()}
-  @type cache_status :: :ok | {:error, term()}
+  @doc """
+  Clears all cache entries for a specific namespace.
+  """
+  @spec clear_namespace(String.t()) :: :ok | {:error, term()}
+  def clear_namespace(namespace) do
+    pattern = "#{namespace}:*"
+
+    case Cachex.keys(@cache_name, pattern) do
+      {:ok, keys} ->
+        case Cachex.del(@cache_name, keys) do
+          {:ok, _count} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets cache statistics.
+  """
+  @spec stats() :: cache_result(map())
+  def stats() do
+    case Cachex.stats(@cache_name) do
+      {:ok, stats} -> {:ok, stats}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Checks if the cache is healthy.
+  """
+  @spec healthy?() :: boolean()
+  def healthy?() do
+    case Cachex.size(@cache_name) do
+      {:ok, _size} -> true
+      {:error, _} -> false
+    end
+  end
 end

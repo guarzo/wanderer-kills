@@ -28,8 +28,7 @@ defmodule WandererKills.Parser.KillmailCache do
   """
 
   require Logger
-  alias WandererKills.Cache.Base
-  alias WandererKills.Cache.Key
+  alias WandererKills.Cache.Unified
 
   @type killmail :: map()
   @type killmail_id :: integer()
@@ -65,11 +64,19 @@ defmodule WandererKills.Parser.KillmailCache do
     Logger.debug("Storing killmail in cache", killmail_id: killmail_id)
 
     try do
-      cache_key = Key.killmail_key(killmail_id)
+      case Unified.set_killmail(killmail_id, killmail) do
+        {:ok, _} ->
+          Logger.debug("Successfully stored killmail", killmail_id: killmail_id)
+          :ok
 
-      Base.set_value(:killmails, cache_key, killmail)
-      Logger.debug("Successfully stored killmail", killmail_id: killmail_id)
-      :ok
+        error ->
+          Logger.error("Failed to store killmail",
+            killmail_id: killmail_id,
+            error: inspect(error)
+          )
+
+          error
+      end
     rescue
       error ->
         Logger.error("Exception while storing killmail",
@@ -160,9 +167,7 @@ defmodule WandererKills.Parser.KillmailCache do
   def get_killmail(killmail_id) when is_integer(killmail_id) do
     Logger.debug("Retrieving killmail from cache", killmail_id: killmail_id)
 
-    cache_key = Key.killmail_key(killmail_id)
-
-    case Base.get_value(:killmails, cache_key) do
+    case Unified.get_killmail(killmail_id) do
       {:ok, killmail} ->
         Logger.debug("Successfully retrieved killmail", killmail_id: killmail_id)
         {:ok, killmail}
@@ -213,10 +218,15 @@ defmodule WandererKills.Parser.KillmailCache do
   def remove_killmail(killmail_id) when is_integer(killmail_id) do
     Logger.debug("Removing killmail from cache", killmail_id: killmail_id)
 
-    cache_key = Key.killmail_key(killmail_id)
-    Base.delete_value(:killmails, cache_key)
-    Logger.debug("Successfully removed killmail", killmail_id: killmail_id)
-    :ok
+    case Unified.delete_killmail(killmail_id) do
+      {:ok, _} ->
+        Logger.debug("Successfully removed killmail", killmail_id: killmail_id)
+        :ok
+
+      error ->
+        Logger.error("Failed to remove killmail", killmail_id: killmail_id, error: inspect(error))
+        error
+    end
   end
 
   def remove_killmail(_), do: {:error, :invalid_killmail_id}

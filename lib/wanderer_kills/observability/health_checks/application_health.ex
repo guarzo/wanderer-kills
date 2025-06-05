@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.HealthChecks.ApplicationHealth do
+defmodule WandererKills.Observability.HealthChecks.ApplicationHealth do
   @moduledoc """
   Application-level health check that aggregates all component health checks.
 
@@ -6,11 +6,11 @@ defmodule WandererKills.Infrastructure.HealthChecks.ApplicationHealth do
   and aggregating health status from all registered health check modules.
   """
 
-  @behaviour WandererKills.Infrastructure.Behaviours.HealthCheck
+  @behaviour WandererKills.Observability.Behaviours.HealthCheck
 
   require Logger
   alias WandererKills.Core.Clock
-  alias WandererKills.Infrastructure.HealthChecks.CacheHealth
+  alias WandererKills.Observability.HealthChecks.CacheHealth
 
   @impl true
   def check_health(opts \\ []) do

@@ -8,7 +8,7 @@ defmodule WandererKills.Http.RequestUtils do
 
   require Logger
   alias WandererKills.Http.Errors.{ConnectionError, TimeoutError}
-  alias WandererKills.Infrastructure.Telemetry
+  alias WandererKills.Observability.Telemetry
 
   @type url :: String.t()
   @type method :: String.t()

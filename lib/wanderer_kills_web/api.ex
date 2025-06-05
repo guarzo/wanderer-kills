@@ -7,7 +7,7 @@ defmodule WandererKillsWeb.Api do
   require Logger
   import Plug.Conn
 
-  alias WandererKills.Infrastructure.Monitoring
+  alias WandererKills.Observability.Monitoring
   alias WandererKills.Cache.Unified, as: Cache
   alias WandererKillsWeb.Plugs.RequestId
 

@@ -31,14 +31,6 @@ defmodule WandererKills.KillmailStoreTest do
     "zkb" => %{"totalValue" => 3000}
   }
 
-  @test_killmail_4 %{
-    "killmail_id" => 12_348,
-    "solar_system_id" => @system_id_2,
-    "victim" => %{"character_id" => 126},
-    "attackers" => [],
-    "zkb" => %{"totalValue" => 4000}
-  }
-
   setup do
     WandererKills.TestHelpers.clear_all_caches()
     # Clean up ETS tables before each test

@@ -5,8 +5,8 @@ defmodule WandererKills.Parser.Stats do
 
   use GenServer
   require Logger
-  alias WandererKills.Config
-  alias WandererKills.Infrastructure.Telemetry
+  alias WandererKills.Core.Config
+  alias WandererKills.Observability.Telemetry
 
   # Client API
 

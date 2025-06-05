@@ -1,4 +1,4 @@
-defmodule WandererKills.Data.Behaviors.ShipTypeSource do
+defmodule WandererKills.Data.Behaviours.ShipTypeSource do
   @moduledoc """
   Behaviour for ship type data sources.
 
@@ -18,7 +18,7 @@ defmodule WandererKills.Data.Behaviors.ShipTypeSource do
 
   ```elixir
   defmodule MyShipTypeSource do
-    @behaviour WandererKills.Data.Behaviors.ShipTypeSource
+    @behaviour WandererKills.Data.Behaviours.ShipTypeSource
 
     @impl true
     def download(opts \\ []) do
@@ -126,7 +126,7 @@ defmodule WandererKills.Data.Behaviors.ShipTypeSource do
   # Provide default implementation for update/1
   defmacro __using__(_opts) do
     quote do
-      @behaviour WandererKills.Data.Behaviors.ShipTypeSource
+      @behaviour WandererKills.Data.Behaviours.ShipTypeSource
 
       @doc """
       Default implementation of the update pipeline.

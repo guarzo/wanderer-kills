@@ -44,7 +44,7 @@ defmodule WandererKills.Core.BatchProcessor do
   """
 
   require Logger
-  alias WandererKills.Config
+  alias WandererKills.Constants
 
   @type task_result :: {:ok, term()} | {:error, term()}
   @type batch_result :: {:ok, [term()]} | {:partial, [term()], [term()]} | {:error, term()}
@@ -72,10 +72,8 @@ defmodule WandererKills.Core.BatchProcessor do
   """
   @spec process_parallel([term()], (term() -> task_result()), batch_opts()) :: batch_result()
   def process_parallel(items, process_fn, opts \\ []) when is_list(items) do
-    concurrency_config = Config.concurrency()
-
-    max_concurrency = Keyword.get(opts, :max_concurrency, concurrency_config.max_concurrent)
-    timeout = Keyword.get(opts, :timeout, concurrency_config.timeout_ms)
+    max_concurrency = Keyword.get(opts, :max_concurrency, Constants.concurrency(:default))
+    timeout = Keyword.get(opts, :timeout, Constants.timeout(:http))
     supervisor = Keyword.get(opts, :supervisor, WandererKills.TaskSupervisor)
     description = Keyword.get(opts, :description, "items")
 
@@ -149,9 +147,7 @@ defmodule WandererKills.Core.BatchProcessor do
   """
   @spec process_batched([term()], (term() -> task_result()), batch_opts()) :: batch_result()
   def process_batched(items, process_fn, opts \\ []) when is_list(items) do
-    concurrency_config = Config.concurrency()
-
-    batch_size = Keyword.get(opts, :batch_size, concurrency_config.batch_size)
+    batch_size = Keyword.get(opts, :batch_size, Constants.concurrency(:batch_size))
     description = Keyword.get(opts, :description, "items")
 
     Logger.info("Processing #{length(items)} #{description} in batches of #{batch_size}")
@@ -187,9 +183,7 @@ defmodule WandererKills.Core.BatchProcessor do
   """
   @spec await_tasks([Task.t()], batch_opts()) :: batch_result()
   def await_tasks(tasks, opts \\ []) when is_list(tasks) do
-    concurrency_config = Config.concurrency()
-
-    timeout = Keyword.get(opts, :timeout, concurrency_config.timeout_ms)
+    timeout = Keyword.get(opts, :timeout, Constants.timeout(:http))
     description = Keyword.get(opts, :description, "tasks")
 
     Logger.info("Awaiting #{length(tasks)} #{description} (timeout: #{timeout}ms)")

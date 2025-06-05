@@ -32,10 +32,10 @@ defmodule WandererKills.Fetcher.Esi.Source do
   ```
   """
 
-  use WandererKills.Data.Behaviors.ShipTypeSource
+  use WandererKills.Data.Behaviours.ShipTypeSource
 
   require Logger
-  alias WandererKills.Core.Config
+  alias WandererKills.Constants
   alias WandererKills.Core.BatchProcessor
   alias WandererKills.TaskSupervisor
   alias WandererKills.Cache.Specialized.EsiCache
@@ -104,10 +104,8 @@ defmodule WandererKills.Fetcher.Esi.Source do
   def update_ship_groups(group_ids) when is_list(group_ids) do
     Logger.info("Processing #{length(group_ids)} ship groups from ESI")
 
-    concurrency_config = Config.concurrency()
-
     opts = [
-      max_concurrency: concurrency_config.max_concurrent,
+      max_concurrency: Constants.concurrency(:default),
       timeout: :timer.seconds(30)
     ]
 
@@ -139,10 +137,8 @@ defmodule WandererKills.Fetcher.Esi.Source do
 
   defp fetch_group_type_ids(group_ids) do
     # Fetch all group information and collect type IDs
-    concurrency_config = Config.concurrency()
-
     opts = [
-      max_concurrency: concurrency_config.max_concurrent,
+      max_concurrency: Constants.concurrency(:default),
       timeout: :timer.seconds(30)
     ]
 
@@ -197,10 +193,8 @@ defmodule WandererKills.Fetcher.Esi.Source do
   end
 
   defp fetch_ship_types(type_ids) when is_list(type_ids) do
-    concurrency_config = Config.concurrency()
-
     opts = [
-      max_concurrency: concurrency_config.max_concurrent,
+      max_concurrency: Constants.concurrency(:default),
       timeout: :timer.seconds(30)
     ]
 

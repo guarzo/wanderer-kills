@@ -5,13 +5,13 @@ defmodule WandererKills.ApiTest do
 
   alias WandererKillsWeb.Api
   alias WandererKills.Zkb.Client.Mock, as: ZkbClientMock
-  alias WandererKills.HttpTestHelpers
+  alias WandererKills.TestHelpers
 
   @opts Api.init([])
 
   setup do
     WandererKills.TestHelpers.clear_all_caches()
-    HttpTestHelpers.setup_http_mocks()
+    TestHelpers.setup_http_mocks()
     :ok
   end
 

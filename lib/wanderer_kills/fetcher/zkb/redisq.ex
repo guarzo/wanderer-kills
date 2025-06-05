@@ -15,7 +15,7 @@ defmodule WandererKills.Fetcher.Zkb.RedisQ do
   use GenServer
   require Logger
 
-  alias WandererKills.Parser
+  alias WandererKills.Parser.Coordinator
   alias WandererKills.Cache.Specialized.EsiCache
   alias WandererKills.Core.Clock
   alias WandererKills.Http.Client, as: HttpClient
@@ -181,7 +181,7 @@ defmodule WandererKills.Fetcher.Zkb.RedisQ do
       "[RedisQ] Processing new format killmail (cutoff: #{DateTime.to_iso8601(cutoff)})"
     )
 
-    case Parser.parse_full_and_store(killmail, %{"zkb" => zkb}, cutoff) do
+    case Coordinator.parse_full_and_store(killmail, %{"zkb" => zkb}, cutoff) do
       {:ok, :kill_older} ->
         Logger.debug("[RedisQ] Kill is older than cutoff → skipping.")
         {:ok, :kill_older}

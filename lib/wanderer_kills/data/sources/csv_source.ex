@@ -43,12 +43,11 @@ defmodule WandererKills.Data.Sources.CsvSource do
   ```
   """
 
-  use WandererKills.Data.Behaviors.ShipTypeSource
+  use WandererKills.Data.Behaviours.ShipTypeSource
 
   require Logger
   alias WandererKills.Core.BatchProcessor
-  alias WandererKills.Data.Parsers.CsvUtil
-  alias WandererKills.Data.Parsers.CsvRowParser
+  alias WandererKills.Shared.CSV
   # Note: Cache.Base and Cache.Key removed since CSV source no longer caches to ESI
 
   @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"
@@ -197,8 +196,8 @@ defmodule WandererKills.Data.Sources.CsvSource do
   end
 
   defp process_csv_data(types_path, groups_path) do
-    with {:ok, types} <- CsvUtil.read_rows(types_path, &CsvRowParser.parse_type/1),
-         {:ok, groups} <- CsvUtil.read_rows(groups_path, &CsvRowParser.parse_group/1) do
+    with {:ok, types} <- CSV.read_file(types_path, &CSV.parse_ship_type/1),
+         {:ok, groups} <- CSV.read_file(groups_path, &CSV.parse_ship_group/1) do
       # Filter for ship types and enrich with group names
       ship_types = build_ship_types(types, groups)
 

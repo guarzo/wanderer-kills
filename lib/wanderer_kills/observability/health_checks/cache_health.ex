@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.HealthChecks.CacheHealth do
+defmodule WandererKills.Observability.HealthChecks.CacheHealth do
   @moduledoc """
   Health check implementation for cache systems.
 
@@ -7,11 +7,11 @@ defmodule WandererKills.Infrastructure.HealthChecks.CacheHealth do
   performance metrics.
   """
 
-  @behaviour WandererKills.Infrastructure.Behaviours.HealthCheck
+  @behaviour WandererKills.Observability.Behaviours.HealthCheck
 
   require Logger
   alias WandererKills.Core.Clock
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
 
   @impl true
   def check_health(opts \\ []) do

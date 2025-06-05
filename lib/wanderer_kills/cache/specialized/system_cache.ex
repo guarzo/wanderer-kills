@@ -59,7 +59,7 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   """
   @spec get_killmail_ids_for_system(integer()) :: cache_result()
   def get_killmail_ids_for_system(system_id) do
-    Base.get_list(:system, Key.system_killmail_ids_key(system_id))
+    Base.get_list(:system, Key.system_killmails_key(system_id, :killmail_ids))
   end
 
   @doc """
@@ -292,7 +292,13 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   @spec add_system_killmail_id(integer(), integer()) :: cache_status()
   def add_system_killmail_id(system_id, killmail_id) do
     ttl = Config.cache(:system, :ttl)
-    Base.add_to_list(:system, Key.system_killmail_ids_key(system_id), killmail_id, ttl)
+
+    Base.add_to_list(
+      :system,
+      Key.system_killmails_key(system_id, :killmail_ids),
+      killmail_id,
+      ttl
+    )
   end
 
   @doc """
@@ -300,7 +306,11 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   """
   @spec remove_system_killmail_id(integer(), integer()) :: cache_status()
   def remove_system_killmail_id(system_id, killmail_id) do
-    Base.remove_from_list(:system, Key.system_killmail_ids_key(system_id), killmail_id)
+    Base.remove_from_list(
+      :system,
+      Key.system_killmails_key(system_id, :killmail_ids),
+      killmail_id
+    )
   end
 
   @doc """

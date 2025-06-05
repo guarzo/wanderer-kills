@@ -52,7 +52,7 @@ defmodule WandererKills.Fetcher do
   alias WandererKills.Zkb.Client, as: ZkbClient
   alias WandererKills.Parser.Core, as: Parser
   alias WandererKills.Parser.Enricher
-  alias WandererKills.Infrastructure.Telemetry
+  alias WandererKills.Observability.Telemetry
 
   @type killmail_id :: pos_integer()
   @type system_id :: pos_integer()

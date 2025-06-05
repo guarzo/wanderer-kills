@@ -1,12 +1,14 @@
-defmodule WandererKills.Data.Parsers.ShipTypeParser do
+defmodule WandererKills.Parser.ShipTypeParser do
   @moduledoc """
   Parser for EVE Online ship type data from the official data dump.
   Uses invTypes.csv and invGroups.csv files from fuzzwork.co.uk.
+
+  Note: This module now uses the unified WandererKills.Shared.CSV module
+  for all CSV parsing operations.
   """
 
   require Logger
-  alias WandererKills.Data.Parsers.CsvUtil
-  alias WandererKills.Data.Parsers.CsvRowParser
+  alias WandererKills.Shared.CSV
 
   @type ship_type :: %{
           type_id: integer(),
@@ -43,8 +45,8 @@ defmodule WandererKills.Data.Parsers.ShipTypeParser do
     types_path = Path.join([data_dir, "invTypes.csv"])
     groups_path = Path.join([data_dir, "invGroups.csv"])
 
-    with {:ok, types} <- CsvUtil.read_rows(types_path, &CsvRowParser.parse_type/1),
-         {:ok, groups} <- CsvUtil.read_rows(groups_path, &CsvRowParser.parse_group/1) do
+    with {:ok, types} <- CSV.read_file(types_path, &CSV.parse_ship_type/1),
+         {:ok, groups} <- CSV.read_file(groups_path, &CSV.parse_ship_group/1) do
       # Filter for ship types (group category ID 6)
       ship_types =
         types

@@ -29,7 +29,7 @@ defmodule WandererKills.Fetcher.BatchOperations do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Telemetry
+  alias WandererKills.Observability.Telemetry
 
   @type system_id :: pos_integer()
   @type batch_result :: {:ok, term()} | {:error, term()}

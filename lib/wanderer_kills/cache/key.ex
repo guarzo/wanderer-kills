@@ -72,7 +72,7 @@ defmodule WandererKills.Cache.Key do
   """
   @spec get_ttl(cache_type()) :: pos_integer()
   def get_ttl(cache_type) do
-    WandererKills.Core.Config.cache(cache_type)[:ttl] || 3600
+    WandererKills.Config.cache_ttl(cache_type)
   end
 
   @doc """
@@ -215,23 +215,6 @@ defmodule WandererKills.Cache.Key do
       :killmails -> generate(:killmails, ["system", to_string(system_id)])
       :killmail_ids -> generate(:killmails, ["system", to_string(system_id), "killmail_ids"])
     end
-  end
-
-  @doc """
-  Generates a key for a system's killmail IDs.
-
-  This function is kept for backward compatibility.
-  Use `system_killmails_key(system_id, :killmail_ids)` instead.
-  """
-  def system_killmail_ids_key(system_id) do
-    system_killmails_key(system_id, :killmail_ids)
-  end
-
-  @doc """
-  Alias for system_fetch_timestamp_key/1 for backward compatibility.
-  """
-  def system_fetch_ts_key(system_id) do
-    system_fetch_timestamp_key(system_id)
   end
 
   @doc """

@@ -48,7 +48,7 @@ defmodule WandererKills.Http.Client do
   require Logger
   alias WandererKills.Http.Errors.{ConnectionError, TimeoutError, RateLimitError}
   alias WandererKills.Retry
-  alias WandererKills.Infrastructure.Telemetry
+  alias WandererKills.Observability.Telemetry
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 

@@ -15,7 +15,10 @@ defmodule WandererKills.Cache.KeyTest do
       assert Key.system_data_key(123) == "wanderer_kills:system:123:data"
       assert Key.system_info_key(456) == "wanderer_kills:system:456:info"
       assert Key.system_kill_count_key(789) == "wanderer_kills:killmails:system:789:kill_count"
-      assert Key.system_fetch_ts_key(101) == "wanderer_kills:killmails:system:101:fetch_timestamp"
+
+      assert Key.system_fetch_timestamp_key(101) ==
+               "wanderer_kills:killmails:system:101:fetch_timestamp"
+
       assert Key.system_ttl_key(102) == "wanderer_kills:system:102:ttl"
     end
 

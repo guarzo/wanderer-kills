@@ -22,7 +22,8 @@ defmodule WandererKills.Core do
   """
 
   # Core utilities
-  alias WandererKills.Core.{BatchProcessor, Clock, CircuitBreaker, Config, Constants}
+  alias WandererKills.Core.{BatchProcessor, Clock, CircuitBreaker}
+  alias WandererKills.{Config, Constants}
 
   #
   # Batch Processing API
@@ -111,7 +112,7 @@ defmodule WandererKills.Core do
   """
   @spec cache_config(atom()) :: map()
   def cache_config(cache_type) do
-    Config.cache(cache_type)
+    Config.cache_config(cache_type)
   end
 
   @doc """
@@ -119,7 +120,7 @@ defmodule WandererKills.Core do
   """
   @spec http_config() :: map()
   def http_config do
-    Config.retry()
+    Config.retry_config(:http)
   end
 
   @doc """
@@ -127,7 +128,7 @@ defmodule WandererKills.Core do
   """
   @spec retry_config() :: map()
   def retry_config do
-    Config.retry()
+    Config.retry_config(:http)
   end
 
   #
@@ -139,7 +140,7 @@ defmodule WandererKills.Core do
   """
   @spec default_cache_ttl() :: integer()
   def default_cache_ttl do
-    Constants.cache_ttl(:killmails)
+    Config.cache_ttl(:killmails)
   end
 
   @doc """

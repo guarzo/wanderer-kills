@@ -1,12 +1,12 @@
-defmodule WandererKills.Infrastructure.Telemetry do
+defmodule WandererKills.Observability.Telemetry do
   @moduledoc """
   Handles telemetry events for the WandererKills application.
 
   This module provides functionality to:
-  - Attach telemetry event handlers
-  - Process and aggregate metrics
-  - Monitor application performance
-  - Centralized telemetry event execution
+  - Execute telemetry events with helper functions
+  - Attach and detach telemetry event handlers
+  - Process telemetry events through handlers
+  - Centralized logging of telemetry events
 
   ## Events
 
@@ -25,6 +25,11 @@ defmodule WandererKills.Infrastructure.Telemetry do
   - `[:wanderer_kills, :fetch, :system, :complete]` - When a system fetch completes
   - `[:wanderer_kills, :fetch, :system, :error]` - When a system fetch fails
 
+  Parser events:
+  - `[:wanderer_kills, :parser, :stored]` - When killmails are stored
+  - `[:wanderer_kills, :parser, :skipped]` - When killmails are skipped
+  - `[:wanderer_kills, :parser, :summary]` - Parser summary statistics
+
   System events:
   - `[:wanderer_kills, :system, :memory]` - Memory usage metrics
   - `[:wanderer_kills, :system, :cpu]` - CPU usage metrics
@@ -32,11 +37,20 @@ defmodule WandererKills.Infrastructure.Telemetry do
   ## Usage
 
   ```elixir
-  # Instead of calling :telemetry.execute directly, use helper functions:
+  # Execute telemetry events using helper functions:
   Telemetry.http_request_start("GET", "https://api.example.com")
   Telemetry.fetch_system_complete(12345, :success)
   Telemetry.cache_hit("my_key")
+
+  # Attach/detach handlers during application lifecycle
+  Telemetry.attach_handlers()
+  Telemetry.detach_handlers()
   ```
+
+  ## Note
+
+  Periodic measurements and metrics collection are handled by
+  `WandererKills.Observability.Monitoring` module.
   """
 
   require Logger
@@ -202,12 +216,16 @@ defmodule WandererKills.Infrastructure.Telemetry do
   end
 
   # -------------------------------------------------
-  # Existing handler attachment/detachment functions
+  # Handler attachment/detachment functions
   # -------------------------------------------------
 
   @doc """
-  Attaches telemetry event handlers for cache metrics.
+  Attaches telemetry event handlers for all application events.
+
+  This should be called during application startup to ensure
+  all telemetry events are properly logged and processed.
   """
+  @spec attach_handlers() :: :ok
   def attach_handlers do
     # Cache hit/miss handlers
     :telemetry.attach_many(
@@ -217,7 +235,7 @@ defmodule WandererKills.Infrastructure.Telemetry do
         [:wanderer_kills, :cache, :miss],
         [:wanderer_kills, :cache, :error]
       ],
-      &WandererKills.Infrastructure.Telemetry.handle_cache_event/4,
+      &WandererKills.Observability.Telemetry.handle_cache_event/4,
       nil
     )
 
@@ -228,7 +246,7 @@ defmodule WandererKills.Infrastructure.Telemetry do
         [:wanderer_kills, :http, :request, :start],
         [:wanderer_kills, :http, :request, :stop]
       ],
-      &WandererKills.Infrastructure.Telemetry.handle_http_event/4,
+      &WandererKills.Observability.Telemetry.handle_http_event/4,
       nil
     )
 
@@ -243,7 +261,7 @@ defmodule WandererKills.Infrastructure.Telemetry do
         [:wanderer_kills, :fetch, :system, :success],
         [:wanderer_kills, :fetch, :system, :error]
       ],
-      &WandererKills.Infrastructure.Telemetry.handle_fetch_event/4,
+      &WandererKills.Observability.Telemetry.handle_fetch_event/4,
       nil
     )
 
@@ -255,7 +273,7 @@ defmodule WandererKills.Infrastructure.Telemetry do
         [:wanderer_kills, :parser, :skipped],
         [:wanderer_kills, :parser, :summary]
       ],
-      &WandererKills.Infrastructure.Telemetry.handle_parser_event/4,
+      &WandererKills.Observability.Telemetry.handle_parser_event/4,
       nil
     )
 
@@ -266,7 +284,7 @@ defmodule WandererKills.Infrastructure.Telemetry do
         [:wanderer_kills, :system, :memory],
         [:wanderer_kills, :system, :cpu]
       ],
-      &WandererKills.Infrastructure.Telemetry.handle_system_event/4,
+      &WandererKills.Observability.Telemetry.handle_system_event/4,
       nil
     )
 
@@ -275,7 +293,11 @@ defmodule WandererKills.Infrastructure.Telemetry do
 
   @doc """
   Detaches all telemetry event handlers.
+
+  This should be called during application shutdown to clean up
+  telemetry handlers properly.
   """
+  @spec detach_handlers() :: :ok
   def detach_handlers do
     :telemetry.detach("wanderer-kills-cache-handler")
     :telemetry.detach("wanderer-kills-http-handler")
@@ -285,8 +307,13 @@ defmodule WandererKills.Infrastructure.Telemetry do
     :ok
   end
 
+  # -------------------------------------------------
   # Event handlers
+  # -------------------------------------------------
 
+  @doc """
+  Handles cache-related telemetry events.
+  """
   def handle_cache_event([:wanderer_kills, :cache, event], _measurements, metadata, _config) do
     case event do
       :hit ->
@@ -302,6 +329,9 @@ defmodule WandererKills.Infrastructure.Telemetry do
     end
   end
 
+  @doc """
+  Handles HTTP request telemetry events.
+  """
   def handle_http_event(
         [:wanderer_kills, :http, :request, event],
         _measurements,
@@ -327,6 +357,9 @@ defmodule WandererKills.Infrastructure.Telemetry do
     end
   end
 
+  @doc """
+  Handles fetch operation telemetry events.
+  """
   def handle_fetch_event([:wanderer_kills, :fetch, type, event], measurements, metadata, _config) do
     case {type, event} do
       {:killmail, :success} ->
@@ -359,6 +392,9 @@ defmodule WandererKills.Infrastructure.Telemetry do
     end
   end
 
+  @doc """
+  Handles parser telemetry events.
+  """
   def handle_parser_event([:wanderer_kills, :parser, event], measurements, _metadata, _config) do
     case event do
       :stored ->
@@ -374,6 +410,9 @@ defmodule WandererKills.Infrastructure.Telemetry do
     end
   end
 
+  @doc """
+  Handles system resource telemetry events.
+  """
   def handle_system_event([:wanderer_kills, :system, event], measurements, _metadata, _config) do
     case event do
       :memory ->
@@ -386,40 +425,5 @@ defmodule WandererKills.Infrastructure.Telemetry do
           "[System] CPU usage - Total: #{measurements.total_cpu}%, Process: #{measurements.process_cpu}%"
         )
     end
-  end
-
-  # Measurement functions for TelemetryPoller
-
-  @doc """
-  Measures HTTP request metrics.
-  """
-  def count_http_requests do
-    :telemetry.execute(
-      [:wanderer_kills, :system, :http_requests],
-      %{count: :erlang.statistics(:exact_reductions)},
-      %{}
-    )
-  end
-
-  @doc """
-  Measures cache operation metrics.
-  """
-  def count_cache_operations do
-    :telemetry.execute(
-      [:wanderer_kills, :system, :cache_operations],
-      %{count: :erlang.statistics(:exact_reductions)},
-      %{}
-    )
-  end
-
-  @doc """
-  Measures fetch operation metrics.
-  """
-  def count_fetch_operations do
-    :telemetry.execute(
-      [:wanderer_kills, :system, :fetch_operations],
-      %{count: :erlang.statistics(:exact_reductions)},
-      %{}
-    )
   end
 end
