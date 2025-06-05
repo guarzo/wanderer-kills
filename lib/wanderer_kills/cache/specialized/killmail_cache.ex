@@ -8,7 +8,7 @@ defmodule WandererKills.Cache.Specialized.KillmailCache do
   require Logger
   alias WandererKills.Cache.Base
   alias WandererKills.Cache.Key
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
 
   @type cache_result :: {:ok, term()} | {:error, term()}
   @type cache_status :: :ok | {:error, term()}

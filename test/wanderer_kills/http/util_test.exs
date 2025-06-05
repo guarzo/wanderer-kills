@@ -1,7 +1,8 @@
 defmodule WandererKills.Http.UtilTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Http.{Util, Retry}
+  alias WandererKills.Http.Util
+  alias WandererKills.Retry
   alias WandererKills.Http.Errors.TimeoutError
 
   setup do

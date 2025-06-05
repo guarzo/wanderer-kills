@@ -81,7 +81,7 @@ defmodule WandererKills.MixProject do
     [
       name: "wanderer_kills",
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/yourusername/wanderer_kills"}
+      links: %{"GitHub" => "https://github.com/guarzo/wanderer_kills"}
     ]
   end
 

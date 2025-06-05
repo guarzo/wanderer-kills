@@ -30,7 +30,7 @@ defmodule WandererKills.Application do
       WandererKills.Infrastructure.Monitoring,
       {Plug.Cowboy,
        scheme: :http,
-       plug: WandererKills.Web.Api,
+       plug: WandererKillsWeb.Api,
        options: [port: Application.fetch_env!(:wanderer_kills, :port)]},
       WandererKills.Parser.Stats,
       {:telemetry_poller,
@@ -42,13 +42,8 @@ defmodule WandererKills.Application do
        period: :timer.seconds(10)}
     ]
 
-    # Conditionally add PreloaderSupervisor based on configuration
-    children =
-      if Application.get_env(:wanderer_kills, :start_preloader, true) do
-        [WandererKills.PreloaderSupervisor | base_children]
-      else
-        base_children
-      end
+    # Add PreloaderSupervisor to the supervision tree
+    children = [WandererKills.PreloaderSupervisor | base_children]
 
     opts = [strategy: :one_for_one, name: WandererKills.Supervisor]
 

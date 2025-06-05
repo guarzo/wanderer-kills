@@ -35,7 +35,7 @@ defmodule WandererKills.Fetcher.Esi.Source do
   use WandererKills.Data.Behaviors.ShipTypeSource
 
   require Logger
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
   alias WandererKills.Core.BatchProcessor
   alias WandererKills.TaskSupervisor
   alias WandererKills.Cache.Specialized.EsiCache

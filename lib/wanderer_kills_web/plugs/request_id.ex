@@ -1,4 +1,4 @@
-defmodule WandererKills.Web.Plugs.RequestId do
+defmodule WandererKillsWeb.Plugs.RequestId do
   @moduledoc """
   Plug for handling request IDs.
   Generates a unique request ID for each request and stores it in the process dictionary.

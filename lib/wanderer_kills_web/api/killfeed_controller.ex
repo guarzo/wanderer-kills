@@ -1,4 +1,4 @@
-defmodule WandererKills.Web.Api.KillfeedController do
+defmodule WandererKillsWeb.Api.KillfeedController do
   @moduledoc """
   Controller for handling killfeed polling and real-time event access.
 

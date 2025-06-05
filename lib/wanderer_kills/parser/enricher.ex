@@ -4,7 +4,7 @@ defmodule WandererKills.Parser.Enricher do
   """
 
   require Logger
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
   alias WandererKills.Cache.Specialized.EsiCache
   alias WandererKills.Data.ShipTypeInfo
 

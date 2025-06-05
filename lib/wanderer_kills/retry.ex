@@ -114,6 +114,12 @@ defmodule WandererKills.Retry do
   def retriable_http_error?(_), do: false
 
   @doc """
+  Alias for retriable_http_error?/1 for backward compatibility.
+  """
+  @spec retriable_error?(term()) :: boolean()
+  def retriable_error?(reason), do: retriable_http_error?(reason)
+
+  @doc """
   Convenience function for retrying HTTP operations with sensible defaults.
 
   ## Parameters

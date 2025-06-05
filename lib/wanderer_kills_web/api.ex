@@ -1,4 +1,4 @@
-defmodule WandererKills.Web.Api do
+defmodule WandererKillsWeb.Api do
   @moduledoc """
   HTTP API for the Wanderer Kills service.
   """
@@ -9,7 +9,7 @@ defmodule WandererKills.Web.Api do
 
   alias WandererKills.Infrastructure.Monitoring
   alias WandererKills.Cache.Unified, as: Cache
-  alias WandererKills.Web.Plugs.RequestId
+  alias WandererKillsWeb.Plugs.RequestId
 
   plug(Plug.Logger, log: :info)
   plug(RequestId)
@@ -160,11 +160,11 @@ defmodule WandererKills.Web.Api do
 
   # Killfeed endpoints
   get "/api/killfeed" do
-    WandererKills.Web.Api.KillfeedController.poll(conn, conn.query_params)
+    WandererKillsWeb.Api.KillfeedController.poll(conn, conn.query_params)
   end
 
   get "/api/killfeed/next" do
-    WandererKills.Web.Api.KillfeedController.next(conn, conn.query_params)
+    WandererKillsWeb.Api.KillfeedController.next(conn, conn.query_params)
   end
 
   # Catch-all route

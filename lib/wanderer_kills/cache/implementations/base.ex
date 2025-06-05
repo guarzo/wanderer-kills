@@ -41,7 +41,7 @@ defmodule WandererKills.Cache.Base do
 
   require Logger
   alias WandererKills.Cache.Errors
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
 
   @type cache_type :: :killmails | :system | :esi
   @type cache_name :: atom()
@@ -168,7 +168,8 @@ defmodule WandererKills.Cache.Base do
     case get_value(cache_type, key) do
       {:ok, nil} -> {:ok, []}
       {:ok, list} when is_list(list) -> {:ok, list}
-      _ -> {:ok, []}
+      {:ok, _non_list} -> {:ok, []}
+      {:error, reason} -> {:error, reason}
     end
   end
 

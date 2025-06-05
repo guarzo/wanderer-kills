@@ -42,7 +42,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   require Logger
   alias WandererKills.Cache.Base
   alias WandererKills.Cache.Key
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
   alias WandererKills.Esi.Data.Types
   alias WandererKills.Http.ClientProvider
 

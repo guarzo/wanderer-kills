@@ -1,4 +1,4 @@
-defmodule WandererKills.Web.Api.Helpers do
+defmodule WandererKillsWeb.Api.Helpers do
   @moduledoc """
   Helper functions for API routes and responses.
   """

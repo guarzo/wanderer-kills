@@ -38,7 +38,7 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   alias WandererKills.Cache.Base
   alias WandererKills.Cache.Key
   alias WandererKills.Core.Clock
-  alias WandererKills.Config
+  alias WandererKills.Core.Config
   alias Cachex
 
   @type cache_result :: {:ok, term()} | {:error, term()}

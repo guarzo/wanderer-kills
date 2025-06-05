@@ -72,7 +72,7 @@ defmodule WandererKills.Cache.Key do
   """
   @spec get_ttl(cache_type()) :: pos_integer()
   def get_ttl(cache_type) do
-    WandererKills.Config.cache(cache_type)[:ttl] || 3600
+    WandererKills.Core.Config.cache(cache_type)[:ttl] || 3600
   end
 
   @doc """

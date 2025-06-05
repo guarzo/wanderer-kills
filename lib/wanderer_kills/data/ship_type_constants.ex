@@ -1,6 +1,6 @@
 defmodule WandererKills.Data.ShipTypeConstants do
   @moduledoc """
-  Constants and configuration values for ship type data management.
+  Constants for ship type data management.
 
   This module centralizes all ship type related constants to improve
   maintainability and reduce hardcoded values throughout the codebase.
@@ -50,10 +50,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ```
   """
   @spec ship_group_ids() :: [pos_integer()]
-  def ship_group_ids do
-    Application.get_env(:wanderer_kills, :ship_type_constants, %{})
-    |> Map.get(:ship_group_ids, default_ship_group_ids())
-  end
+  def ship_group_ids, do: [6, 7, 9, 11, 16, 17, 23]
 
   @doc """
   Gets the base URL for EVE DB dumps.
@@ -69,10 +66,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ```
   """
   @spec eve_db_dump_url() :: String.t()
-  def eve_db_dump_url do
-    Application.get_env(:wanderer_kills, :ship_type_constants, %{})
-    |> Map.get(:eve_db_dump_url, default_eve_db_dump_url())
-  end
+  def eve_db_dump_url, do: "https://www.fuzzwork.co.uk/dump/latest"
 
   @doc """
   Lists the required CSV files for ship type data.
@@ -88,10 +82,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ```
   """
   @spec required_csv_files() :: [String.t()]
-  def required_csv_files do
-    Application.get_env(:wanderer_kills, :ship_type_constants, %{})
-    |> Map.get(:required_csv_files, default_required_csv_files())
-  end
+  def required_csv_files, do: ["invGroups.csv", "invTypes.csv"]
 
   @doc """
   Gets the default maximum concurrency for batch operations.
@@ -107,10 +98,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ```
   """
   @spec default_max_concurrency() :: pos_integer()
-  def default_max_concurrency do
-    Application.get_env(:wanderer_kills, :ship_type_constants, %{})
-    |> Map.get(:default_max_concurrency, 10)
-  end
+  def default_max_concurrency, do: 10
 
   @doc """
   Gets the default task timeout in milliseconds.
@@ -126,10 +114,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ```
   """
   @spec default_task_timeout_ms() :: pos_integer()
-  def default_task_timeout_ms do
-    Application.get_env(:wanderer_kills, :ship_type_constants, %{})
-    |> Map.get(:default_task_timeout_ms, 30_000)
-  end
+  def default_task_timeout_ms, do: 30_000
 
   @doc """
   Gets the data directory path for storing CSV files.
@@ -146,23 +131,6 @@ defmodule WandererKills.Data.ShipTypeConstants do
   """
   @spec data_directory() :: String.t()
   def data_directory do
-    Application.get_env(:wanderer_kills, :ship_type_constants, %{})
-    |> Map.get(:data_directory, default_data_directory())
-  end
-
-  # Default values (can be overridden via application config)
-
-  @spec default_ship_group_ids() :: [pos_integer()]
-  defp default_ship_group_ids, do: [6, 7, 9, 11, 16, 17, 23]
-
-  @spec default_eve_db_dump_url() :: String.t()
-  defp default_eve_db_dump_url, do: "https://www.fuzzwork.co.uk/dump/latest"
-
-  @spec default_required_csv_files() :: [String.t()]
-  defp default_required_csv_files, do: ["invGroups.csv", "invTypes.csv"]
-
-  @spec default_data_directory() :: String.t()
-  defp default_data_directory do
     Path.join([:code.priv_dir(:wanderer_kills), "data"])
   end
 end

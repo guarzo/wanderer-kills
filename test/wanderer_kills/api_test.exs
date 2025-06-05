@@ -3,7 +3,7 @@ defmodule WandererKills.ApiTest do
   import Plug.Test
   import Mox
 
-  alias WandererKills.Web.Api
+  alias WandererKillsWeb.Api
   alias WandererKills.Zkb.Client.Mock, as: ZkbClientMock
   alias WandererKills.HttpTestHelpers
 

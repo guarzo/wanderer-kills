@@ -1,29 +1,29 @@
-defmodule WandererKills.Web do
+defmodule WandererKillsWeb do
   @moduledoc """
   The entrypoint for defining your web interface, such
   as controllers, views, channels and so on.
 
   This can be used in your application as:
 
-      use WandererKills.Web, :controller
-      use WandererKills.Web, :view
+      use WandererKillsWeb, :controller
+      use WandererKillsWeb, :view
   """
 
   def controller do
     quote do
-      use Phoenix.Controller, namespace: WandererKills.Web
+      use Phoenix.Controller, namespace: WandererKillsWeb
 
       import Plug.Conn
       import WandererKills.Gettext
-      alias WandererKills.Router.Helpers, as: Routes
+      alias WandererKillsWeb.Router.Helpers, as: Routes
     end
   end
 
   def view do
     quote do
       use Phoenix.View,
-        root: "lib/wanderer_kills/web/templates",
-        namespace: WandererKills.Web
+        root: "lib/wanderer_kills_web/templates",
+        namespace: WandererKillsWeb
 
       # Import convenience functions from controllers
       import Phoenix.Controller,
@@ -57,7 +57,7 @@ defmodule WandererKills.Web do
 
       import WandererKills.ErrorHelpers
       import WandererKills.Gettext
-      alias WandererKills.Router.Helpers, as: Routes
+      alias WandererKillsWeb.Router.Helpers, as: Routes
     end
   end
 

@@ -49,7 +49,8 @@ defmodule WandererKills.Infrastructure.HealthChecks.Runner do
     # Collect results with timeout
     results =
       tasks
-      |> Enum.map(&Task.await(&1, 10_000))  # 10 second timeout for all checks
+      # 10 second timeout for all checks
+      |> Enum.map(&Task.await(&1, 10_000))
 
     duration = System.monotonic_time(:millisecond) - start_time
 
@@ -67,13 +68,13 @@ defmodule WandererKills.Infrastructure.HealthChecks.Runner do
   end
 
   @doc """
-  Gets the list of health check modules from configuration.
+  Gets the list of health check modules.
   """
   def get_health_check_modules do
-    Application.get_env(:wanderer_kills, :health_checks, [
+    [
       WandererKills.Infrastructure.HealthChecks.ApplicationHealth,
       WandererKills.Infrastructure.HealthChecks.CacheHealth
-    ])
+    ]
   end
 
   # Private helper functions
