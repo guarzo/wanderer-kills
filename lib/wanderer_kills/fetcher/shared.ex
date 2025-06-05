@@ -48,7 +48,7 @@ defmodule WandererKills.Fetcher do
 
   require Logger
 
-  alias WandererKills.Cache
+  alias WandererKills.Cache.Unified, as: Cache
   alias WandererKills.Zkb.Client, as: ZkbClient
   alias WandererKills.Parser.Core, as: Parser
   alias WandererKills.Parser.Enricher
@@ -81,7 +81,7 @@ defmodule WandererKills.Fetcher do
 
   def fetch_and_cache_killmail(id, client) when is_integer(id) and id > 0 do
     # Use dependency injection if no client specified
-    actual_client = client || Application.get_env(:wanderer_kills, :zkb_client, ZkbClient)
+    actual_client = client || ZkbClient
 
     Logger.debug("Fetching killmail",
       killmail_id: id,
@@ -327,7 +327,7 @@ defmodule WandererKills.Fetcher do
   end
 
   def get_system_kill_count(system_id, client) when is_integer(system_id) do
-    actual_client = client || Application.get_env(:wanderer_kills, :zkb_client, ZkbClient)
+    actual_client = client || ZkbClient
 
     case actual_client.get_system_kill_count(system_id) do
       {:ok, count} when is_integer(count) ->
@@ -360,7 +360,7 @@ defmodule WandererKills.Fetcher do
           source: source
         )
 
-        Cache.get_system_killmails(system_id)
+        Cache.get_killmails_for_system(system_id)
 
       {:ok, false} ->
         fetch_remote_killmails(system_id, limit, since_hours, source, client)
@@ -395,7 +395,7 @@ defmodule WandererKills.Fetcher do
 
   # Fetch raw killmails from zKillboard
   defp fetch_raw_killmails(system_id, _limit, _since_hours, client) do
-    client = client || Application.get_env(:wanderer_kills, :zkb_client, ZkbClient)
+    client = client || ZkbClient
 
     # ZKB client doesn't accept limit or since_hours parameters directly
     # We'll need to filter the results after fetching

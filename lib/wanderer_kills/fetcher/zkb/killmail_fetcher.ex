@@ -1,17 +1,19 @@
-defmodule WandererKills.Fetcher.KillmailFetcher do
+defmodule WandererKills.Fetcher.Zkb.KillmailFetcher do
   @moduledoc """
-  Fetches killmails from various sources and stores them.
+  Fetches killmails from zKillboard sources and stores them.
+
+  This module handles on-demand killmail fetching from zKillboard API,
+  as opposed to the streaming RedisQ operations.
   """
 
-  alias WandererKills.Data.Sources.ZkbClient
+  alias WandererKills.Zkb.Client, as: ZkbClient
   alias WandererKills.KillmailStore
 
   @doc """
   Fetches a killmail by ID and stores it.
   """
   def fetch_killmail(killmail_id, client \\ nil) do
-    actual_client =
-      client || Application.get_env(:wanderer_kills, :data_sources_zkb_client, ZkbClient)
+    actual_client = get_client(client)
 
     case actual_client.fetch_killmail(killmail_id) do
       {:ok, killmail} when is_map(killmail) ->
@@ -30,8 +32,7 @@ defmodule WandererKills.Fetcher.KillmailFetcher do
   Fetches all killmails for a system and stores them.
   """
   def fetch_system_killmails(system_id, client \\ nil) do
-    actual_client =
-      client || Application.get_env(:wanderer_kills, :data_sources_zkb_client, ZkbClient)
+    actual_client = get_client(client)
 
     case actual_client.fetch_system_killmails(system_id) do
       {:ok, killmails} when is_list(killmails) ->
@@ -51,5 +52,9 @@ defmodule WandererKills.Fetcher.KillmailFetcher do
       error ->
         error
     end
+  end
+
+  defp get_client(client) do
+    client || ZkbClient
   end
 end

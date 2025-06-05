@@ -1,13 +1,11 @@
 defmodule WandererKills.CacheTest do
   use WandererKills.TestCase
 
-  alias WandererKills.Cache
+  alias WandererKills.Cache.Unified, as: Cache
   alias WandererKills.TestHelpers
 
   setup do
-    Cachex.clear(:killmails_cache_test)
-    Cachex.clear(:system_cache_test)
-    Cachex.clear(:esi_cache_test)
+    TestHelpers.clear_test_caches()
     :ok
   end
 
@@ -40,11 +38,12 @@ defmodule WandererKills.CacheTest do
       assert {:ok, true} = Cache.add_system_killmail(789, 123)
       assert {:ok, true} = Cache.add_system_killmail(789, 456)
 
-      assert {:ok, [123, 456]} = Cache.get_system_killmails(789)
+      assert {:ok, killmail_ids} = Cache.get_killmails_for_system(789)
+      assert Enum.sort(killmail_ids) == [123, 456]
     end
 
     test "returns empty list for system with no killmails" do
-      assert {:ok, []} = Cache.get_system_killmails(999)
+      assert {:ok, []} = Cache.get_killmails_for_system(999)
     end
 
     test "can remove killmail from system" do
@@ -52,7 +51,7 @@ defmodule WandererKills.CacheTest do
       assert {:ok, true} = Cache.set_killmail(123, killmail)
       assert {:ok, true} = Cache.add_system_killmail(789, 123)
       assert {:ok, true} = Cache.remove_system_killmail(789, 123)
-      assert {:ok, []} = Cache.get_system_killmails(789)
+      assert {:ok, []} = Cache.get_killmails_for_system(789)
     end
   end
 

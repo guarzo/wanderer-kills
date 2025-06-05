@@ -26,7 +26,7 @@ defmodule WandererKills.Parser.KillmailEnricher do
   """
 
   require Logger
-  alias WandererKills.Esi.Cache, as: EsiCache
+  alias WandererKills.Cache.Specialized.EsiCache
 
   @type killmail :: map()
   @type enrichment_option :: :characters | :corporations | :alliances | :ship_types | :locations

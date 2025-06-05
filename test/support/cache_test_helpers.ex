@@ -94,7 +94,10 @@ defmodule WandererKills.CacheTestHelpers do
       test "#{unquote(function_name)} fetches and caches data" do
         WandererKills.CacheTestHelpers.setup_esi_mock(unquote(mock_response))
 
-        assert {:ok, result} = WandererKills.Esi.Cache.unquote(function_name)(unquote(id_param))
+        assert {:ok, result} =
+                 WandererKills.Cache.Specialized.EsiCache.unquote(function_name)(
+                   unquote(id_param)
+                 )
 
         # Verify all expected fields are present
         for {field, expected_value} <- unquote(expected_fields) do
@@ -106,10 +109,16 @@ defmodule WandererKills.CacheTestHelpers do
         WandererKills.CacheTestHelpers.setup_esi_mock(unquote(mock_response))
 
         # First call should fetch from HTTP
-        assert {:ok, result1} = WandererKills.Esi.Cache.unquote(function_name)(unquote(id_param))
+        assert {:ok, result1} =
+                 WandererKills.Cache.Specialized.EsiCache.unquote(function_name)(
+                   unquote(id_param)
+                 )
 
         # Second call should use cache (no additional HTTP expectation needed)
-        assert {:ok, result2} = WandererKills.Esi.Cache.unquote(function_name)(unquote(id_param))
+        assert {:ok, result2} =
+                 WandererKills.Cache.Specialized.EsiCache.unquote(function_name)(
+                   unquote(id_param)
+                 )
 
         assert result1 == result2
       end
@@ -198,7 +207,7 @@ defmodule WandererKills.CacheTestHelpers do
     Application.put_env(:wanderer_kills, :http_client, WandererKills.Http.Client.Mock)
 
     on_exit(fn ->
-      Application.put_env(:wanderer_kills, :http_client, WandererKills.MockHttpClient)
+      Application.put_env(:wanderer_kills, :http_client, WandererKills.Http.Client)
     end)
   end
 

@@ -12,7 +12,8 @@ config :wanderer_kills,
   start_preloader: false
 
 # Configure ESI cache to use mock HTTP client
-config :wanderer_kills, WandererKills.Esi.Cache, http_client: WandererKills.MockHttpClient
+config :wanderer_kills, WandererKills.Cache.Specialized.EsiCache,
+  http_client: WandererKills.MockHttpClient
 
 # Configure Cachex for tests
 config :cachex, :default_ttl, :timer.minutes(1)

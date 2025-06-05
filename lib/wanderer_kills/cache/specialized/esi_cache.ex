@@ -43,8 +43,37 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   alias WandererKills.Cache.Base
   alias WandererKills.Cache.Key
   alias WandererKills.Config
-  alias WandererKills.Esi.Types
-  alias WandererKills.Http.Client, as: HttpClient
+  alias WandererKills.Esi.Data.Types
+  alias WandererKills.Http.ClientProvider
+
+  @doc """
+  Generic helper function for ESI info fetching.
+
+  This reduces boilerplate by providing a standardized way to:
+  1. Generate cache key using Key module
+  2. Build ESI URL
+  3. Parse response using provided parser function
+  4. Fetch or retrieve from cache
+
+  ## Parameters
+  - `key_fn` - Function to generate cache key (e.g., &Key.character_info_key/1)
+  - `endpoint` - ESI endpoint pattern (e.g., "/characters")
+  - `id` - The ID to fetch
+  - `parser_fn` - Function to parse the API response
+
+  ## Returns
+  - `{:ok, parsed_data}` - On success
+  - `{:error, reason}` - On failure
+  """
+  @spec fetch_esi_info((pos_integer() -> String.t()), String.t(), pos_integer(), (map() -> term())) ::
+          {:ok, term()} | {:error, term()}
+  def fetch_esi_info(key_fn, endpoint, id, parser_fn) do
+    key = key_fn.(id)
+    url = "#{base_url()}#{endpoint}/#{id}/"
+
+    fetch_fn = fn -> handle_api_response(url, parser_fn) end
+    fetch_or_store(key, fetch_fn)
+  end
 
   @type type_id :: pos_integer()
   @type group_id :: pos_integer()
@@ -53,8 +82,6 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   @type alliance_id :: pos_integer()
   @type system_id :: pos_integer()
   @type cache_status :: :ok | {:error, term()}
-
-  defp http_client, do: Application.get_env(:wanderer_kills, :http_client, HttpClient)
 
   @doc """
   Base URL for ESI API.
@@ -126,7 +153,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
     params = Keyword.get(opts, :params, [])
     timeout = Keyword.get(opts, :timeout, 30_000)
 
-    case http_client().get_with_rate_limit(url, params: params, timeout: timeout) do
+    case ClientProvider.get().get_with_rate_limit(url, params: params, timeout: timeout) do
       {:ok, %{body: body}} ->
         try do
           parsed_data = parser_fn.(body)
@@ -144,15 +171,57 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   end
 
   @doc """
+  Ensures data is cached for the specified entity type and ID.
+
+  This is a convenience function that consolidates the common pattern of
+  fetching data and only caring about whether it was successfully cached,
+  not about retrieving the actual data.
+
+  ## Parameters
+  - `type` - The type of entity (:character, :corporation, :alliance, :type, :group, :system)
+  - `id` - The ID of the entity
+  - `opts` - Optional parameters (currently unused, reserved for future use)
+
+  ## Returns
+  - `:ok` - If data was successfully fetched/cached
+  - `{:error, reason}` - If fetching failed
+
+  ## Examples
+
+     ```elixir
+   case EsiCache.ensure_cached(:type, 588) do
+     :ok -> Logger.info("Ship type 588 is now cached")
+     {:error, error} -> Logger.error("Failed to cache ship type: \#{error}")
+   end
+
+  # Batch ensure caching
+  Enum.each(type_ids, &EsiCache.ensure_cached(:type, &1))
+  ```
+  """
+  @spec ensure_cached(atom(), pos_integer(), keyword()) :: :ok | {:error, term()}
+  def ensure_cached(type, id, _opts \\ []) when is_atom(type) and is_integer(id) do
+    case type do
+      :character -> get_character_info(id) |> handle_ensure_result()
+      :corporation -> get_corporation_info(id) |> handle_ensure_result()
+      :alliance -> get_alliance_info(id) |> handle_ensure_result()
+      :type -> get_type_info(id) |> handle_ensure_result()
+      :group -> get_group_info(id) |> handle_ensure_result()
+      :system -> get_system_info(id) |> handle_ensure_result()
+      _ -> {:error, :invalid_type}
+    end
+  end
+
+  # Helper to convert fetch results to ensure results
+  defp handle_ensure_result({:ok, _data}), do: :ok
+  defp handle_ensure_result({:error, reason}), do: {:error, reason}
+
+  @doc """
   Gets character information from ESI API with caching.
   Returns {:ok, %Types.CharacterInfo{}} or {:error, reason}.
   """
   @spec get_character_info(character_id()) ::
           {:ok, Types.CharacterInfo.t()} | {:error, term()}
   def get_character_info(character_id) do
-    key = Key.character_info_key(character_id)
-    url = "#{base_url()}/characters/#{character_id}/"
-
     parser_fn = fn body ->
       %Types.CharacterInfo{
         character_id: character_id,
@@ -164,8 +233,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
       }
     end
 
-    fetch_fn = fn -> handle_api_response(url, parser_fn) end
-    fetch_or_store(key, fetch_fn)
+    fetch_esi_info(&Key.character_info_key/1, "/characters", character_id, parser_fn)
   end
 
   @doc """
@@ -175,9 +243,6 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   @spec get_corporation_info(corporation_id()) ::
           {:ok, Types.CorporationInfo.t()} | {:error, term()}
   def get_corporation_info(corporation_id) do
-    key = Key.corporation_info_key(corporation_id)
-    url = "#{base_url()}/corporations/#{corporation_id}/"
-
     parser_fn = fn body ->
       %Types.CorporationInfo{
         corporation_id: corporation_id,
@@ -190,8 +255,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
       }
     end
 
-    fetch_fn = fn -> handle_api_response(url, parser_fn) end
-    fetch_or_store(key, fetch_fn)
+    fetch_esi_info(&Key.corporation_info_key/1, "/corporations", corporation_id, parser_fn)
   end
 
   @doc """
@@ -201,9 +265,6 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   @spec get_alliance_info(alliance_id()) ::
           {:ok, Types.AllianceInfo.t()} | {:error, term()}
   def get_alliance_info(alliance_id) do
-    key = Key.alliance_info_key(alliance_id)
-    url = "#{base_url()}/alliances/#{alliance_id}/"
-
     parser_fn = fn body ->
       %Types.AllianceInfo{
         alliance_id: alliance_id,
@@ -216,8 +277,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
       }
     end
 
-    fetch_fn = fn -> handle_api_response(url, parser_fn) end
-    fetch_or_store(key, fetch_fn)
+    fetch_esi_info(&Key.alliance_info_key/1, "/alliances", alliance_id, parser_fn)
   end
 
   @doc """
@@ -226,9 +286,6 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   """
   @spec get_type_info(type_id()) :: {:ok, Types.TypeInfo.t()} | {:error, term()}
   def get_type_info(type_id) do
-    key = Key.type_info_key(type_id)
-    url = "#{base_url()}/universe/types/#{type_id}/"
-
     parser_fn = fn body ->
       %Types.TypeInfo{
         type_id: type_id,
@@ -245,8 +302,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
       }
     end
 
-    fetch_fn = fn -> handle_api_response(url, parser_fn) end
-    fetch_or_store(key, fetch_fn)
+    fetch_esi_info(&Key.type_info_key/1, "/universe/types", type_id, parser_fn)
   end
 
   @doc """
@@ -255,9 +311,6 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   """
   @spec get_group_info(group_id()) :: {:ok, Types.GroupInfo.t()} | {:error, term()}
   def get_group_info(group_id) do
-    key = Key.group_info_key(group_id)
-    url = "#{base_url()}/universe/groups/#{group_id}/"
-
     parser_fn = fn body ->
       %Types.GroupInfo{
         group_id: group_id,
@@ -268,8 +321,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
       }
     end
 
-    fetch_fn = fn -> handle_api_response(url, parser_fn) end
-    fetch_or_store(key, fetch_fn)
+    fetch_esi_info(&Key.group_info_key/1, "/universe/groups", group_id, parser_fn)
   end
 
   @doc """
@@ -278,9 +330,6 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   """
   @spec get_system_info(system_id()) :: {:ok, Types.SystemInfo.t()} | {:error, term()}
   def get_system_info(system_id) do
-    key = Key.system_info_key(system_id)
-    url = "#{base_url()}/universe/systems/#{system_id}/"
-
     parser_fn = fn body ->
       %Types.SystemInfo{
         system_id: system_id,
@@ -291,8 +340,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
       }
     end
 
-    fetch_fn = fn -> handle_api_response(url, parser_fn) end
-    fetch_or_store(key, fetch_fn)
+    fetch_esi_info(&Key.system_info_key/1, "/universe/systems", system_id, parser_fn)
   end
 
   @doc """
@@ -324,7 +372,7 @@ defmodule WandererKills.Cache.Specialized.EsiCache do
   def get_killmail(killmail_id, killmail_hash) do
     url = "#{base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
 
-    case http_client().get_with_rate_limit(url, []) do
+    case ClientProvider.get().get_with_rate_limit(url, []) do
       {:ok, %{body: body}} -> {:ok, body}
       {:error, reason} -> {:error, reason}
     end

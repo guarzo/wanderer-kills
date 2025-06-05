@@ -55,9 +55,7 @@ defmodule WandererKills.MixProject do
 
       # HTTP client with retry support
       {:req, "~> 0.5"},
-      {:retry, "~> 0.19"},
       {:backoff, "~> 1.1"},
-      {:httpoison, "~> 2.2"},
 
       # CSV parsing
       {:nimble_csv, "~> 1.2"},

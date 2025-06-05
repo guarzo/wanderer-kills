@@ -258,7 +258,7 @@ defmodule WandererKills.Parser.KillmailParser do
   defp fetch_full_killmail(killmail_id, zkb) do
     hash = zkb["hash"]
 
-    case WandererKills.Esi.Cache.get_killmail(killmail_id, hash) do
+    case WandererKills.Cache.Specialized.EsiCache.get_killmail(killmail_id, hash) do
       {:ok, full_data} ->
         {:ok, full_data}
 

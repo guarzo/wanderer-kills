@@ -3,6 +3,8 @@ defmodule WandererKills.Zkb.Client do
   API client for zKillboard.
   """
 
+  @behaviour WandererKills.Zkb.ClientBehaviour
+
   require Logger
   alias WandererKills.Http.Client, as: HttpClient
 

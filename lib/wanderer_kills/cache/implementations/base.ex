@@ -95,7 +95,7 @@ defmodule WandererKills.Cache.Base do
   """
   @spec get_value(cache_type(), cache_key()) :: cache_result()
   def get_value(cache_type, key) do
-    Cachex.get(cache_name(cache_type), key)
+    Cachex.get(cache_name(cache_type), namespaced_key(cache_type, key))
   end
 
   @doc """
@@ -120,7 +120,7 @@ defmodule WandererKills.Cache.Base do
   @spec set_value(cache_type(), cache_key(), cache_value(), pos_integer() | nil) :: cache_status()
   def set_value(cache_type, key, value, ttl \\ nil) do
     ttl_ms = if ttl, do: ttl * 1000, else: get_ttl(cache_type) * 1000
-    Cachex.put(cache_name(cache_type), key, value, ttl: ttl_ms)
+    Cachex.put(cache_name(cache_type), namespaced_key(cache_type, key), value, ttl: ttl_ms)
   end
 
   @doc """
@@ -142,7 +142,7 @@ defmodule WandererKills.Cache.Base do
   """
   @spec delete_value(cache_type(), cache_key()) :: cache_status()
   def delete_value(cache_type, key) do
-    Cachex.del(cache_name(cache_type), key)
+    Cachex.del(cache_name(cache_type), namespaced_key(cache_type, key))
   end
 
   @doc """
@@ -195,14 +195,32 @@ defmodule WandererKills.Cache.Base do
           cache_status()
   def add_to_list(cache_type, key, value, ttl \\ nil) do
     ttl_ms = if ttl, do: ttl * 1000, else: get_ttl(cache_type) * 1000
+    namespaced = namespaced_key(cache_type, key)
 
-    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
-      case Cachex.get(worker, key) do
-        {:ok, nil} -> Cachex.put(worker, key, [value], ttl: ttl_ms)
-        {:ok, list} when is_list(list) -> Cachex.put(worker, key, [value | list], ttl: ttl_ms)
-        _ -> Cachex.put(worker, key, [value], ttl: ttl_ms)
-      end
-    end)
+    case Cachex.transaction(cache_name(cache_type), [namespaced], fn worker ->
+           case Cachex.get(worker, namespaced) do
+             {:ok, nil} ->
+               case Cachex.put(worker, namespaced, [value], ttl: ttl_ms) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+
+             {:ok, list} when is_list(list) ->
+               case Cachex.put(worker, namespaced, [value | list], ttl: ttl_ms) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+
+             _ ->
+               case Cachex.put(worker, namespaced, [value], ttl: ttl_ms) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+           end
+         end) do
+      {:ok, result} -> result
+      error -> error
+    end
   end
 
   @doc """
@@ -225,18 +243,26 @@ defmodule WandererKills.Cache.Base do
   """
   @spec remove_from_list(cache_type(), cache_key(), cache_value()) :: cache_status()
   def remove_from_list(cache_type, key, value) do
-    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
-      case Cachex.get(worker, key) do
-        {:ok, nil} ->
-          {:ok, []}
+    namespaced = namespaced_key(cache_type, key)
 
-        {:ok, list} when is_list(list) ->
-          Cachex.put(worker, key, Enum.reject(list, &(&1 == value)))
+    case Cachex.transaction(cache_name(cache_type), [namespaced], fn worker ->
+           case Cachex.get(worker, namespaced) do
+             {:ok, nil} ->
+               :ok
 
-        _ ->
-          {:ok, []}
-      end
-    end)
+             {:ok, list} when is_list(list) ->
+               case Cachex.put(worker, namespaced, Enum.reject(list, &(&1 == value))) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+
+             _ ->
+               :ok
+           end
+         end) do
+      {:ok, result} -> result
+      error -> error
+    end
   end
 
   @doc """
@@ -255,8 +281,7 @@ defmodule WandererKills.Cache.Base do
   """
   @spec size(atom()) :: {:ok, non_neg_integer()} | {:error, term()}
   def size(cache_type) do
-    %{name: cache_name} = get_cache_config(cache_type)
-    Cachex.size(cache_name)
+    Cachex.size(cache_name(cache_type))
   end
 
   @doc """
@@ -264,8 +289,7 @@ defmodule WandererKills.Cache.Base do
   """
   @spec stats(atom()) :: {:ok, map()} | {:error, term()}
   def stats(cache_type) do
-    %{name: cache_name} = get_cache_config(cache_type)
-    Cachex.stats(cache_name)
+    Cachex.stats(cache_name(cache_type))
   end
 
   @doc """
@@ -314,14 +338,32 @@ defmodule WandererKills.Cache.Base do
   @spec increment_counter(cache_type(), cache_key(), pos_integer() | nil) :: cache_status()
   def increment_counter(cache_type, key, ttl \\ nil) do
     ttl_ms = if ttl, do: ttl * 1000, else: get_ttl(cache_type) * 1000
+    namespaced = namespaced_key(cache_type, key)
 
-    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
-      case Cachex.get(worker, key) do
-        {:ok, nil} -> Cachex.put(worker, key, 1, ttl: ttl_ms)
-        {:ok, count} when is_integer(count) -> Cachex.put(worker, key, count + 1, ttl: ttl_ms)
-        _ -> Cachex.put(worker, key, 1, ttl: ttl_ms)
-      end
-    end)
+    case Cachex.transaction(cache_name(cache_type), [namespaced], fn worker ->
+           case Cachex.get(worker, namespaced) do
+             {:ok, nil} ->
+               case Cachex.put(worker, namespaced, 1, ttl: ttl_ms) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+
+             {:ok, count} when is_integer(count) ->
+               case Cachex.put(worker, namespaced, count + 1, ttl: ttl_ms) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+
+             _ ->
+               case Cachex.put(worker, namespaced, 1, ttl: ttl_ms) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+           end
+         end) do
+      {:ok, result} -> result
+      error -> error
+    end
   end
 
   @doc """
@@ -343,13 +385,26 @@ defmodule WandererKills.Cache.Base do
   """
   @spec decrement_counter(cache_type(), cache_key()) :: cache_status()
   def decrement_counter(cache_type, key) do
-    Cachex.transaction(cache_name(cache_type), [key], fn worker ->
-      case Cachex.get(worker, key) do
-        {:ok, nil} -> {:ok, 0}
-        {:ok, count} when is_integer(count) and count > 0 -> Cachex.put(worker, key, count - 1)
-        _ -> {:ok, 0}
-      end
-    end)
+    namespaced = namespaced_key(cache_type, key)
+
+    case Cachex.transaction(cache_name(cache_type), [namespaced], fn worker ->
+           case Cachex.get(worker, namespaced) do
+             {:ok, nil} ->
+               :ok
+
+             {:ok, count} when is_integer(count) and count > 0 ->
+               case Cachex.put(worker, namespaced, count - 1) do
+                 {:ok, _} -> :ok
+                 error -> error
+               end
+
+             _ ->
+               :ok
+           end
+         end) do
+      {:ok, result} -> result
+      error -> error
+    end
   end
 
   @doc """
@@ -373,9 +428,7 @@ defmodule WandererKills.Cache.Base do
   """
   @spec exists?(cache_type(), cache_key()) :: {:ok, boolean()} | {:error, term()}
   def exists?(cache_type, key) do
-    %{name: cache_name} = get_cache_config(cache_type)
-
-    case Cachex.exists?(cache_name, key) do
+    case Cachex.exists?(cache_name(cache_type), namespaced_key(cache_type, key)) do
       {:ok, exists} -> {:ok, exists}
       error -> error
     end
@@ -400,20 +453,21 @@ defmodule WandererKills.Cache.Base do
   """
   @spec ttl(cache_type(), cache_key()) :: {:ok, pos_integer()} | {:error, term()}
   def ttl(cache_type, key) do
-    %{name: cache_name} = get_cache_config(cache_type)
-
-    case Cachex.ttl(cache_name, key) do
+    case Cachex.ttl(cache_name(cache_type), namespaced_key(cache_type, key)) do
       {:ok, ttl} -> {:ok, ttl}
       error -> error
     end
   end
 
-  defp cache_name(cache_type) do
-    case cache_type do
-      :killmails -> :killmail_cache
-      :system -> :system_cache
-      :esi -> :esi_cache
-    end
+  defp cache_name(_cache_type) do
+    # Use unified cache for all cache types
+    # The supervisor creates a single :unified_cache instance
+    :unified_cache
+  end
+
+  # Add helper function to generate namespaced keys for the unified cache
+  defp namespaced_key(cache_type, key) do
+    "#{cache_type}:#{key}"
   end
 
   @doc false

@@ -1,9 +1,10 @@
-defmodule WandererKills.Data.Sources.EsiSource do
+defmodule WandererKills.Fetcher.Esi.Source do
   @moduledoc """
-  ESI-based ship type data source implementation.
+  ESI-based ship type data fetcher implementation.
 
-  This module implements the ShipTypeSource behaviour for fetching ship type
-  data directly from the EVE Swagger Interface (ESI) API.
+  This module handles fetching ship type data directly from the EVE Swagger
+  Interface (ESI) API and is organized under the ESI fetcher namespace
+  for better source-specific organization.
 
   ## Features
 
@@ -31,11 +32,11 @@ defmodule WandererKills.Data.Sources.EsiSource do
   ```
   """
 
-  use WandererKills.Data.Behaviours.ShipTypeSource
+  use WandererKills.Data.Behaviors.ShipTypeSource
 
   require Logger
   alias WandererKills.Config
-  alias WandererKills.Core.Shared.Concurrency
+  alias WandererKills.Core.BatchProcessor
   alias WandererKills.TaskSupervisor
   alias WandererKills.Cache.Specialized.EsiCache
 
@@ -110,15 +111,17 @@ defmodule WandererKills.Data.Sources.EsiSource do
       timeout: :timer.seconds(30)
     ]
 
-    case Concurrency.execute_batch_operation(
-           TaskSupervisor,
-           group_ids,
-           &fetch_group_types/1,
-           opts
-         ) do
-      :ok ->
+    batch_opts =
+      Keyword.merge(opts, supervisor: TaskSupervisor, description: "ship group processing")
+
+    case BatchProcessor.process_parallel(group_ids, &fetch_group_types/1, batch_opts) do
+      {:ok, _results} ->
         Logger.info("Successfully processed all ship groups from ESI")
         :ok
+
+      {:partial, _results, failures} ->
+        Logger.error("Some ship groups failed to process: #{inspect(failures)}")
+        {:error, :batch_processing_failed}
 
       {:error, reason} ->
         Logger.error("Failed to process ship groups from ESI: #{inspect(reason)}")
@@ -143,13 +146,15 @@ defmodule WandererKills.Data.Sources.EsiSource do
       timeout: :timer.seconds(30)
     ]
 
-    case Concurrency.execute_batch_operation(
-           TaskSupervisor,
-           group_ids,
-           &fetch_group_info/1,
-           opts
-         ) do
-      :ok ->
+    batch_opts =
+      Keyword.merge(opts, supervisor: TaskSupervisor, description: "group info fetching")
+
+    case BatchProcessor.process_parallel(group_ids, &fetch_group_info/1, batch_opts) do
+      {:ok, _results} ->
+        collect_type_ids_from_groups(group_ids)
+
+      {:partial, _results, _failures} ->
+        # Even if some group fetches fail, we can proceed with what we have
         collect_type_ids_from_groups(group_ids)
 
       {:error, reason} ->
@@ -158,8 +163,8 @@ defmodule WandererKills.Data.Sources.EsiSource do
   end
 
   defp fetch_group_info(group_id) do
-    case EsiCache.get_group_info(group_id) do
-      {:ok, _group_info} ->
+    case EsiCache.ensure_cached(:group, group_id) do
+      :ok ->
         Logger.debug("Successfully fetched group info for group #{group_id}")
         :ok
 
@@ -199,17 +204,20 @@ defmodule WandererKills.Data.Sources.EsiSource do
       timeout: :timer.seconds(30)
     ]
 
-    Concurrency.execute_batch_operation(
-      TaskSupervisor,
-      type_ids,
-      &fetch_ship_type_details/1,
-      opts
-    )
+    batch_opts =
+      Keyword.merge(opts, supervisor: TaskSupervisor, description: "ship type details fetching")
+
+    case BatchProcessor.process_parallel(type_ids, &fetch_ship_type_details/1, batch_opts) do
+      {:ok, _results} -> :ok
+      # Partial success is acceptable
+      {:partial, _results, _failures} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp fetch_ship_type_details(type_id) do
-    case EsiCache.get_type_info(type_id) do
-      {:ok, _type_info} ->
+    case EsiCache.ensure_cached(:type, type_id) do
+      :ok ->
         Logger.debug("Successfully fetched ship type #{type_id}")
         :ok
 

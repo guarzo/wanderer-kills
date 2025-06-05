@@ -4,7 +4,7 @@ defmodule WandererKills.Parser.CacheHandler do
   """
 
   require Logger
-  alias WandererKills.Cache
+  alias WandererKills.Cache.Unified, as: Cache
 
   @type killmail :: map()
   @type result :: {:ok, killmail()} | {:error, term()}
@@ -68,9 +68,4 @@ defmodule WandererKills.Parser.CacheHandler do
         :ok
     end
   end
-
-  # Deprecated: Use increment_kill_count/1 instead
-  @deprecated "Use increment_kill_count/1 instead"
-  @spec update_kill_count(map()) :: :ok
-  def update_kill_count(killmail), do: increment_kill_count(killmail)
 end

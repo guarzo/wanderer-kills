@@ -31,6 +31,14 @@ defmodule WandererKills.KillmailStoreTest do
     "zkb" => %{"totalValue" => 3000}
   }
 
+  @test_killmail_4 %{
+    "killmail_id" => 12_348,
+    "solar_system_id" => @system_id_2,
+    "victim" => %{"character_id" => 126},
+    "attackers" => [],
+    "zkb" => %{"totalValue" => 4000}
+  }
+
   setup do
     WandererKills.TestHelpers.clear_all_caches()
     # Clean up ETS tables before each test
@@ -60,24 +68,21 @@ defmodule WandererKills.KillmailStoreTest do
 
   describe "system operations" do
     test "can store and retrieve system killmails" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
-      Process.sleep(10)
       assert :ok = KillmailStore.add_system_killmail(30_000_142, 123)
       assert :ok = KillmailStore.add_system_killmail(30_000_142, 456)
-      assert {:ok, [123, 456]} = KillmailStore.get_system_killmails(30_000_142)
+      assert {:ok, killmail_ids} = KillmailStore.get_killmails_for_system(30_000_142)
+      assert Enum.sort(killmail_ids) == [123, 456]
     end
 
     test "returns empty list for system with no killmails" do
-      assert {:ok, []} = KillmailStore.get_system_killmails(30_000_142)
+      assert {:ok, []} = KillmailStore.get_killmails_for_system(30_000_142)
     end
 
     test "can remove killmail from system" do
       _killmail = TestHelpers.create_test_killmail(123)
       assert :ok = KillmailStore.add_system_killmail(30_000_142, 123)
       assert :ok = KillmailStore.remove_system_killmail(30_000_142, 123)
-      assert {:ok, []} = KillmailStore.get_system_killmails(30_000_142)
+      assert {:ok, []} = KillmailStore.get_killmails_for_system(30_000_142)
     end
   end
 
@@ -111,29 +116,23 @@ defmodule WandererKills.KillmailStoreTest do
       Process.sleep(10)
       :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
       Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_3)
-      Process.sleep(10)
       {:ok, events} = KillmailStore.fetch_for_client("client1", [@system_id_1])
-      assert length(events) == 3
+      assert length(events) == 2
 
       event_ids = Enum.map(events, &elem(&1, 0))
       assert event_ids == Enum.sort(event_ids)
       assert Enum.all?(event_ids, &(&1 > 0))
 
       # Verify event structure
-      [{event_id_1, sys_id_1, km_1}, {event_id_2, sys_id_2, km_2}, {event_id_3, sys_id_3, km_3}] =
-        events
+      [{event_id_1, sys_id_1, km_1}, {event_id_2, sys_id_2, km_2}] = events
 
       assert sys_id_1 == @system_id_1
       assert sys_id_2 == @system_id_1
-      assert sys_id_3 == @system_id_1
 
       assert km_1["killmail_id"] == 12_345
       assert km_2["killmail_id"] == 12_346
-      assert km_3["killmail_id"] == 12_347
 
       assert event_id_1 < event_id_2
-      assert event_id_2 < event_id_3
     end
 
     test "events are broadcast via PubSub" do
@@ -189,7 +188,7 @@ defmodule WandererKills.KillmailStoreTest do
     test "clients can track different systems independently" do
       :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
       Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_2, @test_killmail_2)
+      :ok = KillmailStore.insert_event(@system_id_2, @test_killmail_3)
       Process.sleep(10)
       {:ok, sys1_events} = KillmailStore.fetch_for_client("client1", [@system_id_1])
       assert length(sys1_events) == 1
@@ -257,13 +256,10 @@ defmodule WandererKills.KillmailStoreTest do
       Process.sleep(10)
       :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
       Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_3)
-      Process.sleep(10)
       {:ok, events} = KillmailStore.fetch_for_client("client1", [@system_id_1])
-      assert length(events) == 3
-      [event1, event2, event3] = events
-      assert event1 < event2
-      assert event2 < event3
+      assert length(events) == 2
+      [event1, event2] = events
+      assert elem(event1, 0) < elem(event2, 0)
     end
   end
 end

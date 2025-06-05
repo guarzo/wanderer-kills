@@ -1,7 +1,7 @@
-defmodule WandererKills.Esi.CacheTest do
+defmodule WandererKills.Cache.Specialized.EsiCacheTest do
   use ExUnit.Case, async: true
-  alias WandererKills.Esi.Cache
-  alias WandererKills.Esi.Types.CharacterInfo
+  alias WandererKills.Cache.Specialized.EsiCache
+  alias WandererKills.Esi.Data.Types.CharacterInfo
 
   setup do
     WandererKills.TestHelpers.clear_all_caches()
@@ -41,7 +41,7 @@ defmodule WandererKills.Esi.CacheTest do
          }}
       end)
 
-      assert {:ok, actual_data} = Cache.get_character_info(character_id)
+      assert {:ok, actual_data} = EsiCache.get_character_info(character_id)
       assert actual_data.character_id == expected_data.character_id
       assert actual_data.name == expected_data.name
     end
@@ -62,7 +62,7 @@ defmodule WandererKills.Esi.CacheTest do
          }}
       end)
 
-      assert {:ok, corp_data} = Cache.get_corporation_info(corporation_id)
+      assert {:ok, corp_data} = EsiCache.get_corporation_info(corporation_id)
       assert corp_data.corporation_id == corporation_id
       assert corp_data.name == "Test Corp"
     end
@@ -83,7 +83,7 @@ defmodule WandererKills.Esi.CacheTest do
          }}
       end)
 
-      assert {:ok, alliance_data} = Cache.get_alliance_info(alliance_id)
+      assert {:ok, alliance_data} = EsiCache.get_alliance_info(alliance_id)
       assert alliance_data.alliance_id == alliance_id
       assert alliance_data.name == "Test Alliance"
     end
@@ -104,7 +104,7 @@ defmodule WandererKills.Esi.CacheTest do
          }}
       end)
 
-      assert {:ok, type_data} = Cache.get_type_info(type_id)
+      assert {:ok, type_data} = EsiCache.get_type_info(type_id)
       assert type_data.type_id == type_id
       assert type_data.name == "Test Type"
     end
@@ -126,7 +126,7 @@ defmodule WandererKills.Esi.CacheTest do
          }}
       end)
 
-      assert {:ok, group_data} = Cache.get_group_info(group_id)
+      assert {:ok, group_data} = EsiCache.get_group_info(group_id)
       assert group_data.group_id == group_id
       assert group_data.name == "Test Group"
     end
@@ -134,7 +134,7 @@ defmodule WandererKills.Esi.CacheTest do
 
   describe "clear cache" do
     test "clear removes all entries" do
-      assert :ok = Cache.clear()
+      assert :ok = EsiCache.clear()
     end
   end
 end

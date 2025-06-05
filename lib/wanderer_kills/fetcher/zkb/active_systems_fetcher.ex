@@ -1,6 +1,9 @@
-defmodule WandererKills.Fetcher.ActiveSystemsFetcher do
+defmodule WandererKills.Fetcher.Zkb.ActiveSystemsFetcher do
   @moduledoc """
-  Fetches and processes active systems data from zKillboard.
+  Fetches and manages active PVP systems from zKillboard.
+
+  This module handles discovering and caching systems with recent killmail activity
+  using zKillboard's active systems API.
 
   This module provides functionality to:
   - Fetch active systems from zKillboard
@@ -41,7 +44,7 @@ defmodule WandererKills.Fetcher.ActiveSystemsFetcher do
   require Logger
 
   alias WandererKills.Zkb.Client, as: ZkbClient
-  alias WandererKills.Cache
+  alias WandererKills.Cache.Unified, as: Cache
 
   @type system_id :: pos_integer()
   @type fetch_opts :: [force: boolean()]

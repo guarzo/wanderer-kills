@@ -8,7 +8,7 @@ defmodule WandererKills.Web.Api do
   import Plug.Conn
 
   alias WandererKills.Infrastructure.Monitoring
-  alias WandererKills.Cache
+  alias WandererKills.Cache.Unified, as: Cache
   alias WandererKills.Web.Plugs.RequestId
 
   plug(Plug.Logger, log: :info)

@@ -33,11 +33,12 @@ defmodule WandererKills.Data.ShipTypeUpdater do
   ## Dependencies
 
   - `WandererKills.Data.Sources.CsvSource` - CSV-based updates
-  - `WandererKills.Data.Sources.EsiSource` - ESI-based updates
+  - `WandererKills.Fetcher.Esi.Source` - ESI-based updates
   """
 
   require Logger
-  alias WandererKills.Data.Sources.{CsvSource, EsiSource}
+  alias WandererKills.Data.Sources.CsvSource
+  alias WandererKills.Fetcher.Esi.Source, as: EsiSource
 
   @doc """
   Updates ship types by first trying CSV download, then falling back to ESI.

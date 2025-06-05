@@ -86,9 +86,8 @@ defmodule WandererKills.TestHelpers do
   """
   @spec clear_test_caches() :: :ok
   def clear_test_caches do
-    safe_clear_cache(:wanderer_test_killmails_cache)
-    safe_clear_cache(:wanderer_test_system_cache)
-    safe_clear_cache(:wanderer_test_esi_cache)
+    # Clear the unified cache used in both test and production environments
+    safe_clear_cache(:unified_cache)
     :ok
   end
 

@@ -2,8 +2,8 @@ defmodule WandererKills.Fetcher.KillmailFetcherTest do
   use ExUnit.Case, async: true
   import Mox
 
-  alias WandererKills.Fetcher.KillmailFetcher
-  alias WandererKills.Data.Sources.ZkbClient.Mock, as: ZkbClient
+  alias WandererKills.Fetcher.Zkb.KillmailFetcher
+  alias WandererKills.Zkb.Client.Mock, as: ZkbClient
   alias WandererKills.TestHelpers
   alias WandererKills.KillmailStore
 
@@ -13,15 +13,6 @@ defmodule WandererKills.Fetcher.KillmailFetcherTest do
   setup do
     # Clean up any existing state
     KillmailStore.cleanup_tables()
-
-    # Configure the application to use the mock
-    Application.put_env(:wanderer_kills, :data_sources_zkb_client, ZkbClient)
-
-    # Clean up after the test
-    on_exit(fn ->
-      Application.delete_env(:wanderer_kills, :data_sources_zkb_client)
-    end)
-
     :ok
   end
 
@@ -32,7 +23,7 @@ defmodule WandererKills.Fetcher.KillmailFetcherTest do
       ZkbClient
       |> expect(:fetch_killmail, fn 123 -> {:ok, killmail} end)
 
-      assert {:ok, ^killmail} = KillmailFetcher.fetch_killmail(123)
+      assert {:ok, ^killmail} = KillmailFetcher.fetch_killmail(123, ZkbClient)
       assert {:ok, ^killmail} = WandererKills.KillmailStore.get_killmail(123)
     end
 
@@ -40,7 +31,7 @@ defmodule WandererKills.Fetcher.KillmailFetcherTest do
       ZkbClient
       |> expect(:fetch_killmail, fn 999 -> {:error, :not_found} end)
 
-      assert {:error, :not_found} = KillmailFetcher.fetch_killmail(999)
+      assert {:error, :not_found} = KillmailFetcher.fetch_killmail(999, ZkbClient)
     end
   end
 
@@ -53,8 +44,8 @@ defmodule WandererKills.Fetcher.KillmailFetcherTest do
       ZkbClient
       |> expect(:fetch_system_killmails, fn 789 -> {:ok, killmails} end)
 
-      assert {:ok, ^killmails} = KillmailFetcher.fetch_system_killmails(789)
-      assert {:ok, stored_killmails} = WandererKills.KillmailStore.get_system_killmails(789)
+      assert {:ok, ^killmails} = KillmailFetcher.fetch_system_killmails(789, ZkbClient)
+      assert {:ok, stored_killmails} = WandererKills.KillmailStore.get_killmails_for_system(789)
       assert length(stored_killmails) == 2
       assert Enum.map(stored_killmails, & &1) |> Enum.sort() == [123, 456]
     end
@@ -63,15 +54,15 @@ defmodule WandererKills.Fetcher.KillmailFetcherTest do
       ZkbClient
       |> expect(:fetch_system_killmails, fn 999 -> {:ok, []} end)
 
-      assert {:ok, []} = KillmailFetcher.fetch_system_killmails(999)
-      assert {:ok, []} = WandererKills.KillmailStore.get_system_killmails(999)
+      assert {:ok, []} = KillmailFetcher.fetch_system_killmails(999, ZkbClient)
+      assert {:ok, []} = WandererKills.KillmailStore.get_killmails_for_system(999)
     end
 
     test "handles error from zkb client" do
       ZkbClient
       |> expect(:fetch_system_killmails, fn 999 -> {:error, :timeout} end)
 
-      assert {:error, :timeout} = KillmailFetcher.fetch_system_killmails(999)
+      assert {:error, :timeout} = KillmailFetcher.fetch_system_killmails(999, ZkbClient)
     end
   end
 end

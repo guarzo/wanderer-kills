@@ -23,8 +23,7 @@ config :wanderer_kills,
   },
   # Concurrency configuration for batch operations
   concurrency: %{
-    batch_size: 100,
-    max_workers: 10
+    batch_size: 100
   },
   # ESI API configuration
   esi: %{

@@ -6,7 +6,7 @@ defmodule WandererKills.Parser.Core do
   require Logger
   alias WandererKills.Parser.{CacheHandler, Stats, Flatten}
   alias WandererKills.Core.Clock
-  alias WandererKills.Cache
+  alias WandererKills.Cache.Unified, as: Cache
   alias WandererKills.Config
 
   @type raw_km :: map()

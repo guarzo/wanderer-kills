@@ -5,45 +5,54 @@ defmodule WandererKills.Data.Sources.CsvSource do
   This module implements the ShipTypeSource behaviour for downloading and
   processing EVE ship type data from CSV files provided by fuzzwork.co.uk.
 
+  ## Purpose
+
+  This source is intended for **initial data seeding and offline processing**.
+  It does NOT populate the ESI cache to avoid conflicts with live ESI data
+  that has a different structure and comes from the live EVE API.
+
   ## Features
 
   - Downloads CSV files from EVE DB dumps
   - Parses ship type and group data from CSV format
-  - Caches processed data in the ESI cache
+  - Processes ship data for initial seeding or offline analysis
   - Handles file validation and error recovery
+
+  ## Usage vs EsiSource
+
+  - **CsvSource**: Use for initial data seeding, bulk imports, or offline processing
+  - **EsiSource**: Use for live ESI cache population with current EVE API data
+
+  These sources have different data structures and should not be mixed in the
+  same cache namespace.
 
   ## Usage
 
   ```elixir
-  # Use the behaviour interface
+  # Use for initial data processing (does not populate ESI cache)
   alias WandererKills.Data.Sources.CsvSource
 
   case CsvSource.update() do
-    :ok -> Logger.info("CSV update successful")
-    {:error, reason} -> Logger.error("CSV update failed: {inspect(reason)}")
+    :ok -> Logger.info("CSV processing successful")
+    {:error, reason} -> Logger.error("CSV processing failed: {inspect(reason)}")
   end
 
   # Or call individual steps
   {:ok, file_paths} = CsvSource.download()
-  {:ok, ship_types} = CsvSource.parse(file_paths)
-  :ok = CsvSource.cache(ship_types)
+  {:ok, ship_types} = CsvSource.parse(file_paths) # Returns processed data, doesn't cache to ESI
   ```
   """
 
-  use WandererKills.Data.Behaviours.ShipTypeSource
+  use WandererKills.Data.Behaviors.ShipTypeSource
 
   require Logger
-  alias WandererKills.Config
-  alias WandererKills.Http.Client
-  alias WandererKills.Core.Shared.Concurrency
+  alias WandererKills.Core.BatchProcessor
   alias WandererKills.Data.Parsers.CsvUtil
-  alias WandererKills.Cache.Base
-  alias WandererKills.Cache.Key
+  alias WandererKills.Data.Parsers.CsvRowParser
+  # Note: Cache.Base and Cache.Key removed since CSV source no longer caches to ESI
 
   @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"
   @required_files ["invGroups.csv", "invTypes.csv"]
-
-  defp http_client, do: Application.get_env(:wanderer_kills, :http_client, Client)
 
   @impl true
   def source_name, do: "CSV"
@@ -90,30 +99,10 @@ defmodule WandererKills.Data.Sources.CsvSource do
     end
   end
 
-  # Legacy cache function - no longer used but kept for potential future reference
-  def cache(ship_types) when is_list(ship_types) do
-    Logger.info("Caching #{length(ship_types)} ship types from CSV")
-
-    try do
-      Enum.each(ship_types, fn ship ->
-        key = Key.type_info_key(ship.type_id)
-        :ok = Base.set_value(:esi, key, ship)
-      end)
-
-      Logger.info("Successfully cached #{length(ship_types)} ship types")
-      :ok
-    rescue
-      error ->
-        Logger.error("Failed to cache ship types: #{inspect(error)}")
-        {:error, :cache_failed}
-    end
-  end
-
   # Private helper functions
 
   defp get_data_directory do
-    Config.concurrency().batch_size
-    |> then(fn _ -> Path.join([:code.priv_dir(:wanderer_kills), "data"]) end)
+    Path.join([:code.priv_dir(:wanderer_kills), "data"])
   end
 
   defp get_missing_files(data_dir) do
@@ -129,20 +118,19 @@ defmodule WandererKills.Data.Sources.CsvSource do
   end
 
   defp download_files(file_names, data_dir) do
-    _concurrency_config = Config.concurrency()
+    download_fn = fn file_name -> download_single_file(file_name, data_dir) end
 
-    task_fn = fn file_name ->
-      Task.async(fn -> download_single_file(file_name, data_dir) end)
-    end
-
-    case Concurrency.execute_parallel_tasks(
-           file_names,
-           task_fn,
-           :timer.minutes(5)
+    case BatchProcessor.process_parallel(file_names, download_fn,
+           timeout: :timer.minutes(5),
+           description: "CSV file downloads"
          ) do
-      :ok ->
+      {:ok, _results} ->
         Logger.info("Successfully downloaded all CSV files")
         :ok
+
+      {:partial, _results, failures} ->
+        Logger.error("Some CSV downloads failed: #{inspect(failures)}")
+        {:error, :download_failed}
 
       {:error, reason} ->
         Logger.error("Failed to download CSV files: #{inspect(reason)}")
@@ -156,8 +144,8 @@ defmodule WandererKills.Data.Sources.CsvSource do
 
     Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
 
-    case http_client().get_with_rate_limit(url, raw: true) do
-      {:ok, %{body: body}} when is_binary(body) ->
+    case WandererKills.Http.ClientUtil.fetch_raw(url, raw: true) do
+      {:ok, body} ->
         case File.write(download_path, body) do
           :ok ->
             Logger.info("Successfully downloaded #{file_name}")
@@ -167,10 +155,6 @@ defmodule WandererKills.Data.Sources.CsvSource do
             Logger.error("Failed to write file #{file_name}: #{inspect(reason)}")
             {:error, reason}
         end
-
-      {:ok, response} ->
-        Logger.error("Unexpected response format for #{file_name}: #{inspect(response)}")
-        {:error, :unexpected_response_format}
 
       {:error, reason} ->
         Logger.error("Failed to download file #{file_name}: #{inspect(reason)}")
@@ -189,50 +173,6 @@ defmodule WandererKills.Data.Sources.CsvSource do
     end
   end
 
-  defp parse_type_row(row) when is_map(row) do
-    try do
-      with type_id when is_binary(type_id) <- Map.get(row, "typeID"),
-           group_id when is_binary(group_id) <- Map.get(row, "groupID"),
-           name when is_binary(name) <- Map.get(row, "typeName") do
-        %{
-          type_id: String.to_integer(type_id),
-          group_id: String.to_integer(group_id),
-          name: name,
-          group_name: nil,
-          mass: CsvUtil.parse_float_with_default(Map.get(row, "mass", "0")),
-          capacity: CsvUtil.parse_float_with_default(Map.get(row, "capacity", "0")),
-          volume: CsvUtil.parse_float_with_default(Map.get(row, "volume", "0"))
-        }
-      else
-        _ -> nil
-      end
-    rescue
-      ArgumentError -> nil
-    end
-  end
-
-  defp parse_type_row(_), do: nil
-
-  defp parse_group_row(row) when is_map(row) do
-    try do
-      with group_id when is_binary(group_id) <- Map.get(row, "groupID"),
-           name when is_binary(name) <- Map.get(row, "groupName"),
-           category_id when is_binary(category_id) <- Map.get(row, "categoryID") do
-        %{
-          group_id: String.to_integer(group_id),
-          name: name,
-          category_id: String.to_integer(category_id)
-        }
-      else
-        _ -> nil
-      end
-    rescue
-      ArgumentError -> nil
-    end
-  end
-
-  defp parse_group_row(_), do: nil
-
   defp build_ship_types(types, groups) do
     # Get ship group IDs from configuration
     ship_group_ids = [6, 7, 9, 11, 16, 17, 23]
@@ -247,25 +187,18 @@ defmodule WandererKills.Data.Sources.CsvSource do
     |> Enum.reject(&is_nil/1)
   end
 
+  # Note: CSV source no longer caches data directly to ESI cache to avoid
+  # conflicts with live ESI data. CSV data should be used for initial seeding
+  # or processed separately from ESI cache operations.
   defp cache_ship_types(ship_types) when is_list(ship_types) do
-    try do
-      Enum.each(ship_types, fn ship ->
-        key = Key.type_info_key(ship.type_id)
-        :ok = Base.set_value(:esi, key, ship)
-      end)
-
-      Logger.info("Successfully cached #{length(ship_types)} ship types")
-      :ok
-    rescue
-      error ->
-        Logger.error("Failed to cache ship types: #{inspect(error)}")
-        {:error, :cache_failed}
-    end
+    Logger.info("CSV source processed #{length(ship_types)} ship types successfully")
+    Logger.info("Note: CSV data is not cached to ESI cache to avoid conflicts with live ESI data")
+    :ok
   end
 
   defp process_csv_data(types_path, groups_path) do
-    with {:ok, types} <- CsvUtil.read_rows(types_path, &parse_type_row/1),
-         {:ok, groups} <- CsvUtil.read_rows(groups_path, &parse_group_row/1) do
+    with {:ok, types} <- CsvUtil.read_rows(types_path, &CsvRowParser.parse_type/1),
+         {:ok, groups} <- CsvUtil.read_rows(groups_path, &CsvRowParser.parse_group/1) do
       # Filter for ship types and enrich with group names
       ship_types = build_ship_types(types, groups)
 
@@ -278,16 +211,9 @@ defmodule WandererKills.Data.Sources.CsvSource do
       {:error, :no_ship_types}
     else
       # Cache the ship types as part of the parse step
-      case cache_ship_types(ship_types) do
-        :ok ->
-          Logger.info("Successfully parsed and cached #{length(ship_types)} ship types from CSV")
-
-          {:ok, ship_types}
-
-        {:error, reason} ->
-          Logger.error("Parsing succeeded but caching failed: #{inspect(reason)}")
-          {:error, reason}
-      end
+      cache_ship_types(ship_types)
+      Logger.info("Successfully parsed and cached #{length(ship_types)} ship types from CSV")
+      {:ok, ship_types}
     end
   end
 end

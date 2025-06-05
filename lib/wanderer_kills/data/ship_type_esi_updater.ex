@@ -23,9 +23,9 @@ defmodule WandererKills.Data.ShipTypeEsiUpdater do
   """
 
   require Logger
-  alias WandererKills.Core.Shared.Concurrency
+  alias WandererKills.Core.BatchProcessor
   alias WandererKills.TaskSupervisor
-  alias WandererKills.Esi.Cache, as: EsiCache
+  alias WandererKills.Cache.Specialized.EsiCache
 
   # Ship group IDs that contain ship types
   @ship_group_ids [6, 7, 9, 11, 16, 17, 23]
@@ -96,15 +96,17 @@ defmodule WandererKills.Data.ShipTypeEsiUpdater do
       timeout: get_config(:task_timeout_ms)
     ]
 
-    case Concurrency.execute_batch_operation(
-           TaskSupervisor,
-           group_ids,
-           &fetch_group_types/1,
-           opts
-         ) do
-      :ok ->
+    batch_opts =
+      Keyword.merge(opts, supervisor: TaskSupervisor, description: "ship group processing")
+
+    case BatchProcessor.process_parallel(group_ids, &fetch_group_types/1, batch_opts) do
+      {:ok, _results} ->
         Logger.info("Successfully processed all ship groups from ESI")
         :ok
+
+      {:partial, _results, failures} ->
+        Logger.error("Some ship groups failed to process: #{inspect(failures)}")
+        {:error, :batch_processing_failed}
 
       {:error, reason} ->
         Logger.error("Failed to process ship groups from ESI: #{inspect(reason)}")
@@ -163,10 +165,17 @@ defmodule WandererKills.Data.ShipTypeEsiUpdater do
       timeout: get_config(:task_timeout_ms)
     ]
 
-    case Concurrency.execute_batch_operation(TaskSupervisor, type_ids, &fetch_ship_type/1, opts) do
-      :ok ->
+    batch_opts =
+      Keyword.merge(opts, supervisor: TaskSupervisor, description: "ship type fetching")
+
+    case BatchProcessor.process_parallel(type_ids, &fetch_ship_type/1, batch_opts) do
+      {:ok, _results} ->
         Logger.info("Successfully fetched all #{length(type_ids)} ship types")
         :ok
+
+      {:partial, _results, failures} ->
+        Logger.error("Some ship types failed to fetch: #{inspect(failures)}")
+        {:error, :batch_processing_failed}
 
       {:error, reason} ->
         Logger.error("Failed to fetch ship types: #{inspect(reason)}")

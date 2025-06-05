@@ -47,7 +47,7 @@ defmodule WandererKills.Http.Client do
 
   require Logger
   alias WandererKills.Http.Errors.{ConnectionError, TimeoutError, RateLimitError}
-  alias WandererKills.Http.Retry
+  alias WandererKills.Retry
   alias WandererKills.Infrastructure.Telemetry
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
@@ -231,7 +231,7 @@ defmodule WandererKills.Http.Client do
   end
 
   @spec retriable_error?(term()) :: boolean()
-  def retriable_error?(error), do: Retry.retriable_error?(error)
+  def retriable_error?(error), do: Retry.retriable_http_error?(error)
 
   # Helper function to get configuration values
   defp get_config(key) do

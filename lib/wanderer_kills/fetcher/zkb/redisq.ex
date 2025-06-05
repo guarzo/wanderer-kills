@@ -1,6 +1,9 @@
-defmodule WandererKills.Preloader.RedisQ do
+defmodule WandererKills.Fetcher.Zkb.RedisQ do
   @moduledoc """
   Client for interacting with the zKillboard RedisQ API.
+
+  This module handles streaming killmail data from zKillboard's RedisQ endpoint,
+  providing real-time killmail processing capabilities.
 
   • Idle (no kills):    poll every `:idle_interval_ms`
   • On kill (new):      poll again after `:fast_interval_ms`
@@ -13,7 +16,7 @@ defmodule WandererKills.Preloader.RedisQ do
   require Logger
 
   alias WandererKills.Parser
-  alias WandererKills.Esi.Cache, as: EsiCache
+  alias WandererKills.Cache.Specialized.EsiCache
   alias WandererKills.Core.Clock
   alias WandererKills.Http.Client, as: HttpClient
 

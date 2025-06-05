@@ -72,11 +72,7 @@ defmodule WandererKills.Cache.Key do
   """
   @spec get_ttl(cache_type()) :: pos_integer()
   def get_ttl(cache_type) do
-    case cache_type do
-      :killmails -> 3600
-      :system -> 3600
-      :esi -> 3600
-    end
+    WandererKills.Config.cache(cache_type)[:ttl] || 3600
   end
 
   @doc """
@@ -201,17 +197,34 @@ defmodule WandererKills.Cache.Key do
   end
 
   @doc """
-  Generates a key for a system's killmails.
+  Generates a key for a system's killmails or killmail IDs.
+
+  ## Parameters
+  - `system_id` - The system ID
+  - `type` - Either `:killmails` (default) or `:killmail_ids`
+
+  ## Examples
+      iex> system_killmails_key(123)
+      "killmails:system:123"
+
+      iex> system_killmails_key(123, :killmail_ids)
+      "killmails:system:123:killmail_ids"
   """
-  def system_killmails_key(system_id) do
-    generate(:killmails, ["system", to_string(system_id)])
+  def system_killmails_key(system_id, type \\ :killmails) do
+    case type do
+      :killmails -> generate(:killmails, ["system", to_string(system_id)])
+      :killmail_ids -> generate(:killmails, ["system", to_string(system_id), "killmail_ids"])
+    end
   end
 
   @doc """
   Generates a key for a system's killmail IDs.
+
+  This function is kept for backward compatibility.
+  Use `system_killmails_key(system_id, :killmail_ids)` instead.
   """
   def system_killmail_ids_key(system_id) do
-    generate(:killmails, ["system", to_string(system_id), "killmail_ids"])
+    system_killmails_key(system_id, :killmail_ids)
   end
 
   @doc """

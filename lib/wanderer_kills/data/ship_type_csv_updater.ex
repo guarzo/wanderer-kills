@@ -22,14 +22,12 @@ defmodule WandererKills.Data.ShipTypeCsvUpdater do
   """
 
   require Logger
-  alias WandererKills.Http.Client
-  alias WandererKills.Core.Shared.Concurrency
+  alias WandererKills.Http.ClientProvider
+  alias WandererKills.Core.BatchProcessor
   alias WandererKills.Data.Parsers.ShipTypeParser
 
   @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"
   @required_files ["invGroups.csv", "invTypes.csv"]
-
-  defp http_client, do: Application.get_env(:wanderer_kills, :http_client, Client)
 
   @doc """
   Updates ship types by downloading and processing CSV files.
@@ -116,7 +114,7 @@ defmodule WandererKills.Data.ShipTypeCsvUpdater do
 
     Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
 
-    case http_client().get_with_rate_limit(url, raw: true) do
+    case ClientProvider.get().get_with_rate_limit(url, raw: true) do
       {:ok, %{body: body}} when is_binary(body) ->
         process_downloaded_content(body, file_name, download_path)
 
@@ -188,14 +186,17 @@ defmodule WandererKills.Data.ShipTypeCsvUpdater do
   defp download_files(file_names) do
     Logger.info("Downloading #{length(file_names)} CSV files")
 
-    task_fn = fn file_name ->
-      Task.async(fn -> download_file(file_name) end)
-    end
-
-    case Concurrency.execute_parallel_tasks(file_names, task_fn, :timer.minutes(30)) do
-      :ok ->
+    case BatchProcessor.process_parallel(file_names, &download_file/1,
+           timeout: :timer.minutes(30),
+           description: "CSV file downloads"
+         ) do
+      {:ok, _results} ->
         Logger.info("Successfully downloaded all CSV files")
         :ok
+
+      {:partial, _results, failures} ->
+        Logger.error("Some CSV file downloads failed: #{inspect(failures)}")
+        {:error, :download_failed}
 
       {:error, reason} ->
         Logger.error("Failed to download CSV files: #{inspect(reason)}")

@@ -28,11 +28,12 @@ defmodule WandererKills.Http.Util do
   The module provides comprehensive error handling:
   - Detailed error logging
   - Rate limit detection and handling
-  - Delegates to WandererKills.Http.Retry for retry logic
+  - Delegates to WandererKills.Retry for retry logic
   """
 
   require Logger
-  alias WandererKills.Http.{Retry, Client}
+  alias WandererKills.Http.Client
+  alias WandererKills.Retry
 
   @type url :: String.t()
   @type opts :: keyword()
@@ -135,7 +136,7 @@ defmodule WandererKills.Http.Util do
   """
   @spec handle_http_error(term(), url()) :: {:error, term()}
   def handle_http_error(reason, url) do
-    if Retry.retriable_error?(reason) do
+    if Retry.retriable_http_error?(reason) do
       log_retriable_error(reason, url)
     else
       Logger.error("Request failed for #{url}: #{inspect(reason)}")

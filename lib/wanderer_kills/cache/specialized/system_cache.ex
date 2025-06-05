@@ -49,16 +49,16 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   @doc """
   Gets all killmails for a system.
   """
-  @spec get_system_killmails(integer()) :: cache_result()
-  def get_system_killmails(system_id) do
+  @spec get_killmails_for_system(integer()) :: cache_result()
+  def get_killmails_for_system(system_id) do
     Base.get_list(:system, Key.system_killmails_key(system_id))
   end
 
   @doc """
   Gets all killmail IDs for a system.
   """
-  @spec get_system_killmail_ids(integer()) :: cache_result()
-  def get_system_killmail_ids(system_id) do
+  @spec get_killmail_ids_for_system(integer()) :: cache_result()
+  def get_killmail_ids_for_system(system_id) do
     Base.get_list(:system, Key.system_killmail_ids_key(system_id))
   end
 
@@ -108,6 +108,45 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
       Key.system_fetch_timestamp_key(system_id),
       System.system_time(:second)
     )
+  end
+
+  @doc """
+  Stores a specific timestamp for when a system was last fetched.
+  """
+  @spec set_fetch_timestamp(integer(), DateTime.t() | integer()) :: cache_status()
+  def set_fetch_timestamp(system_id, %DateTime{} = timestamp) do
+    unix_timestamp = DateTime.to_unix(timestamp, :microsecond)
+
+    Base.set_value(
+      :system,
+      Key.system_fetch_timestamp_key(system_id),
+      unix_timestamp
+    )
+  end
+
+  def set_fetch_timestamp(system_id, unix_timestamp) when is_integer(unix_timestamp) do
+    Base.set_value(
+      :system,
+      Key.system_fetch_timestamp_key(system_id),
+      unix_timestamp
+    )
+  end
+
+  @doc """
+  Gets the fetch timestamp for a system.
+  """
+  @spec get_fetch_timestamp(integer()) :: {:ok, DateTime.t() | nil} | {:error, term()}
+  def get_fetch_timestamp(system_id) do
+    case Base.get_value(:system, Key.system_fetch_timestamp_key(system_id)) do
+      {:ok, nil} ->
+        {:ok, nil}
+
+      {:ok, unix_timestamp} when is_integer(unix_timestamp) ->
+        {:ok, DateTime.from_unix!(unix_timestamp, :microsecond)}
+
+      error ->
+        error
+    end
   end
 
   @doc """

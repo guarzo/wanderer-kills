@@ -137,4 +137,49 @@ defmodule WandererKills.Data.Parsers.CsvUtil do
       {:error, _} -> default
     end
   end
+
+  @doc """
+  Unified number parsing function that supports both integers and floats.
+
+  ## Parameters
+  - `value` - String value to parse
+  - `type` - Either `:integer` or `:float`
+  - `default` - Default value to return on error (optional)
+
+  ## Returns
+  - `{:ok, number}` on successful parse (when no default provided)
+  - `number | default` when default is provided
+  - `{:error, reason}` on parse failure (when no default provided)
+
+  ## Examples
+
+  ```elixir
+  # Parse without default (returns result tuples)
+  {:ok, 123} = parse_number("123", :integer)
+  {:ok, 123.45} = parse_number("123.45", :float)
+  {:error, :invalid_integer} = parse_number("abc", :integer)
+
+  # Parse with default (returns values directly)
+  123 = parse_number("123", :integer, 0)
+  0 = parse_number("abc", :integer, 0)
+  123.45 = parse_number("123.45", :float, 0.0)
+  ```
+  """
+  @spec parse_number(String.t(), :integer | :float, term()) ::
+          {:ok, number()} | {:error, atom()} | number() | term()
+  def parse_number(value, type, default \\ :no_default) do
+    result =
+      case type do
+        :integer -> parse_integer(value)
+        :float -> parse_float(value)
+        _ -> {:error, :invalid_type}
+      end
+
+    case {result, default} do
+      {{:ok, number}, :no_default} -> {:ok, number}
+      {{:error, reason}, :no_default} -> {:error, reason}
+      {{:ok, number}, _default} -> number
+      {{:error, _reason}, default} -> default
+    end
+  end
 end

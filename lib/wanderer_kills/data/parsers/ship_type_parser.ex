@@ -6,6 +6,7 @@ defmodule WandererKills.Data.Parsers.ShipTypeParser do
 
   require Logger
   alias WandererKills.Data.Parsers.CsvUtil
+  alias WandererKills.Data.Parsers.CsvRowParser
 
   @type ship_type :: %{
           type_id: integer(),
@@ -42,8 +43,8 @@ defmodule WandererKills.Data.Parsers.ShipTypeParser do
     types_path = Path.join([data_dir, "invTypes.csv"])
     groups_path = Path.join([data_dir, "invGroups.csv"])
 
-    with {:ok, types} <- CsvUtil.read_rows(types_path, &parse_type_row/1),
-         {:ok, groups} <- CsvUtil.read_rows(groups_path, &parse_group_row/1) do
+    with {:ok, types} <- CsvUtil.read_rows(types_path, &CsvRowParser.parse_type/1),
+         {:ok, groups} <- CsvUtil.read_rows(groups_path, &CsvRowParser.parse_group/1) do
       # Filter for ship types (group category ID 6)
       ship_types =
         types
@@ -60,49 +61,4 @@ defmodule WandererKills.Data.Parsers.ShipTypeParser do
       end
     end
   end
-
-  # CSV row parsers
-  defp parse_type_row(row) when is_map(row) do
-    try do
-      with type_id when is_binary(type_id) <- Map.get(row, "typeID"),
-           group_id when is_binary(group_id) <- Map.get(row, "groupID"),
-           name when is_binary(name) <- Map.get(row, "typeName") do
-        %{
-          type_id: String.to_integer(type_id),
-          group_id: String.to_integer(group_id),
-          name: name,
-          group_name: nil,
-          mass: CsvUtil.parse_float_with_default(Map.get(row, "mass", "0")),
-          capacity: CsvUtil.parse_float_with_default(Map.get(row, "capacity", "0")),
-          volume: CsvUtil.parse_float_with_default(Map.get(row, "volume", "0"))
-        }
-      else
-        _ -> nil
-      end
-    rescue
-      ArgumentError -> nil
-    end
-  end
-
-  defp parse_type_row(_), do: nil
-
-  defp parse_group_row(row) when is_map(row) do
-    try do
-      with group_id when is_binary(group_id) <- Map.get(row, "groupID"),
-           name when is_binary(name) <- Map.get(row, "groupName"),
-           category_id when is_binary(category_id) <- Map.get(row, "categoryID") do
-        %{
-          group_id: String.to_integer(group_id),
-          name: name,
-          category_id: String.to_integer(category_id)
-        }
-      else
-        _ -> nil
-      end
-    rescue
-      ArgumentError -> nil
-    end
-  end
-
-  defp parse_group_row(_), do: nil
 end
