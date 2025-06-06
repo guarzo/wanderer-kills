@@ -1,4 +1,4 @@
-defmodule WandererKills.Data.ShipTypeConstants do
+defmodule WandererKills.ShipTypes.Constants do
   @moduledoc """
   Constants for ship type data management.
 
@@ -16,14 +16,14 @@ defmodule WandererKills.Data.ShipTypeConstants do
 
   ```elixir
   # Get ship group IDs
-  ship_groups = ShipTypeConstants.ship_group_ids()
+  ship_groups = Constants.ship_group_ids()
 
   # Get EVE DB dump configuration
-  base_url = ShipTypeConstants.eve_db_dump_url()
-  files = ShipTypeConstants.required_csv_files()
+  base_url = Constants.eve_db_dump_url()
+  files = Constants.required_csv_files()
 
   # Get default settings
-  max_concurrent = ShipTypeConstants.default_max_concurrency()
+  max_concurrent = Constants.default_max_concurrency()
   ```
   """
 
@@ -45,7 +45,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ## Examples
 
   ```elixir
-  iex> ShipTypeConstants.ship_group_ids()
+  iex> Constants.ship_group_ids()
   [6, 7, 9, 11, 16, 17, 23]
   ```
   """
@@ -61,7 +61,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ## Examples
 
   ```elixir
-  iex> ShipTypeConstants.eve_db_dump_url()
+  iex> Constants.eve_db_dump_url()
   "https://www.fuzzwork.co.uk/dump/latest"
   ```
   """
@@ -77,7 +77,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ## Examples
 
   ```elixir
-  iex> ShipTypeConstants.required_csv_files()
+  iex> Constants.required_csv_files()
   ["invGroups.csv", "invTypes.csv"]
   ```
   """
@@ -93,7 +93,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ## Examples
 
   ```elixir
-  iex> ShipTypeConstants.default_max_concurrency()
+  iex> Constants.default_max_concurrency()
   10
   ```
   """
@@ -109,7 +109,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ## Examples
 
   ```elixir
-  iex> ShipTypeConstants.default_task_timeout_ms()
+  iex> Constants.default_task_timeout_ms()
   30000
   ```
   """
@@ -125,7 +125,7 @@ defmodule WandererKills.Data.ShipTypeConstants do
   ## Examples
 
   ```elixir
-  iex> ShipTypeConstants.data_directory()
+  iex> Constants.data_directory()
   "/path/to/app/priv/data"
   ```
   """

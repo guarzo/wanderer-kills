@@ -38,7 +38,8 @@ defmodule WandererKills.Cache do
   """
 
   require Logger
-  alias WandererKills.{Config, Constants}
+  alias WandererKills.{Constants}
+  alias WandererKills.Infrastructure.Config
 
   @cache_name :unified_cache
 

@@ -22,8 +22,8 @@ defmodule WandererKills.Core do
   """
 
   # Core utilities
-  alias WandererKills.{BatchProcessor, Clock, CircuitBreaker}
-  alias WandererKills.{Config, Constants}
+  alias WandererKills.Infrastructure.{BatchProcessor, Clock, CircuitBreaker, Config}
+  alias WandererKills.Constants
 
   #
   # Batch Processing API
@@ -108,11 +108,11 @@ defmodule WandererKills.Core do
   #
 
   @doc """
-  Gets cache configuration.
+  Gets cache TTL for a specific cache type.
   """
   @spec cache_config(atom()) :: map()
   def cache_config(cache_type) do
-    Config.cache_config(cache_type)
+    %{ttl: Config.cache_ttl(cache_type)}
   end
 
   @doc """
@@ -120,15 +120,19 @@ defmodule WandererKills.Core do
   """
   @spec http_config() :: map()
   def http_config do
-    Config.retry_config(:http)
+    %{
+      max_retries: Config.retry_http_max_retries(),
+      base_delay: Config.retry_http_base_delay(),
+      max_delay: Config.retry_http_max_delay()
+    }
   end
 
   @doc """
-  Gets retry configuration.
+  Gets retry configuration for HTTP.
   """
   @spec retry_config() :: map()
   def retry_config do
-    Config.retry_config(:http)
+    http_config()
   end
 
   #

@@ -51,11 +51,12 @@ defmodule WandererKills.Killmails.Coordinator do
   - `{:ok, killmail}` - On successful parsing
   - `{:ok, :kill_skipped}` - When killmail is too old
   - `:older` - When killmail is older than cutoff
-  - `{:error, reason}` - On failure
+  - `{:error, Error.t()}` - On failure with standardized error
   """
 
   require Logger
   alias WandererKills.Parser.Core
+  alias WandererKills.Infrastructure.Error
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -70,7 +71,7 @@ defmodule WandererKills.Killmails.Coordinator do
 
   ## Returns
   - `{:ok, enriched_killmail}` - On successful parsing and enrichment
-  - `{:error, reason}` - On failure
+  - `{:error, Error.t()}` - On failure with standardized error
 
   ## Examples
 
@@ -83,11 +84,11 @@ defmodule WandererKills.Killmails.Coordinator do
   {:ok, enriched} = parse_full_and_store(full, partial, cutoff)
 
   # Handle invalid format
-  {:error, :invalid_format} = parse_full_and_store(invalid_data, invalid_data, cutoff)
+  {:error, %Error{}} = parse_full_and_store(invalid_data, invalid_data, cutoff)
   ```
   """
   @spec parse_full_and_store(killmail(), killmail(), DateTime.t()) ::
-          {:ok, killmail()} | {:ok, :kill_older} | {:error, term()}
+          {:ok, killmail()} | {:ok, :kill_older} | {:error, Error.t()}
   def parse_full_and_store(full, %{"zkb" => zkb}, cutoff) when is_map(full) do
     Logger.info("Starting to parse and store killmail", %{
       killmail_id: full["killmail_id"],
@@ -98,10 +99,12 @@ defmodule WandererKills.Killmails.Coordinator do
     process_killmail(full, zkb, cutoff)
   end
 
-  def parse_full_and_store(_, _, _), do: {:error, :invalid_format}
+  def parse_full_and_store(_, _, _) do
+    {:error, Error.killmail_error(:invalid_format, "Invalid payload format for killmail parsing")}
+  end
 
   @spec process_killmail(killmail(), map(), DateTime.t()) ::
-          {:ok, killmail()} | {:ok, :kill_older} | {:error, term()}
+          {:ok, killmail()} | {:ok, :kill_older} | {:error, Error.t()}
   defp process_killmail(full, zkb, cutoff) do
     with {:ok, merged} <- Core.merge_killmail_data(full, %{"zkb" => zkb}),
          {:ok, built} <- Core.build_kill_data(merged, cutoff),
@@ -142,7 +145,13 @@ defmodule WandererKills.Killmails.Coordinator do
           status: :error
         })
 
-        {:error, :missing_system_id}
+        {:error,
+         Error.killmail_error(
+           :missing_system_id,
+           "System ID missing from enriched killmail",
+           false,
+           %{killmail_id: full["killmail_id"]}
+         )}
       end
     else
       :older ->
@@ -166,7 +175,7 @@ defmodule WandererKills.Killmails.Coordinator do
     end
   end
 
-  @spec enrich_killmail(killmail()) :: {:ok, killmail()} | {:error, term()}
+  @spec enrich_killmail(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
   defp enrich_killmail(killmail) do
     WandererKills.Killmails.Enricher.enrich_killmail(killmail)
   end
@@ -182,7 +191,7 @@ defmodule WandererKills.Killmails.Coordinator do
   - `{:ok, enriched_killmail}` - On successful parsing
   - `{:ok, :kill_skipped}` - When killmail is too old
   - `:older` - When killmail is older than cutoff
-  - `{:error, reason}` - On failure
+  - `{:error, Error.t()}` - On failure with standardized error
 
   ## Examples
 
@@ -200,11 +209,11 @@ defmodule WandererKills.Killmails.Coordinator do
   {:ok, :kill_skipped} = parse_partial(old_killmail, cutoff)
 
   # Handle invalid format
-  {:error, :invalid_format} = parse_partial(invalid_data, cutoff)
+  {:error, %Error{}} = parse_partial(invalid_data, cutoff)
   ```
   """
   @spec parse_partial(raw_killmail(), DateTime.t()) ::
-          {:ok, killmail()} | {:ok, :kill_skipped} | :older | {:error, term()}
+          {:ok, killmail()} | {:ok, :kill_skipped} | :older | {:error, Error.t()}
   def parse_partial(%{"killID" => id, "zkb" => %{"hash" => hash}} = partial, cutoff) do
     Logger.info("Starting to parse partial killmail", %{
       killmail_id: id,
@@ -234,5 +243,11 @@ defmodule WandererKills.Killmails.Coordinator do
     end
   end
 
-  def parse_partial(_, _), do: {:error, :invalid_format}
+  def parse_partial(_, _) do
+    {:error,
+     Error.killmail_error(
+       :invalid_format,
+       "Invalid partial killmail format - missing required fields"
+     )}
+  end
 end

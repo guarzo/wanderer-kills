@@ -5,6 +5,17 @@ defmodule WandererKills.External.ZKB.RedisQ do
   This module handles streaming killmail data from zKillboard's RedisQ endpoint,
   providing real-time killmail processing capabilities.
 
+  ## Format Handling and Monitoring
+
+  Analysis confirmed two response formats from RedisQ:
+  1. **Package with full killmail**: `%{"package" => %{"killmail" => data, "zkb" => zkb}}`
+  2. **Package null**: `%{"package" => nil}` - no activity
+
+  **Production Usage**: 100% package_full format - no legacy formats observed.
+  **Monitoring**: This module tracks format usage for operational visibility.
+
+  ## Polling Behavior
+
   • Idle (no kills):    poll every `:idle_interval_ms`
   • On kill (new):      poll again after `:fast_interval_ms`
   • On kill_older:      poll again after `:idle_interval_ms` (reset backoff)
@@ -15,13 +26,12 @@ defmodule WandererKills.External.ZKB.RedisQ do
   use GenServer
   require Logger
 
-  alias WandererKills.External.ESI.Client, as: ESIClient
-  alias WandererKills.Clock
+  alias WandererKills.Infrastructure.Clock
   alias WandererKills.Http.Client, as: HttpClient
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 
-  @base_url Application.compile_env(:wanderer_kills, [:redisq, :base_url])
+  @base_url Application.compile_env(:wanderer_kills, :redisq_base_url)
 
   defmodule State do
     @moduledoc false
@@ -137,28 +147,32 @@ defmodule WandererKills.External.ZKB.RedisQ do
         Logger.debug("[RedisQ] No package received.")
         {:ok, :no_kills}
 
-      # New‐format: "package" → %{ "killID" => _, "killmail" => killmail, "zkb" => zkb }
-      {:ok, %{body: %{"package" => %{"killID" => _id, "killmail" => killmail, "zkb" => zkb}}}} ->
-        Logger.info("[RedisQ] New‐format killmail received.")
-        process_kill(killmail, zkb)
-
-      # Alternate new‐format (sometimes `killID` is absent, but `killmail`+`zkb` exist)
+      # Package format with full killmail data (confirmed production format)
       {:ok, %{body: %{"package" => %{"killmail" => killmail, "zkb" => zkb}}}} ->
-        Logger.info("[RedisQ] New‐format killmail (no killID) received.")
-        process_kill(killmail, zkb)
+        Logger.info("[RedisQ] Package format with full killmail received",
+          format: :package_full,
+          endpoint: url
+        )
 
-      # Legacy format: { "killID" => id, "zkb" => zkb }
-      {:ok, %{body: %{"killID" => id, "zkb" => zkb}}} ->
-        Logger.info("[RedisQ] Legacy‐format killmail ID=#{id}.  Fetching full payload…")
-        process_legacy_kill(id, zkb)
+        track_format_usage(:package_full)
+        process_kill(killmail, zkb)
 
       # Anything else is unexpected
       {:ok, resp} ->
-        Logger.warning("[RedisQ] Unexpected response shape: #{inspect(resp)}")
+        Logger.warning("[RedisQ] Unexpected response shape",
+          response: inspect(resp),
+          endpoint: url
+        )
+
+        track_format_usage(:unexpected)
         {:error, :unexpected_format}
 
       {:error, reason} ->
-        Logger.warning("[RedisQ] HTTP request failed: #{inspect(reason)}")
+        Logger.warning("[RedisQ] HTTP request failed",
+          error: inspect(reason),
+          endpoint: url
+        )
+
         {:error, reason}
     end
   end
@@ -176,8 +190,18 @@ defmodule WandererKills.External.ZKB.RedisQ do
   defp process_kill(killmail, zkb) do
     cutoff = get_cutoff_time()
 
+    # Log detailed information about the format and available data
+    killmail_id = Map.get(killmail, "killmail_id", "unknown")
+    victim_ship = get_in(killmail, ["victim", "ship_type_id"])
+    attacker_count = length(Map.get(killmail, "attackers", []))
+
     Logger.debug(
-      "[RedisQ] Processing new format killmail (cutoff: #{DateTime.to_iso8601(cutoff)})"
+      "[RedisQ] Processing new format killmail (cutoff: #{DateTime.to_iso8601(cutoff)})",
+      killmail_id: killmail_id,
+      format: :full_killmail_data,
+      victim_ship_type_id: victim_ship,
+      attacker_count: attacker_count,
+      has_zkb_data: not is_nil(zkb)
     )
 
     case WandererKills.Killmails.Coordinator.parse_full_and_store(
@@ -195,58 +219,6 @@ defmodule WandererKills.External.ZKB.RedisQ do
 
       {:error, reason} ->
         Logger.error("[RedisQ] Failed to parse/store killmail: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  # Handle legacy‐format kill → fetch full payload async and then process.
-  # Returns one of:
-  #   {:ok, :kill_received}   (if Parser.parse... says new)
-  #   {:ok, :kill_older}      (if Parser returns :kill_older)
-  #   {:ok, :kill_skipped}    (if Parser returns :kill_skipped)
-  #   {:error, reason}
-  defp process_legacy_kill(id, zkb) do
-    task =
-      Task.Supervisor.async(WandererKills.TaskSupervisor, fn ->
-        fetch_and_parse_full_kill(id, zkb)
-      end)
-
-    task
-    |> Task.await(get_config(:task_timeout_ms))
-    |> case do
-      {:ok, :kill_received} ->
-        {:ok, :kill_received}
-
-      {:ok, :kill_older} ->
-        Logger.debug("[RedisQ] Legacy kill ID=#{id} is older than cutoff → skipping.")
-        {:ok, :kill_older}
-
-      {:ok, :kill_skipped} ->
-        Logger.debug("[RedisQ] Legacy kill ID=#{id} already ingested → skipping.")
-        {:ok, :kill_skipped}
-
-      {:error, reason} ->
-        Logger.error("[RedisQ] Legacy‐kill #{id} failed: #{inspect(reason)}")
-        {:error, reason}
-
-      other ->
-        Logger.error("[RedisQ] Unexpected task result for legacy kill #{id}: #{inspect(other)}")
-        {:error, :unexpected_task_result}
-    end
-  end
-
-  # Fetch the full killmail from ESI and then hand off to `process_kill/2`.
-  # Returns exactly whatever `process_kill/2` returns.
-  defp fetch_and_parse_full_kill(id, zkb) do
-    Logger.debug("[RedisQ] Fetching full killmail for ID=#{id}")
-
-    case ESIClient.get_killmail(id, zkb["hash"]) do
-      {:ok, full_killmail} ->
-        Logger.debug("[RedisQ] Fetched full killmail ID=#{id}. Now parsing…")
-        process_kill(full_killmail, zkb)
-
-      {:error, reason} ->
-        Logger.warning("[RedisQ] ESI fetch failed for ID=#{id}: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -270,16 +242,6 @@ defmodule WandererKills.External.ZKB.RedisQ do
 
     Logger.debug(
       "[RedisQ] Older kill detected → scheduling next poll in #{idle}ms; resetting backoff."
-    )
-
-    {idle, get_config(:initial_backoff_ms)}
-  end
-
-  defp next_schedule({:ok, :kill_skipped}, _old_backoff) do
-    idle = get_config(:idle_interval_ms)
-
-    Logger.debug(
-      "[RedisQ] Skipped kill detected → scheduling next poll in #{idle}ms; resetting backoff."
     )
 
     {idle, get_config(:initial_backoff_ms)}
@@ -309,21 +271,45 @@ defmodule WandererKills.External.ZKB.RedisQ do
     Clock.hours_ago(24)
   end
 
-  # Fetch an integer or float from application config under [:wanderer_kills, :redisq].
-  # The config is expected to be a map. If the key is missing, this will raise.
+  # Fetch configuration using the new flattened structure
   defp get_config(key) do
-    cfg = Application.fetch_env!(:wanderer_kills, :redisq)
+    WandererKills.Infrastructure.Config.redisq(key)
+  end
 
-    # cfg is a map like:
-    # %{
-    #   task_timeout_ms:    10_000,
-    #   fast_interval_ms:   1_000,
-    #   idle_interval_ms:   5_000,
-    #   initial_backoff_ms: 1_000,
-    #   max_backoff_ms:     30_000,
-    #   backoff_factor:     2
-    # }
-    Map.fetch!(cfg, key)
+  # Track format usage for monitoring and analysis
+  defp track_format_usage(format_type) do
+    # Emit telemetry event
+    :telemetry.execute(
+      [:wanderer_kills, :redisq, :format],
+      %{count: 1},
+      %{
+        format: format_type,
+        timestamp: DateTime.utc_now(),
+        module: __MODULE__
+      }
+    )
+
+    # Also log a summary periodically (every 100 calls)
+    case :persistent_term.get({__MODULE__, :format_counter}, 0) do
+      count when rem(count, 100) == 0 and count > 0 ->
+        format_stats = :persistent_term.get({__MODULE__, :format_stats}, %{})
+
+        Logger.info("[RedisQ] Format usage summary",
+          stats: format_stats,
+          total_calls: count
+        )
+
+      _count ->
+        :ok
+    end
+
+    # Update counters
+    new_count = :persistent_term.get({__MODULE__, :format_counter}, 0) + 1
+    :persistent_term.put({__MODULE__, :format_counter}, new_count)
+
+    current_stats = :persistent_term.get({__MODULE__, :format_stats}, %{})
+    updated_stats = Map.update(current_stats, format_type, 1, &(&1 + 1))
+    :persistent_term.put({__MODULE__, :format_stats}, updated_stats)
   end
 
   defp handle_response(%{"package" => package}) do

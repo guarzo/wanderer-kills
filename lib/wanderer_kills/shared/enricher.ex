@@ -4,9 +4,9 @@ defmodule WandererKills.Enricher do
   """
 
   require Logger
-  alias WandererKills.Config
+  alias WandererKills.Infrastructure.Config
   alias WandererKills.Cache
-  alias WandererKills.Data.ShipTypeInfo
+  alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
 
   @doc """
   Enriches a killmail with additional information.
@@ -39,7 +39,12 @@ defmodule WandererKills.Enricher do
 
   defp enrich_attackers(killmail) do
     attackers = Map.get(killmail, "attackers", [])
-    enricher_config = Config.enricher()
+
+    enricher_config = %{
+      min_attackers_for_parallel: Config.enricher(:min_attackers_for_parallel),
+      max_concurrency: Config.enricher(:max_concurrency),
+      task_timeout_ms: Config.enricher(:task_timeout_ms)
+    }
 
     enriched_attackers =
       if length(attackers) >= enricher_config.min_attackers_for_parallel do

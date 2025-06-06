@@ -1,5 +1,5 @@
-# lib/wanderer_kills/data/ship_type_updater.ex
-defmodule WandererKills.Data.ShipTypeUpdater do
+# lib/wanderer_kills/ship_types/updater.ex
+defmodule WandererKills.ShipTypes.Updater do
   @moduledoc """
   Coordinates ship type updates from multiple sources.
 
@@ -14,14 +14,14 @@ defmodule WandererKills.Data.ShipTypeUpdater do
 
   ```elixir
   # Update ship types with automatic fallback
-  case WandererKills.Data.ShipTypeUpdater.update_ship_types() do
+  case WandererKills.ShipTypes.Updater.update_ship_types() do
     :ok -> Logger.info("Ship types updated successfully")
     {:error, _reason} -> Logger.error("Failed to update ship types")
   end
 
   # Force update from specific source
-  WandererKills.Data.ShipTypeUpdater.update_with_csv()
-  WandererKills.Data.ShipTypeUpdater.update_with_esi()
+  WandererKills.ShipTypes.Updater.update_with_csv()
+  WandererKills.ShipTypes.Updater.update_with_esi()
   ```
 
   ## Strategy
@@ -33,12 +33,13 @@ defmodule WandererKills.Data.ShipTypeUpdater do
   ## Dependencies
 
   - `WandererKills.Data.Sources.CsvSource` - CSV-based updates
-  - `WandererKills.Fetcher.Esi.Source` - ESI-based updates
+  - `WandererKills.External.ESI.Client` - ESI-based updates
   """
 
   require Logger
   alias WandererKills.Data.Sources.CsvSource
   alias WandererKills.External.ESI.Client, as: EsiSource
+  alias WandererKills.Infrastructure.Error
 
   @doc """
   Updates ship types by first trying CSV download, then falling back to ESI.
@@ -85,7 +86,12 @@ defmodule WandererKills.Data.ShipTypeUpdater do
               esi_error: esi_reason
             })
 
-            {:error, {:all_methods_failed, csv_reason, esi_reason}}
+            {:error,
+             Error.ship_types_error(
+               :all_update_methods_failed,
+               "Both CSV and ESI update methods failed",
+               %{csv_error: csv_reason, esi_error: esi_reason}
+             )}
         end
     end
   end
@@ -122,7 +128,11 @@ defmodule WandererKills.Data.ShipTypeUpdater do
 
       {:error, reason} ->
         Logger.error("CSV ship type update failed: #{inspect(reason)}")
-        {:error, reason}
+
+        {:error,
+         Error.ship_types_error(:csv_update_failed, "CSV ship type update failed", %{
+           underlying_error: reason
+         })}
     end
   end
 
@@ -157,7 +167,11 @@ defmodule WandererKills.Data.ShipTypeUpdater do
 
       {:error, reason} ->
         Logger.error("ESI ship type update failed: #{inspect(reason)}")
-        {:error, reason}
+
+        {:error,
+         Error.ship_types_error(:esi_update_failed, "ESI ship type update failed", %{
+           underlying_error: reason
+         })}
     end
   end
 
@@ -181,7 +195,7 @@ defmodule WandererKills.Data.ShipTypeUpdater do
   update_ship_groups([23, 16])
 
   # Update all known ship groups
-  update_ship_groups(EsiSource.ship_group_ids())
+  update_ship_groups(Constants.ship_group_ids())
   ```
   """
   @spec update_ship_groups([integer()]) :: :ok | {:error, term()}
@@ -220,7 +234,11 @@ defmodule WandererKills.Data.ShipTypeUpdater do
 
       {:error, reason} ->
         Logger.error("Failed to download CSV files: #{inspect(reason)}")
-        {:error, reason}
+
+        {:error,
+         Error.ship_types_error(:csv_download_failed, "Failed to download CSV files", %{
+           underlying_error: reason
+         })}
     end
   end
 

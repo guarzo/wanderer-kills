@@ -29,6 +29,7 @@ defmodule WandererKills.Killmails.Cache do
 
   require Logger
   alias WandererKills.Cache
+  alias WandererKills.Infrastructure.Error
 
   @type killmail :: map()
   @type killmail_id :: integer()
@@ -84,11 +85,21 @@ defmodule WandererKills.Killmails.Cache do
           error: inspect(error)
         )
 
-        {:error, :storage_exception}
+        {:error,
+         Error.killmail_error(:storage_exception, "Exception occurred while storing killmail", %{
+           killmail_id: killmail_id,
+           exception: inspect(error)
+         })}
     end
   end
 
-  def store_killmail(_), do: {:error, :invalid_killmail_format}
+  def store_killmail(_),
+    do:
+      {:error,
+       Error.killmail_error(
+         :invalid_killmail_format,
+         "Killmail must have a valid killmail_id field"
+       )}
 
   @doc """
   Stores multiple killmails in batch.
@@ -138,11 +149,18 @@ defmodule WandererKills.Killmails.Cache do
           failed_ids: failed_ids
         )
 
-        {:error, failed_ids}
+        {:error,
+         Error.killmail_error(:batch_storage_failed, "Failed to store some killmails in batch", %{
+           failed_ids: failed_ids,
+           failed_count: length(errors)
+         })}
     end
   end
 
-  def store_killmails(_), do: {:error, :invalid_killmails_format}
+  def store_killmails(_),
+    do:
+      {:error,
+       Error.killmail_error(:invalid_killmails_format, "Killmails must be provided as a list")}
 
   @doc """
   Retrieves a killmail from the cache.
@@ -182,7 +200,8 @@ defmodule WandererKills.Killmails.Cache do
     end
   end
 
-  def get_killmail(_), do: {:error, :invalid_killmail_id}
+  def get_killmail(_),
+    do: {:error, Error.killmail_error(:invalid_killmail_id, "Killmail ID must be an integer")}
 
   @doc """
   Checks if a killmail exists in the cache.
@@ -229,7 +248,8 @@ defmodule WandererKills.Killmails.Cache do
     end
   end
 
-  def remove_killmail(_), do: {:error, :invalid_killmail_id}
+  def remove_killmail(_),
+    do: {:error, Error.killmail_error(:invalid_killmail_id, "Killmail ID must be an integer")}
 
   # Private helper functions
 

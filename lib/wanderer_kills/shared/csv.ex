@@ -31,6 +31,7 @@ defmodule WandererKills.Shared.CSV do
 
   require Logger
   alias NimbleCSV.RFC4180, as: CSV
+  alias WandererKills.Infrastructure.Error
 
   @type parse_result :: {:ok, term()} | {:error, atom()}
   @type parser_function :: (map() -> term() | nil)
@@ -129,28 +130,48 @@ defmodule WandererKills.Shared.CSV do
   @doc """
   Parses a string value to integer with error handling.
   """
-  @spec parse_integer(String.t()) :: {:ok, integer()} | {:error, :invalid_integer}
+  @spec parse_integer(String.t()) :: {:ok, integer()} | {:error, Error.t()}
   def parse_integer(value) when is_binary(value) do
     case Integer.parse(value) do
-      {int, ""} -> {:ok, int}
-      _ -> {:error, :invalid_integer}
+      {int, ""} ->
+        {:ok, int}
+
+      _ ->
+        {:error,
+         Error.parsing_error(:invalid_integer, "Failed to parse string as integer", %{
+           value: value
+         })}
     end
   end
 
-  def parse_integer(_), do: {:error, :invalid_integer}
+  def parse_integer(value) do
+    {:error,
+     Error.parsing_error(:invalid_integer, "Cannot parse non-string value as integer", %{
+       value: inspect(value)
+     })}
+  end
 
   @doc """
   Parses a string value to float with error handling.
   """
-  @spec parse_float(String.t()) :: {:ok, float()} | {:error, :invalid_float}
+  @spec parse_float(String.t()) :: {:ok, float()} | {:error, Error.t()}
   def parse_float(value) when is_binary(value) do
     case Float.parse(value) do
-      {float, _} -> {:ok, float}
-      :error -> {:error, :invalid_float}
+      {float, _} ->
+        {:ok, float}
+
+      :error ->
+        {:error,
+         Error.parsing_error(:invalid_float, "Failed to parse string as float", %{value: value})}
     end
   end
 
-  def parse_float(_), do: {:error, :invalid_float}
+  def parse_float(value) do
+    {:error,
+     Error.parsing_error(:invalid_float, "Cannot parse non-string value as float", %{
+       value: inspect(value)
+     })}
+  end
 
   @doc """
   Parses a number with a default value on error.
@@ -271,12 +292,16 @@ defmodule WandererKills.Shared.CSV do
           parse_rows(rows, headers, parser, skip_invalid, max_errors)
 
         _ ->
-          {:error, :empty_file}
+          {:error, Error.parsing_error(:empty_file, "CSV file is empty or has no headers")}
       end
     rescue
       e ->
         Logger.error("Failed to parse CSV content: #{inspect(e)}")
-        {:error, :parse_error}
+
+        {:error,
+         Error.parsing_error(:parse_error, "Exception during CSV parsing", %{
+           exception: inspect(e)
+         })}
     end
   end
 
@@ -306,7 +331,12 @@ defmodule WandererKills.Shared.CSV do
     # Check if we have too many errors
     if length(errors) > max_errors do
       Logger.error("Too many CSV parse errors (#{length(errors)} > #{max_errors})")
-      {:error, :too_many_errors}
+
+      {:error,
+       Error.parsing_error(:too_many_errors, "CSV parsing failed with too many errors", %{
+         error_count: length(errors),
+         max_errors: max_errors
+       })}
     else
       if length(errors) > 0 do
         Logger.warning("CSV parsing completed with #{length(errors)} errors")

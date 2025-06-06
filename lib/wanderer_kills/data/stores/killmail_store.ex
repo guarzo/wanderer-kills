@@ -12,7 +12,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
   use GenServer
   require Logger
 
-  alias WandererKills.Config
+  alias WandererKills.Infrastructure.Config
 
   @type event_id :: integer()
   @type system_id :: integer()
@@ -518,8 +518,8 @@ defmodule WandererKills.Data.Stores.KillmailStore do
 
   @spec schedule_garbage_collection() :: :ok
   defp schedule_garbage_collection do
-    config = Config.killmail_store()
-    Process.send_after(self(), {:garbage_collect}, config.gc_interval_ms)
+    gc_interval = Config.killmail_store(:gc_interval_ms)
+    Process.send_after(self(), {:garbage_collect}, gc_interval)
     :ok
   end
 

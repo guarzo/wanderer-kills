@@ -38,6 +38,7 @@ defmodule WandererKills.Killmails.Parser do
 
   alias WandererKills.Killmails.{Enricher, Cache}
   alias WandererKills.Observability.Monitoring
+  alias WandererKills.Infrastructure.Error
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -61,7 +62,16 @@ defmodule WandererKills.Killmails.Parser do
   """
   @spec parse_full_killmail(killmail(), DateTime.t()) :: parse_result()
   def parse_full_killmail(killmail, cutoff_time) when is_map(killmail) do
-    Logger.debug("Parsing full killmail", killmail_id: get_killmail_id(killmail))
+    killmail_id = get_killmail_id(killmail)
+
+    Logger.debug("Parsing full killmail",
+      killmail_id: killmail_id,
+      has_solar_system_id: Map.has_key?(killmail, "solar_system_id"),
+      has_victim: Map.has_key?(killmail, "victim"),
+      has_attackers: Map.has_key?(killmail, "attackers"),
+      has_zkb: Map.has_key?(killmail, "zkb"),
+      killmail_keys: Map.keys(killmail) |> Enum.sort()
+    )
 
     with {:ok, validated} <- validate_killmail_structure(killmail),
          {:ok, time_checked} <- check_killmail_time(validated, cutoff_time),
@@ -77,7 +87,9 @@ defmodule WandererKills.Killmails.Parser do
       {:error, reason} ->
         Logger.error("Failed to parse killmail",
           killmail_id: get_killmail_id(killmail),
-          error: reason
+          error: reason,
+          step: determine_failure_step(reason),
+          killmail_sample: inspect(killmail, limit: 3, printable_limit: 100)
         )
 
         {:error, reason}
@@ -110,7 +122,13 @@ defmodule WandererKills.Killmails.Parser do
     end
   end
 
-  def parse_partial_killmail(_, _), do: {:error, :invalid_partial_format}
+  def parse_partial_killmail(_, _),
+    do:
+      {:error,
+       Error.killmail_error(
+         :invalid_partial_format,
+         "Partial killmail must have killID and zkb fields"
+       )}
 
   @doc """
   Merges ESI killmail data with zKB metadata.
@@ -137,11 +155,14 @@ defmodule WandererKills.Killmails.Parser do
 
       {:ok, merged}
     else
-      {:error, :missing_kill_time}
+      {:error, Error.killmail_error(:missing_kill_time, "Kill time not found in ESI data")}
     end
   end
 
-  def merge_killmail_data(_, _), do: {:error, :invalid_merge_data}
+  def merge_killmail_data(_, _),
+    do:
+      {:error,
+       Error.killmail_error(:invalid_merge_data, "Invalid data format for merge operation")}
 
   @doc """
   Validates killmail timestamp and parses it.
@@ -156,8 +177,14 @@ defmodule WandererKills.Killmails.Parser do
   @spec validate_killmail_time(killmail()) :: {:ok, DateTime.t()} | {:error, term()}
   def validate_killmail_time(%{"killmail_time" => time}) when is_binary(time) do
     case DateTime.from_iso8601(time) do
-      {:ok, dt, _} -> {:ok, dt}
-      {:error, reason} -> {:error, {:invalid_time_format, reason}}
+      {:ok, dt, _} ->
+        {:ok, dt}
+
+      {:error, reason} ->
+        {:error,
+         Error.killmail_error(:invalid_time_format, "Failed to parse ISO8601 timestamp", %{
+           underlying_error: reason
+         })}
     end
   end
 
@@ -165,7 +192,8 @@ defmodule WandererKills.Killmails.Parser do
     validate_killmail_time(%{"killmail_time" => time})
   end
 
-  def validate_killmail_time(_), do: {:error, :missing_kill_time}
+  def validate_killmail_time(_),
+    do: {:error, Error.killmail_error(:missing_kill_time, "Killmail missing valid time field")}
 
   # Private functions for internal implementation
 
@@ -185,11 +213,39 @@ defmodule WandererKills.Killmails.Parser do
     if Enum.empty?(missing_fields) do
       {:ok, killmail}
     else
-      {:error, {:missing_required_fields, missing_fields}}
+      Logger.error("[Parser] Killmail structure validation failed",
+        killmail_id: id,
+        required_fields: required_fields,
+        missing_fields: missing_fields,
+        available_keys: Map.keys(killmail),
+        killmail_sample: killmail |> inspect(limit: 5, printable_limit: 200)
+      )
+
+      {:error,
+       Error.killmail_error(:missing_required_fields, "Killmail missing required ESI fields", %{
+         missing_fields: missing_fields,
+         required_fields: required_fields
+       })}
     end
   end
 
-  defp validate_killmail_structure(_), do: {:error, :missing_killmail_id}
+  defp validate_killmail_structure(killmail) do
+    Logger.error("[Parser] Killmail missing killmail_id field",
+      available_keys: Map.keys(killmail || %{}),
+      killmail_sample: killmail |> inspect(limit: 5, printable_limit: 200)
+    )
+
+    {:error, Error.killmail_error(:missing_killmail_id, "Killmail missing killmail_id field")}
+  end
+
+  @spec determine_failure_step(term()) :: String.t()
+  defp determine_failure_step({:missing_required_fields, _}), do: "structure_validation"
+  defp determine_failure_step(:missing_killmail_id), do: "structure_validation"
+  defp determine_failure_step({:invalid_time_format, _}), do: "time_validation"
+  defp determine_failure_step(:missing_kill_time), do: "time_validation"
+  defp determine_failure_step(:kill_too_old), do: "time_check"
+  defp determine_failure_step(:build_failed), do: "data_building"
+  defp determine_failure_step(_), do: "unknown"
 
   @spec check_killmail_time(killmail(), DateTime.t()) :: {:ok, killmail()} | {:error, atom()}
   defp check_killmail_time(killmail, cutoff_time) do
@@ -202,7 +258,11 @@ defmodule WandererKills.Killmails.Parser do
             cutoff: DateTime.to_iso8601(cutoff_time)
           )
 
-          {:error, :kill_too_old}
+          {:error,
+           Error.killmail_error(:kill_too_old, "Killmail is older than cutoff time", %{
+             kill_time: DateTime.to_iso8601(kill_time),
+             cutoff: DateTime.to_iso8601(cutoff_time)
+           })}
         else
           {:ok, Map.put(killmail, "parsed_kill_time", kill_time)}
         end
@@ -231,7 +291,11 @@ defmodule WandererKills.Killmails.Parser do
     rescue
       error ->
         Logger.error("Failed to build killmail data", error: inspect(error))
-        {:error, :build_failed}
+
+        {:error,
+         Error.killmail_error(:build_failed, "Failed to build killmail data structure", %{
+           exception: inspect(error)
+         })}
     end
   end
 
@@ -265,15 +329,15 @@ defmodule WandererKills.Killmails.Parser do
         {:ok, full_data}
 
       {:error, :not_found} ->
-        # Fallback to ZKB client to fetch the killmail
-        case WandererKills.Zkb.Client.fetch_killmail(killmail_id) do
-          {:ok, zkb_data} when is_map(zkb_data) ->
+        # Fetch full killmail data from ESI
+        case WandererKills.External.ESI.Client.get_killmail(killmail_id, hash) do
+          {:ok, esi_data} when is_map(esi_data) ->
             # Cache the result
-            Cache.store_killmail(zkb_data)
-            {:ok, zkb_data}
+            Cache.store_killmail(esi_data)
+            {:ok, esi_data}
 
           {:error, reason} ->
-            Logger.error("Failed to fetch full killmail from ZKB",
+            Logger.error("Failed to fetch full killmail from ESI",
               killmail_id: killmail_id,
               hash: hash,
               error: reason

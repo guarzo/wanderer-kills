@@ -10,8 +10,7 @@ defmodule WandererKills.Observability.HealthChecks.CacheHealth do
   @behaviour WandererKills.Observability.Behaviours.HealthCheck
 
   require Logger
-  alias WandererKills.Clock
-  # Config now accessed via WandererKills.Config
+  alias WandererKills.Infrastructure.{Clock, Config}
 
   @impl true
   def check_health(opts \\ []) do
@@ -54,12 +53,10 @@ defmodule WandererKills.Observability.HealthChecks.CacheHealth do
 
   @impl true
   def default_config do
-    cache_config = WandererKills.Config.cache()
-
     cache_names = [
-      cache_config.killmails[:name],
-      cache_config.system[:name],
-      cache_config.esi[:name]
+      Config.cache_killmails_name(),
+      Config.cache_system_name(),
+      Config.cache_esi_name()
     ]
 
     [

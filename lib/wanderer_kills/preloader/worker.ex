@@ -97,7 +97,56 @@ defmodule WandererKills.Preloader.Worker do
   def init(opts) do
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
 
-    # Only spawn the quick preload if we have active systems
+    # Temporarily load a single system for testing and logging
+    # Jita system ID for testing
+    test_system_id = 30_000_142
+
+    Logger.info("Preloader starting - adding test system for validation",
+      system_id: test_system_id,
+      purpose: :foundation_testing
+    )
+
+    # Add the test system to active systems
+    case Cache.add_active_system(test_system_id) do
+      :ok ->
+        Logger.info("Successfully added test system",
+          system_id: test_system_id,
+          status: :success
+        )
+
+        # Spawn a quick preload for the test system
+        Task.start(fn ->
+          # Wait for system to be fully initialized
+          Process.sleep(2000)
+
+          Logger.info("Running test preload for validation",
+            system_id: test_system_id
+          )
+
+          case fetch_system(test_system_id, 1, 3) do
+            :ok ->
+              Logger.info("Test system preload completed successfully",
+                system_id: test_system_id,
+                status: :success
+              )
+
+            {:error, reason} ->
+              Logger.warning("Test system preload failed",
+                system_id: test_system_id,
+                error: reason,
+                status: :error
+              )
+          end
+        end)
+
+      {:error, reason} ->
+        Logger.warning("Failed to add test system",
+          system_id: test_system_id,
+          error: reason
+        )
+    end
+
+    # Check for any existing active systems
     case Cache.get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         Logger.info("Preloader initialized with #{length(systems)} active systems")

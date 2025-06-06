@@ -30,7 +30,7 @@ defmodule WandererKills.Data do
   alias WandererKills.Data.Stores.KillmailStore
 
   # Ship Type Information
-  alias WandererKills.Data.{ShipTypeInfo, ShipTypeConstants}
+  alias WandererKills.ShipTypes.{Info, Constants}
 
   #
   # ZKB Data Source API
@@ -129,7 +129,7 @@ defmodule WandererKills.Data do
   """
   @spec get_ship_type_info(integer()) :: {:ok, map()} | {:error, term()}
   def get_ship_type_info(type_id) do
-    ShipTypeInfo.get_ship_type(type_id)
+    Info.get_ship_type(type_id)
   end
 
   @doc """
@@ -137,7 +137,7 @@ defmodule WandererKills.Data do
   """
   @spec get_ship_group_ids() :: [integer()]
   def get_ship_group_ids do
-    ShipTypeConstants.ship_group_ids()
+    Constants.ship_group_ids()
   end
 
   @doc """
@@ -146,7 +146,7 @@ defmodule WandererKills.Data do
   @spec ship_type?(integer()) :: boolean()
   def ship_type?(_type_id) do
     # Check if the type ID is in any of the ship groups
-    _ship_groups = ShipTypeConstants.ship_group_ids()
+    _ship_groups = Constants.ship_group_ids()
     # This is a simple implementation - in a real scenario you'd check against type data
     # For now, return false as this would need to be implemented with actual type->group mappings
     false

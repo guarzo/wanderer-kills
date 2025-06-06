@@ -1,4 +1,4 @@
-defmodule WandererKills.Clock do
+defmodule WandererKills.Infrastructure.Clock do
   @moduledoc """
   Mockable time utilities for WandererKills.
 
@@ -37,7 +37,7 @@ defmodule WandererKills.Clock do
   ```
   """
 
-  alias WandererKills.Config
+  alias WandererKills.Infrastructure.Config
 
   @type clock_config ::
           nil
@@ -58,7 +58,7 @@ defmodule WandererKills.Clock do
   """
   @spec now() :: DateTime.t()
   def now do
-    case Config.clock() do
+    case Config.get(:clock) do
       nil ->
         DateTime.utc_now()
 
@@ -86,7 +86,7 @@ defmodule WandererKills.Clock do
   """
   @spec now_milliseconds() :: integer()
   def now_milliseconds do
-    case Config.clock() do
+    case Config.get(:clock) do
       nil ->
         System.system_time(:millisecond)
 
@@ -156,11 +156,11 @@ defmodule WandererKills.Clock do
   # Centralized system time logic with configuration support
   @spec get_system_time_with_config(System.time_unit()) :: integer()
   defp get_system_time_with_config(unit) do
-    case Config.clock() do
+    case Config.get(:clock) do
       nil ->
         System.system_time(unit)
 
-      {WandererKills.Clock, :system_time} ->
+      {WandererKills.Infrastructure.Clock, :system_time} ->
         # Avoid recursion by calling System directly
         System.system_time(unit)
 

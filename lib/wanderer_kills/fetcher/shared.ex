@@ -53,6 +53,7 @@ defmodule WandererKills.Fetcher do
   alias WandererKills.Killmails.Parser
   alias WandererKills.Killmails.Enricher
   alias WandererKills.Observability.Telemetry
+  alias WandererKills.Infrastructure.Error
 
   @type killmail_id :: pos_integer()
   @type system_id :: pos_integer()
@@ -81,7 +82,7 @@ defmodule WandererKills.Fetcher do
 
   def fetch_and_cache_killmail(id, client) when is_integer(id) and id > 0 do
     # Use dependency injection if no client specified
-    actual_client = client || Application.get_env(:wanderer_kills, :zkb_client, ZkbClient)
+    actual_client = client || WandererKills.Infrastructure.Config.zkb_client()
 
     Logger.debug("Fetching killmail",
       killmail_id: id,
@@ -91,7 +92,7 @@ defmodule WandererKills.Fetcher do
 
     case actual_client.fetch_killmail(id) do
       {:ok, nil} ->
-        {:error, :not_found}
+        {:error, Error.zkb_error(:not_found, "Killmail not found in zKillboard", false)}
 
       {:ok, killmail} ->
         Telemetry.fetch_system_complete(id, :success)
@@ -112,7 +113,9 @@ defmodule WandererKills.Fetcher do
     end
   end
 
-  def fetch_and_cache_killmail(_id, _client), do: {:error, :invalid_id}
+  def fetch_and_cache_killmail(_id, _client) do
+    {:error, Error.validation_error("Invalid killmail ID format")}
+  end
 
   # -------------------------------------------------
   # System-scoped killmail operations
@@ -172,7 +175,7 @@ defmodule WandererKills.Fetcher do
   def fetch_killmails_for_system(id, source, opts, client) when is_binary(id) do
     case Integer.parse(id) do
       {system_id, ""} -> fetch_killmails_for_system(system_id, source, opts, client)
-      _ -> {:error, :invalid_system_id}
+      _ -> {:error, Error.validation_error("Invalid system ID format")}
     end
   end
 
@@ -217,7 +220,9 @@ defmodule WandererKills.Fetcher do
     end
   end
 
-  def fetch_killmails_for_system(_id, _source, _opts, _client), do: {:error, :invalid_system_id}
+  def fetch_killmails_for_system(_id, _source, _opts, _client) do
+    {:error, Error.validation_error("Invalid system ID format")}
+  end
 
   # -------------------------------------------------
   # Batch operations
@@ -289,13 +294,15 @@ defmodule WandererKills.Fetcher do
       |> Map.new()
 
     if map_size(results) == 0 do
-      {:error, :no_results}
+      {:error, Error.system_error(:no_results, "No systems produced valid results")}
     else
       results
     end
   end
 
-  def fetch_killmails_for_systems(_system_ids, _opts), do: {:error, :invalid_system_ids}
+  def fetch_killmails_for_systems(_system_ids, _opts) do
+    {:error, Error.validation_error("Invalid system IDs list format")}
+  end
 
   @doc """
   Get the kill count for a system from zKillboard stats.
@@ -322,7 +329,7 @@ defmodule WandererKills.Fetcher do
   def get_system_kill_count(id, client) when is_binary(id) do
     case Integer.parse(id) do
       {system_id, ""} -> get_system_kill_count(system_id, client)
-      _ -> {:error, :invalid_system_id}
+      _ -> {:error, Error.validation_error("Invalid system ID format")}
     end
   end
 
@@ -338,7 +345,9 @@ defmodule WandererKills.Fetcher do
     end
   end
 
-  def get_system_kill_count(_id, _client), do: {:error, :invalid_system_id}
+  def get_system_kill_count(_id, _client) do
+    {:error, Error.validation_error("Invalid system ID format")}
+  end
 
   # -------------------------------------------------
   # Private helper functions
@@ -402,7 +411,7 @@ defmodule WandererKills.Fetcher do
     client.fetch_system_killmails(system_id)
   end
 
-  # Parse raw killmails
+  # Parse raw killmails - use partial parser for ZKB/preloader data
   defp parse_killmails(raw_killmails) do
     try do
       # Use a reasonable cutoff time (24 hours ago as default)
@@ -410,12 +419,21 @@ defmodule WandererKills.Fetcher do
 
       parsed =
         raw_killmails
-        |> Enum.map(&Parser.parse_full_killmail(&1, cutoff_time))
+        |> Enum.map(&Parser.parse_partial_killmail(&1, cutoff_time))
         |> Enum.filter(fn
           {:ok, _} -> true
           _ -> false
         end)
-        |> Enum.map(fn {:ok, killmail} -> killmail end)
+        |> Enum.flat_map(fn
+          {:ok, killmail} when is_map(killmail) -> [killmail]
+          {:ok, killmails} when is_list(killmails) -> killmails
+        end)
+
+      Logger.info("Parsed killmails using partial parser",
+        raw_count: length(raw_killmails),
+        parsed_count: length(parsed),
+        parser_type: "partial_killmail"
+      )
 
       {:ok, parsed}
     rescue
@@ -424,7 +442,7 @@ defmodule WandererKills.Fetcher do
           error: inspect(error)
         )
 
-        {:error, :parse_error}
+        {:error, Error.parsing_error(:exception, "Exception during killmail parsing")}
     end
   end
 
@@ -445,7 +463,7 @@ defmodule WandererKills.Fetcher do
     rescue
       error ->
         Logger.error("Failed to enrich killmails", error: inspect(error))
-        {:error, :enrichment_error}
+        {:error, Error.enrichment_error(:exception, "Exception during killmail enrichment")}
     end
   end
 

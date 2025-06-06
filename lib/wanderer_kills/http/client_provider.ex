@@ -18,8 +18,6 @@ defmodule WandererKills.Http.ClientProvider do
   ```
   """
 
-  alias WandererKills.Http.Client
-
   @doc """
   Gets the configured HTTP client module.
 
@@ -39,6 +37,6 @@ defmodule WandererKills.Http.ClientProvider do
   """
   @spec get() :: module()
   def get do
-    Application.get_env(:wanderer_kills, :http_client, Client)
+    WandererKills.Infrastructure.Config.http_client()
   end
 end

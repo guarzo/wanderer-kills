@@ -13,6 +13,7 @@ defmodule WandererKills.Retry do
   """
 
   require Logger
+  alias WandererKills.Infrastructure.Config
 
   @type retry_opts :: [
           max_retries: non_neg_integer(),
@@ -40,12 +41,9 @@ defmodule WandererKills.Retry do
   """
   @spec retry_with_backoff((-> term()), retry_opts()) :: {:ok, term()} | {:error, term()}
   def retry_with_backoff(fun, opts \\ []) do
-    retry_config = Application.get_env(:wanderer_kills, :retry, %{})
-    http_config = Map.get(retry_config, :http, %{})
-
-    max_retries = Keyword.get(opts, :max_retries, Map.get(http_config, :max_retries, 3))
-    base_delay = Keyword.get(opts, :base_delay, Map.get(http_config, :base_delay, 1000))
-    max_delay = Keyword.get(opts, :max_delay, Map.get(http_config, :max_delay, 30_000))
+    max_retries = Keyword.get(opts, :max_retries, Config.retry_http_max_retries())
+    base_delay = Keyword.get(opts, :base_delay, Config.retry_http_base_delay())
+    max_delay = Keyword.get(opts, :max_delay, Config.retry_http_max_delay())
     operation_name = Keyword.get(opts, :operation_name, "operation")
 
     rescue_only =

@@ -6,9 +6,8 @@ defmodule WandererKills.Parser.Core do
   require Logger
   alias WandererKills.Killmails.{CacheHandler, Flatten}
   alias WandererKills.Observability.Monitoring
-  alias WandererKills.Clock
+  alias WandererKills.Infrastructure.{Clock, Config, Error}
   alias WandererKills.Cache
-  # Config now accessed via WandererKills.Config
 
   @type raw_km :: map()
   @type merged_km :: map()
@@ -46,7 +45,9 @@ defmodule WandererKills.Parser.Core do
 
       {:error, reason} ->
         Logger.error("[Parser] Failed to build killmail data: #{inspect(reason)}")
-        {:error, reason}
+
+        {:error,
+         Error.killmail_error(:build_failed, "Failed to build killmail data", %{reason: reason})}
     end
   end
 
@@ -82,11 +83,13 @@ defmodule WandererKills.Parser.Core do
 
       {:ok, merged}
     else
-      {:error, :missing_kill_time}
+      {:error, Error.killmail_error(:missing_kill_time, "Kill time not found in killmail data")}
     end
   end
 
-  def merge_killmail_data(_, _), do: {:error, :invalid_payload}
+  def merge_killmail_data(_, _) do
+    {:error, Error.killmail_error(:invalid_payload, "Invalid killmail payload format")}
+  end
 
   @doc """
   Given merged data and a cutoff, either build the final map, or return `:older` if it's too old.
@@ -107,7 +110,9 @@ defmodule WandererKills.Parser.Core do
     end
   end
 
-  def build_kill_data(_, _), do: {:error, :invalid_payload}
+  def build_kill_data(_, _) do
+    {:error, Error.killmail_error(:invalid_payload, "Invalid payload format for kill data")}
+  end
 
   @doc """
   Gets the kill time from a killmail.
@@ -127,7 +132,9 @@ defmodule WandererKills.Parser.Core do
     end
   end
 
-  def get_kill_time(_), do: {:error, :invalid_time}
+  def get_kill_time(_) do
+    {:error, Error.killmail_error(:invalid_time, "Invalid or missing killmail_time field")}
+  end
 
   # The real builder, matching on all required fields:
   @spec do_build(merged_km()) :: result_t()
@@ -249,7 +256,7 @@ defmodule WandererKills.Parser.Core do
   """
   @spec get_cutoff_time() :: DateTime.t()
   def get_cutoff_time do
-    cutoff_seconds = WandererKills.Config.parser().cutoff_seconds
+    cutoff_seconds = Config.parser_cutoff_seconds()
     Clock.seconds_ago(cutoff_seconds)
   end
 

@@ -46,8 +46,9 @@ defmodule WandererKills.Data.Sources.CsvSource do
   use WandererKills.Data.Behaviours.ShipTypeSource
 
   require Logger
-  alias WandererKills.BatchProcessor
+  alias WandererKills.Infrastructure.BatchProcessor
   alias WandererKills.Shared.CSV
+  alias WandererKills.Infrastructure.Error
   # Note: Cache.Base and Cache.Key removed since CSV source no longer caches to ESI
 
   @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"
@@ -129,11 +130,19 @@ defmodule WandererKills.Data.Sources.CsvSource do
 
       {:partial, _results, failures} ->
         Logger.error("Some CSV downloads failed: #{inspect(failures)}")
-        {:error, :download_failed}
+
+        {:error,
+         Error.ship_types_error(:download_failed, "Some CSV file downloads failed", true, %{
+           failures: failures
+         })}
 
       {:error, reason} ->
         Logger.error("Failed to download CSV files: #{inspect(reason)}")
-        {:error, :download_failed}
+
+        {:error,
+         Error.ship_types_error(:download_failed, "Failed to download CSV files", true, %{
+           underlying_error: reason
+         })}
     end
   end
 
@@ -166,9 +175,22 @@ defmodule WandererKills.Data.Sources.CsvSource do
     groups_path = Enum.find(file_paths, &String.ends_with?(&1, "invGroups.csv"))
 
     case {types_path, groups_path} do
-      {nil, _} -> {:error, :missing_types_file}
-      {_, nil} -> {:error, :missing_groups_file}
-      {types, groups} -> {:ok, {types, groups}}
+      {nil, _} ->
+        {:error,
+         Error.ship_types_error(
+           :missing_types_file,
+           "invTypes.csv file not found in provided paths"
+         )}
+
+      {_, nil} ->
+        {:error,
+         Error.ship_types_error(
+           :missing_groups_file,
+           "invGroups.csv file not found in provided paths"
+         )}
+
+      {types, groups} ->
+        {:ok, {types, groups}}
     end
   end
 
@@ -186,12 +208,39 @@ defmodule WandererKills.Data.Sources.CsvSource do
     |> Enum.reject(&is_nil/1)
   end
 
-  # Note: CSV source no longer caches data directly to ESI cache to avoid
-  # conflicts with live ESI data. CSV data should be used for initial seeding
-  # or processed separately from ESI cache operations.
+  # Cache ship types to ESI cache for immediate availability
   defp cache_ship_types(ship_types) when is_list(ship_types) do
     Logger.info("CSV source processed #{length(ship_types)} ship types successfully")
-    Logger.info("Note: CSV data is not cached to ESI cache to avoid conflicts with live ESI data")
+    Logger.info("Caching ship types to ESI cache for enrichment")
+
+    # Cache each ship type individually
+    cached_count =
+      ship_types
+      |> Enum.map(fn ship_type ->
+        type_data = %{
+          "type_id" => ship_type.type_id,
+          "name" => ship_type.name,
+          "group_id" => ship_type.group_id,
+          "group_name" => ship_type.group_name,
+          "published" => Map.get(ship_type, :published, true),
+          "description" => Map.get(ship_type, :description, ""),
+          "mass" => Map.get(ship_type, :mass, 0.0),
+          "volume" => Map.get(ship_type, :volume, 0.0),
+          "capacity" => Map.get(ship_type, :capacity, 0.0)
+        }
+
+        case WandererKills.Cache.set_type_info(ship_type.type_id, type_data) do
+          :ok ->
+            1
+
+          {:error, reason} ->
+            Logger.warning("Failed to cache ship type #{ship_type.type_id}: #{inspect(reason)}")
+            0
+        end
+      end)
+      |> Enum.sum()
+
+    Logger.info("Successfully cached #{cached_count}/#{length(ship_types)} ship types")
     :ok
   end
 
@@ -207,7 +256,11 @@ defmodule WandererKills.Data.Sources.CsvSource do
 
   defp handle_ship_types_result(ship_types) do
     if Enum.empty?(ship_types) do
-      {:error, :no_ship_types}
+      {:error,
+       Error.ship_types_error(
+         :no_ship_types,
+         "No ship types found in CSV data for configured ship groups"
+       )}
     else
       # Cache the ship types as part of the parse step
       cache_ship_types(ship_types)

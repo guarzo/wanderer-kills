@@ -207,22 +207,22 @@ defmodule WandererKills.Http.Client do
   """
   @spec handle_status_code(integer(), map()) :: {:ok, map()} | {:error, term()}
   def handle_status_code(status, resp \\ %{}) do
-    status_codes = get_config(:http_status_codes)
+    config = WandererKills.Infrastructure.Config
 
     cond do
-      status in status_codes.success ->
+      status in config.http_status(:success) ->
         {:ok, resp}
 
-      status == status_codes.not_found ->
+      status == config.http_status(:not_found) ->
         {:error, :not_found}
 
-      status == status_codes.rate_limited ->
+      status == config.http_status(:rate_limited) ->
         {:error, :rate_limited}
 
-      status in status_codes.retryable ->
+      status in config.http_status(:retryable) ->
         {:error, "HTTP #{status}"}
 
-      status in status_codes.fatal ->
+      status in config.http_status(:fatal) ->
         {:error, "HTTP #{status}"}
 
       true ->
@@ -232,9 +232,4 @@ defmodule WandererKills.Http.Client do
 
   @spec retriable_error?(term()) :: boolean()
   def retriable_error?(error), do: Retry.retriable_http_error?(error)
-
-  # Helper function to get configuration values
-  defp get_config(key) do
-    Application.get_env(:wanderer_kills, key)
-  end
 end

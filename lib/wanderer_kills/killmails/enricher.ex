@@ -27,6 +27,7 @@ defmodule WandererKills.Killmails.Enricher do
 
   require Logger
   alias WandererKills.Cache
+  alias WandererKills.Infrastructure.Error
 
   @type killmail :: map()
   @type enrichment_option :: :characters | :corporations | :alliances | :ship_types | :locations
@@ -47,7 +48,7 @@ defmodule WandererKills.Killmails.Enricher do
 
   ## Returns
   - `{:ok, enriched_killmail}` - On successful enrichment
-  - `{:error, reason}` - On failure
+  - `{:error, Error.t()}` - On failure with standardized error
 
   ## Examples
 
@@ -65,7 +66,8 @@ defmodule WandererKills.Killmails.Enricher do
   end
   ```
   """
-  @spec enrich_killmail(killmail(), enrichment_options()) :: {:ok, killmail()} | {:error, term()}
+  @spec enrich_killmail(killmail(), enrichment_options()) ::
+          {:ok, killmail()} | {:error, Error.t()}
   def enrich_killmail(killmail, options \\ @default_enrichment_options)
 
   def enrich_killmail(%{"killmail_id" => killmail_id} = killmail, options)
@@ -91,11 +93,18 @@ defmodule WandererKills.Killmails.Enricher do
           error: inspect(error)
         )
 
-        {:error, :enrichment_exception}
+        {:error,
+         Error.enrichment_error(:exception, "Exception during killmail enrichment", false, %{
+           killmail_id: killmail_id,
+           error: inspect(error)
+         })}
     end
   end
 
-  def enrich_killmail(_, _), do: {:error, :invalid_killmail_format}
+  def enrich_killmail(_, _) do
+    {:error,
+     Error.enrichment_error(:invalid_format, "Invalid killmail format - missing required fields")}
+  end
 
   @doc """
   Enriches character information in killmail data.
@@ -117,6 +126,26 @@ defmodule WandererKills.Killmails.Enricher do
           "character_name" => character_info["name"],
           "character_info" => character_info
         })
+
+      {:error, :not_found} ->
+        # Try to fetch from ESI and cache it
+        case fetch_and_cache_character(character_id) do
+          {:ok, character_info} ->
+            Logger.debug("Fetched and enriched character data", character_id: character_id)
+
+            Map.merge(base_data, %{
+              "character_name" => character_info["name"],
+              "character_info" => character_info
+            })
+
+          {:error, reason} ->
+            Logger.debug("Failed to fetch character data from ESI",
+              character_id: character_id,
+              error: reason
+            )
+
+            base_data
+        end
 
       {:error, reason} ->
         Logger.debug("Failed to enrich character data",
@@ -148,6 +177,26 @@ defmodule WandererKills.Killmails.Enricher do
           "corporation_name" => corp_info["name"],
           "corporation_info" => corp_info
         })
+
+      {:error, :not_found} ->
+        # Try to fetch from ESI and cache it
+        case fetch_and_cache_corporation(corporation_id) do
+          {:ok, corp_info} ->
+            Logger.debug("Fetched and enriched corporation data", corporation_id: corporation_id)
+
+            Map.merge(base_data, %{
+              "corporation_name" => corp_info["name"],
+              "corporation_info" => corp_info
+            })
+
+          {:error, reason} ->
+            Logger.debug("Failed to fetch corporation data from ESI",
+              corporation_id: corporation_id,
+              error: reason
+            )
+
+            base_data
+        end
 
       {:error, reason} ->
         Logger.debug("Failed to enrich corporation data",
@@ -182,6 +231,26 @@ defmodule WandererKills.Killmails.Enricher do
           "alliance_info" => alliance_info
         })
 
+      {:error, :not_found} ->
+        # Try to fetch from ESI and cache it
+        case fetch_and_cache_alliance(alliance_id) do
+          {:ok, alliance_info} ->
+            Logger.debug("Fetched and enriched alliance data", alliance_id: alliance_id)
+
+            Map.merge(base_data, %{
+              "alliance_name" => alliance_info["name"],
+              "alliance_info" => alliance_info
+            })
+
+          {:error, reason} ->
+            Logger.debug("Failed to fetch alliance data from ESI",
+              alliance_id: alliance_id,
+              error: reason
+            )
+
+            base_data
+        end
+
       {:error, reason} ->
         Logger.debug("Failed to enrich alliance data",
           alliance_id: alliance_id,
@@ -212,6 +281,26 @@ defmodule WandererKills.Killmails.Enricher do
           "ship_type_name" => type_info["name"],
           "ship_type_info" => type_info
         })
+
+      {:error, :not_found} ->
+        # Try to fetch from ESI and cache it
+        case fetch_and_cache_type(ship_type_id) do
+          {:ok, type_info} ->
+            Logger.debug("Fetched and enriched ship type data", ship_type_id: ship_type_id)
+
+            Map.merge(base_data, %{
+              "ship_type_name" => type_info["name"],
+              "ship_type_info" => type_info
+            })
+
+          {:error, reason} ->
+            Logger.debug("Failed to fetch ship type data from ESI",
+              ship_type_id: ship_type_id,
+              error: reason
+            )
+
+            base_data
+        end
 
       {:error, reason} ->
         Logger.debug("Failed to enrich ship type data",
@@ -341,4 +430,38 @@ defmodule WandererKills.Killmails.Enricher do
   end
 
   defp maybe_enrich_ship_type(data, _, _, _), do: data
+
+  # ESI fetch and cache helper functions
+
+  @spec fetch_and_cache_character(integer()) :: {:ok, map()} | {:error, term()}
+  defp fetch_and_cache_character(character_id) do
+    case WandererKills.External.ESI.Client.ensure_cached(:character, character_id) do
+      :ok -> Cache.get_character_info(character_id)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec fetch_and_cache_corporation(integer()) :: {:ok, map()} | {:error, term()}
+  defp fetch_and_cache_corporation(corporation_id) do
+    case WandererKills.External.ESI.Client.ensure_cached(:corporation, corporation_id) do
+      :ok -> Cache.get_corporation_info(corporation_id)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec fetch_and_cache_alliance(integer()) :: {:ok, map()} | {:error, term()}
+  defp fetch_and_cache_alliance(alliance_id) do
+    case WandererKills.External.ESI.Client.ensure_cached(:alliance, alliance_id) do
+      :ok -> Cache.get_alliance_info(alliance_id)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec fetch_and_cache_type(integer()) :: {:ok, map()} | {:error, term()}
+  defp fetch_and_cache_type(type_id) do
+    case WandererKills.External.ESI.Client.ensure_cached(:type, type_id) do
+      :ok -> Cache.get_type_info(type_id)
+      {:error, reason} -> {:error, reason}
+    end
+  end
 end

@@ -1,13 +1,14 @@
-defmodule WandererKills.Data.ShipTypeInfo do
+defmodule WandererKills.ShipTypes.Info do
   @moduledoc """
-  Simplified ship type information handler using ESI caching.
+  Ship type information handler for the ship types domain.
 
-  This module provides a lightweight interface for ship type data by leveraging
-  the existing ESI caching infrastructure.
+  This module provides ship type data access by leveraging
+  the existing ESI caching infrastructure and CSV data sources.
   """
 
   require Logger
   alias WandererKills.Cache
+  alias WandererKills.Infrastructure.Error
 
   @doc """
   Gets ship type information from the ESI cache.
@@ -20,7 +21,9 @@ defmodule WandererKills.Data.ShipTypeInfo do
     Cache.get_type_info(type_id)
   end
 
-  def get_ship_type(_type_id), do: {:error, :invalid_type_id}
+  def get_ship_type(_type_id) do
+    {:error, Error.ship_types_error(:invalid_type_id, "Type ID must be a positive integer")}
+  end
 
   @doc """
   Warms the cache with CSV data if needed.
@@ -33,7 +36,7 @@ defmodule WandererKills.Data.ShipTypeInfo do
     Logger.info("Warming ship type cache with CSV data")
 
     # Use the updater which handles downloading missing CSV files
-    case WandererKills.Data.ShipTypeUpdater.update_with_csv() do
+    case WandererKills.ShipTypes.Updater.update_with_csv() do
       :ok ->
         Logger.info("Successfully warmed cache with CSV data")
         :ok

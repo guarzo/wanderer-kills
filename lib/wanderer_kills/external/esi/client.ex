@@ -36,22 +36,22 @@ defmodule WandererKills.External.ESI.Client do
 
   require Logger
   alias WandererKills.Constants
-  alias WandererKills.Config
-  alias WandererKills.BatchProcessor
+  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Infrastructure.BatchProcessor
   alias WandererKills.TaskSupervisor
   alias WandererKills.Cache
-  alias WandererKills.Http.Client, as: HttpClient
+  alias WandererKills.Infrastructure.Error
 
   # Default ship group IDs that contain ship types
   @ship_group_ids [6, 7, 9, 11, 16, 17, 23]
 
-  defp http_client, do: Application.get_env(:wanderer_kills, :http_client, HttpClient)
+  defp http_client, do: WandererKills.Infrastructure.Config.http_client()
 
   @doc """
   Base URL for ESI API.
   """
   def base_url do
-    Config.esi().base_url
+    Config.esi(:base_url)
   end
 
   @doc """
@@ -78,6 +78,45 @@ defmodule WandererKills.External.ESI.Client do
 
       {:error, :not_found} ->
         fetch_and_cache_type_info(type_id)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def ensure_cached(:character, character_id) do
+    case Cache.get_character_info(character_id) do
+      {:ok, _character_info} ->
+        :ok
+
+      {:error, :not_found} ->
+        fetch_and_cache_character_info(character_id)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def ensure_cached(:corporation, corporation_id) do
+    case Cache.get_corporation_info(corporation_id) do
+      {:ok, _corp_info} ->
+        :ok
+
+      {:error, :not_found} ->
+        fetch_and_cache_corporation_info(corporation_id)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def ensure_cached(:alliance, alliance_id) do
+    case Cache.get_alliance_info(alliance_id) do
+      {:ok, _alliance_info} ->
+        :ok
+
+      {:error, :not_found} ->
+        fetch_and_cache_alliance_info(alliance_id)
 
       {:error, reason} ->
         {:error, reason}
@@ -134,6 +173,96 @@ defmodule WandererKills.External.ESI.Client do
 
       {:error, reason} ->
         Logger.error("Failed to fetch type info for #{type_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp fetch_and_cache_character_info(character_id) do
+    url = "#{base_url()}/characters/#{character_id}/"
+
+    case http_client().get_with_rate_limit(url, []) do
+      {:ok, %{body: body}} ->
+        character_info = %{
+          "character_id" => character_id,
+          "name" => Map.get(body, "name"),
+          "corporation_id" => Map.get(body, "corporation_id"),
+          "alliance_id" => Map.get(body, "alliance_id"),
+          "birthday" => Map.get(body, "birthday"),
+          "gender" => Map.get(body, "gender"),
+          "race_id" => Map.get(body, "race_id"),
+          "bloodline_id" => Map.get(body, "bloodline_id"),
+          "ancestry_id" => Map.get(body, "ancestry_id"),
+          "security_status" => Map.get(body, "security_status")
+        }
+
+        case Cache.set_character_info(character_id, character_info) do
+          :ok -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to fetch character info for #{character_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp fetch_and_cache_corporation_info(corporation_id) do
+    url = "#{base_url()}/corporations/#{corporation_id}/"
+
+    case http_client().get_with_rate_limit(url, []) do
+      {:ok, %{body: body}} ->
+        corp_info = %{
+          "corporation_id" => corporation_id,
+          "name" => Map.get(body, "name"),
+          "ticker" => Map.get(body, "ticker"),
+          "alliance_id" => Map.get(body, "alliance_id"),
+          "ceo_id" => Map.get(body, "ceo_id"),
+          "creator_id" => Map.get(body, "creator_id"),
+          "date_founded" => Map.get(body, "date_founded"),
+          "description" => Map.get(body, "description"),
+          "faction_id" => Map.get(body, "faction_id"),
+          "home_station_id" => Map.get(body, "home_station_id"),
+          "member_count" => Map.get(body, "member_count"),
+          "shares" => Map.get(body, "shares"),
+          "tax_rate" => Map.get(body, "tax_rate"),
+          "url" => Map.get(body, "url"),
+          "war_eligible" => Map.get(body, "war_eligible")
+        }
+
+        case Cache.set_corporation_info(corporation_id, corp_info) do
+          :ok -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to fetch corporation info for #{corporation_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp fetch_and_cache_alliance_info(alliance_id) do
+    url = "#{base_url()}/alliances/#{alliance_id}/"
+
+    case http_client().get_with_rate_limit(url, []) do
+      {:ok, %{body: body}} ->
+        alliance_info = %{
+          "alliance_id" => alliance_id,
+          "name" => Map.get(body, "name"),
+          "ticker" => Map.get(body, "ticker"),
+          "creator_corporation_id" => Map.get(body, "creator_corporation_id"),
+          "creator_id" => Map.get(body, "creator_id"),
+          "date_founded" => Map.get(body, "date_founded"),
+          "executor_corporation_id" => Map.get(body, "executor_corporation_id"),
+          "faction_id" => Map.get(body, "faction_id")
+        }
+
+        case Cache.set_alliance_info(alliance_id, alliance_info) do
+          :ok -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to fetch alliance info for #{alliance_id}: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -246,7 +375,9 @@ defmodule WandererKills.External.ESI.Client do
 
       {:partial, _results, failures} ->
         Logger.error("Some ship groups failed to process: #{inspect(failures)}")
-        {:error, :batch_processing_failed}
+
+        {:error,
+         Error.esi_error(:batch_processing_failed, "Some ship groups failed to process", true)}
 
       {:error, reason} ->
         Logger.error("Failed to process ship groups from ESI: #{inspect(reason)}")

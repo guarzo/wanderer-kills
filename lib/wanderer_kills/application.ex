@@ -15,6 +15,7 @@ defmodule WandererKills.Application do
 
   use Application
   require Logger
+  alias WandererKills.Infrastructure.Config
 
   @impl true
   def start(_type, _args) do
@@ -27,12 +28,9 @@ defmodule WandererKills.Application do
       {Phoenix.PubSub, name: WandererKills.PubSub},
       WandererKills.Killmails.Store,
       # Direct Cachex supervision instead of single-child supervisor
-      {Cachex, name: :unified_cache, ttl: WandererKills.Config.cache_ttl(:killmails)},
+      {Cachex, name: :unified_cache, ttl: Config.cache_ttl(:killmails)},
       WandererKills.Observability.Monitoring,
-      {Plug.Cowboy,
-       scheme: :http,
-       plug: WandererKillsWeb.Api,
-       options: [port: Application.fetch_env!(:wanderer_kills, :port)]},
+      {Plug.Cowboy, scheme: :http, plug: WandererKillsWeb.Api, options: [port: Config.port()]},
       {:telemetry_poller,
        measurements: [
          {WandererKills.Observability.Monitoring, :measure_http_requests, []},
@@ -43,8 +41,13 @@ defmodule WandererKills.Application do
        period: :timer.seconds(10)}
     ]
 
-    # Add PreloaderSupervisor to the supervision tree (after cache is started)
-    children = base_children ++ [WandererKills.PreloaderSupervisor]
+    # Conditionally add PreloaderSupervisor based on configuration
+    children =
+      if Config.start_preloader?() do
+        base_children ++ [WandererKills.PreloaderSupervisor]
+      else
+        base_children
+      end
 
     opts = [strategy: :one_for_one, name: WandererKills.Supervisor]
 
@@ -63,10 +66,10 @@ defmodule WandererKills.Application do
   defp start_ship_type_update do
     Task.start(fn ->
       # First warm the cache with CSV data
-      WandererKills.Data.ShipTypeInfo.warm_cache()
+      WandererKills.ShipTypes.Info.warm_cache()
 
       # Then update with fresh ESI data
-      result = WandererKills.Data.ShipTypeUpdater.update_ship_types()
+      result = WandererKills.ShipTypes.Updater.update_ship_types()
 
       # Log if it was an error.
       if match?({:error, _}, result) do

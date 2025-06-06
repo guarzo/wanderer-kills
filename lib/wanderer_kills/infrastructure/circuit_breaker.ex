@@ -1,4 +1,4 @@
-defmodule WandererKills.CircuitBreaker do
+defmodule WandererKills.Infrastructure.CircuitBreaker do
   @moduledoc """
   Circuit breaker implementation for external API calls to prevent cascade failures.
 
