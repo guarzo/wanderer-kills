@@ -13,6 +13,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
   require Logger
 
   alias WandererKills.Infrastructure.Config
+  alias WandererKills.Infrastructure.Error
 
   @type event_id :: integer()
   @type system_id :: integer()
@@ -344,7 +345,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
       :ets.insert(:killmails, {killmail_id, killmail})
       {:reply, :ok, state}
     else
-      {:reply, {:error, :invalid_killmail_id}, state}
+      {:reply, {:error, Error.validation_error("Killmail missing required killmail_id field")}, state}
     end
   end
 
