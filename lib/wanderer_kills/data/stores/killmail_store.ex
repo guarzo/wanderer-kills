@@ -345,7 +345,8 @@ defmodule WandererKills.Data.Stores.KillmailStore do
       :ets.insert(:killmails, {killmail_id, killmail})
       {:reply, :ok, state}
     else
-      {:reply, {:error, Error.validation_error("Killmail missing required killmail_id field")}, state}
+      {:reply, {:error, Error.validation_error("Killmail missing required killmail_id field")},
+       state}
     end
   end
 
