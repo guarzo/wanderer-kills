@@ -4,7 +4,6 @@ defmodule WandererKills.ApiTest do
   import Mox
 
   alias WandererKillsWeb.Api
-  alias WandererKills.Zkb.Client.Mock, as: ZkbClientMock
   alias WandererKills.TestHelpers
 
   @opts Api.init([])
@@ -37,9 +36,9 @@ defmodule WandererKills.ApiTest do
     end
 
     test "returns 404 for non-existent killmail" do
-      # Mock the ZkbClient to return nil for the specified killmail
-      ZkbClientMock
-      |> expect(:fetch_killmail, fn 999_999_999 -> {:ok, nil} end)
+      # Mock the real ZKB client that the API actually uses
+      WandererKills.Zkb.Client.Mock
+      |> expect(:fetch_killmail, fn 999_999_999 -> {:error, :not_found} end)
 
       conn = conn(:get, "/killmail/999999999")
       conn = Api.call(conn, @opts)

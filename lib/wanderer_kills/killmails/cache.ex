@@ -28,7 +28,7 @@ defmodule WandererKills.Killmails.Cache do
   """
 
   require Logger
-  alias WandererKills.Cache.Unified
+  alias WandererKills.Cache
 
   @type killmail :: map()
   @type killmail_id :: integer()
@@ -64,8 +64,8 @@ defmodule WandererKills.Killmails.Cache do
     Logger.debug("Storing killmail in cache", killmail_id: killmail_id)
 
     try do
-      case Unified.set_killmail(killmail_id, killmail) do
-        {:ok, _} ->
+      case Cache.set("killmails:#{killmail_id}", killmail) do
+        :ok ->
           Logger.debug("Successfully stored killmail", killmail_id: killmail_id)
           :ok
 
@@ -167,7 +167,7 @@ defmodule WandererKills.Killmails.Cache do
   def get_killmail(killmail_id) when is_integer(killmail_id) do
     Logger.debug("Retrieving killmail from cache", killmail_id: killmail_id)
 
-    case Unified.get_killmail(killmail_id) do
+    case Cache.get("killmails:#{killmail_id}") do
       {:ok, killmail} ->
         Logger.debug("Successfully retrieved killmail", killmail_id: killmail_id)
         {:ok, killmail}
@@ -218,8 +218,8 @@ defmodule WandererKills.Killmails.Cache do
   def remove_killmail(killmail_id) when is_integer(killmail_id) do
     Logger.debug("Removing killmail from cache", killmail_id: killmail_id)
 
-    case Unified.delete_killmail(killmail_id) do
-      {:ok, _} ->
+    case Cache.del("killmails:#{killmail_id}") do
+      :ok ->
         Logger.debug("Successfully removed killmail", killmail_id: killmail_id)
         :ok
 

@@ -48,10 +48,10 @@ defmodule WandererKills.Fetcher do
 
   require Logger
 
-  alias WandererKills.Cache.Unified, as: Cache
+  alias WandererKills.Cache
   alias WandererKills.Zkb.Client, as: ZkbClient
-  alias WandererKills.Parser.Core, as: Parser
-  alias WandererKills.Parser.Enricher
+  alias WandererKills.Killmails.Parser
+  alias WandererKills.Killmails.Enricher
   alias WandererKills.Observability.Telemetry
 
   @type killmail_id :: pos_integer()
@@ -81,7 +81,7 @@ defmodule WandererKills.Fetcher do
 
   def fetch_and_cache_killmail(id, client) when is_integer(id) and id > 0 do
     # Use dependency injection if no client specified
-    actual_client = client || ZkbClient
+    actual_client = client || Application.get_env(:wanderer_kills, :zkb_client, ZkbClient)
 
     Logger.debug("Fetching killmail",
       killmail_id: id,
@@ -405,9 +405,12 @@ defmodule WandererKills.Fetcher do
   # Parse raw killmails
   defp parse_killmails(raw_killmails) do
     try do
+      # Use a reasonable cutoff time (24 hours ago as default)
+      cutoff_time = DateTime.utc_now() |> DateTime.add(-24 * 60 * 60, :second)
+
       parsed =
         raw_killmails
-        |> Enum.map(&Parser.parse_killmail(&1))
+        |> Enum.map(&Parser.parse_full_killmail(&1, cutoff_time))
         |> Enum.filter(fn
           {:ok, _} -> true
           _ -> false

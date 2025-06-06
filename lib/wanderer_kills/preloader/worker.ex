@@ -13,7 +13,7 @@ defmodule WandererKills.Preloader.Worker do
   use GenServer
   require Logger
 
-  alias WandererKills.Cache.Unified, as: Cache
+  alias WandererKills.Cache
 
   @type pass_type :: :quick | :expanded
   @type fetch_result :: :ok | {:error, term()}

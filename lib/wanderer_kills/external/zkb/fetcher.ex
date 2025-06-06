@@ -7,7 +7,7 @@ defmodule WandererKills.External.ZKB.Fetcher do
   """
 
   alias WandererKills.Zkb.Client, as: ZkbClient
-  alias WandererKills.KillmailStore
+  alias WandererKills.Killmails.Store
 
   @doc """
   Fetches a killmail by ID and stores it.
@@ -17,7 +17,7 @@ defmodule WandererKills.External.ZKB.Fetcher do
 
     case actual_client.fetch_killmail(killmail_id) do
       {:ok, killmail} when is_map(killmail) ->
-        KillmailStore.store_killmail(killmail)
+        Store.store_killmail(killmail)
         {:ok, killmail}
 
       {:ok, nil} ->
@@ -38,11 +38,11 @@ defmodule WandererKills.External.ZKB.Fetcher do
       {:ok, killmails} when is_list(killmails) ->
         Enum.each(killmails, fn killmail ->
           if is_map(killmail) do
-            KillmailStore.store_killmail(killmail)
+            Store.store_killmail(killmail)
             killmail_id = killmail["killID"] || killmail["killmail_id"]
 
             if killmail_id do
-              KillmailStore.add_system_killmail(system_id, killmail_id)
+              Store.add_system_killmail(system_id, killmail_id)
             end
           end
         end)

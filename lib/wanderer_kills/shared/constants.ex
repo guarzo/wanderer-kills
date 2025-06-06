@@ -132,13 +132,17 @@ defmodule WandererKills.Constants do
       :enricher ->
         @enricher_task_timeout
 
+      :gen_server_call ->
+        5_000
+
       :defaults ->
         %{
           http: @default_http_timeout,
           esi: @esi_request_timeout,
           zkb: @zkb_request_timeout,
           parser: @parser_task_timeout,
-          enricher: @enricher_task_timeout
+          enricher: @enricher_task_timeout,
+          gen_server_call: 5_000
         }
     end
   end

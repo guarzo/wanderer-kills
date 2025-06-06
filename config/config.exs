@@ -198,7 +198,10 @@ config :logger, :console,
     :cache,
     :key,
     :client_id,
-    :event_count
+    :event_count,
+    :opts,
+    :response,
+    :size
   ]
 
 # Import environment specific config

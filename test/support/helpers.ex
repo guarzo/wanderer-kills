@@ -44,7 +44,7 @@ defmodule WandererKills.TestHelpers do
   """
   def cleanup_processes do
     # Stop KillmailStore if it's running
-    if pid = Process.whereis(WandererKills.KillmailStore) do
+    if pid = Process.whereis(WandererKills.Killmails.Store) do
       Process.exit(pid, :normal)
       # Give it a moment to shut down
       Process.sleep(10)
@@ -169,7 +169,6 @@ defmodule WandererKills.TestHelpers do
   def setup_http_mocks do
     WandererKills.Http.Client.Mock
     |> stub(:get_with_rate_limit, &mock_url_response/2)
-    |> stub(:get, &mock_url_response/2)
     |> stub(:handle_status_code, fn
       200, %{body: body} -> {:ok, body}
       200, response -> {:ok, response}
@@ -487,7 +486,7 @@ defmodule WandererKills.TestHelpers do
   """
   @spec stop_killmail_store() :: :ok
   def stop_killmail_store do
-    case Process.whereis(WandererKills.KillmailStore) do
+    case Process.whereis(WandererKills.Killmails.Store) do
       nil -> :ok
       pid -> Process.exit(pid, :normal)
     end

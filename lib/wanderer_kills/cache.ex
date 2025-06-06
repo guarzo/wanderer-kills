@@ -52,6 +52,46 @@ defmodule WandererKills.Cache do
   @type cache_result(t) :: {:ok, t} | {:error, term()}
 
   # =============================================================================
+  # Basic Cache Operations
+  # =============================================================================
+
+  @doc """
+  Gets a value from the cache by key.
+  """
+  @spec get(String.t()) :: cache_result(term())
+  def get(key) do
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Sets a value in the cache with optional TTL.
+  """
+  @spec set(String.t(), term(), keyword()) :: :ok | {:error, term()}
+  def set(key, value, opts \\ []) do
+    ttl = Keyword.get(opts, :ttl, Config.cache_ttl(:killmails))
+
+    case Cachex.put(@cache_name, key, value, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Deletes a value from the cache by key.
+  """
+  @spec del(String.t()) :: :ok | {:error, term()}
+  def del(key) do
+    case Cachex.del(@cache_name, key) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # =============================================================================
   # Killmail Cache Operations
   # =============================================================================
 
@@ -251,6 +291,53 @@ defmodule WandererKills.Cache do
     end
   end
 
+  @doc """
+  Gets killmails for a system (alias for get_system_killmails).
+  """
+  @spec get_killmails_for_system(system_id()) :: cache_result([killmail_id()])
+  def get_killmails_for_system(system_id), do: get_system_killmails(system_id)
+
+  @doc """
+  Gets the kill count for a system.
+  """
+  @spec get_system_kill_count(system_id()) :: cache_result(non_neg_integer())
+  def get_system_kill_count(system_id) do
+    key = "systems:#{system_id}:kill_count"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:ok, 0}
+      {:ok, count} when is_integer(count) -> {:ok, count}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Increments the kill count for a system.
+  """
+  @spec increment_system_kill_count(system_id()) :: :ok | {:error, term()}
+  def increment_system_kill_count(system_id) do
+    key = "systems:#{system_id}:kill_count"
+    ttl = Config.cache_ttl(:system)
+
+    case Cachex.incr(@cache_name, key, 1, initial: 0, ttl: ttl) do
+      {:ok, _new_value} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Decrements the kill count for a system.
+  """
+  @spec decrement_system_kill_count(system_id()) :: :ok | {:error, term()}
+  def decrement_system_kill_count(system_id) do
+    key = "systems:#{system_id}:kill_count"
+
+    case Cachex.decr(@cache_name, key, 1) do
+      {:ok, _new_value} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   # =============================================================================
   # ESI Cache Operations
   # =============================================================================
@@ -395,6 +482,34 @@ defmodule WandererKills.Cache do
     end
   end
 
+  @doc """
+  Gets system information from the cache.
+  """
+  @spec get_system_info(system_id()) :: cache_result(map())
+  def get_system_info(system_id) do
+    key = "esi:system:#{system_id}"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Sets system information in the cache.
+  """
+  @spec set_system_info(system_id(), map()) :: :ok | {:error, term()}
+  def set_system_info(system_id, system_info) do
+    key = "esi:system:#{system_id}"
+    ttl = Config.cache_ttl(:esi)
+
+    case Cachex.put(@cache_name, key, system_info, ttl: ttl) do
+      {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   # =============================================================================
   # Utility Functions
   # =============================================================================
@@ -404,11 +519,11 @@ defmodule WandererKills.Cache do
   """
   @spec clear_namespace(String.t()) :: :ok | {:error, term()}
   def clear_namespace(namespace) do
-    pattern = "#{namespace}:*"
-
-    case Cachex.keys(@cache_name, pattern) do
+    case Cachex.keys(@cache_name) do
       {:ok, keys} ->
-        case Cachex.del(@cache_name, keys) do
+        namespace_keys = Enum.filter(keys, &String.starts_with?(&1, "#{namespace}:"))
+
+        case Cachex.del(@cache_name, namespace_keys) do
           {:ok, _count} -> :ok
           {:error, reason} -> {:error, reason}
         end

@@ -4,9 +4,10 @@ defmodule WandererKills.Parser.Core do
   """
 
   require Logger
-  alias WandererKills.Parser.{CacheHandler, Stats, Flatten}
+  alias WandererKills.Killmails.{CacheHandler, Flatten}
+  alias WandererKills.Observability.Monitoring
   alias WandererKills.Clock
-  alias WandererKills.Cache.Unified, as: Cache
+  alias WandererKills.Cache
   # Config now accessed via WandererKills.Config
 
   @type raw_km :: map()
@@ -34,13 +35,13 @@ defmodule WandererKills.Parser.Core do
       {:ok, kill_data} ->
         case CacheHandler.store_killmail(kill_data) do
           :ok ->
-            Stats.increment_stored()
+            Monitoring.increment_stored()
             {:ok, kill_data}
         end
 
       :older ->
         Logger.debug("[Parser] Skipping older killmail")
-        Stats.increment_skipped()
+        Monitoring.increment_skipped()
         :older
 
       {:error, reason} ->
@@ -98,7 +99,7 @@ defmodule WandererKills.Parser.Core do
           "[Parser] Skipping killmail #{merged["killID"]} - Kill time: #{DateTime.to_iso8601(kill_time)}, Cutoff: #{DateTime.to_iso8601(cutoff)}"
         )
 
-        Stats.increment_skipped()
+        Monitoring.increment_skipped()
         :older
       else
         do_build(Map.put(merged, "kill_time", kill_time))

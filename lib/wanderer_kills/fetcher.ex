@@ -21,7 +21,8 @@ defmodule WandererKills.Fetcher.API do
   """
 
   # Fetcher modules
-  alias WandererKills.Fetcher.Zkb.{KillmailFetcher, ActiveSystemsFetcher}
+  alias WandererKills.External.ZKB.Fetcher, as: KillmailFetcher
+  alias WandererKills.Systems.Fetcher, as: ActiveSystemsFetcher
   alias WandererKills.Fetcher, as: SharedFetcher
 
   #

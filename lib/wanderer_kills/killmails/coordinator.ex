@@ -168,7 +168,7 @@ defmodule WandererKills.Killmails.Coordinator do
 
   @spec enrich_killmail(killmail()) :: {:ok, killmail()} | {:error, term()}
   defp enrich_killmail(killmail) do
-    WandererKills.Parser.Enricher.enrich_killmail(killmail)
+    WandererKills.Killmails.Enricher.enrich_killmail(killmail)
   end
 
   @doc """
@@ -212,7 +212,7 @@ defmodule WandererKills.Killmails.Coordinator do
       step: :start
     })
 
-    case WandererKills.Cache.Specialized.EsiCache.get_killmail(id, hash) do
+    case WandererKills.External.ESI.Client.get_killmail(id, hash) do
       {:ok, full} ->
         Logger.debug("Successfully fetched full killmail from ESI", %{
           killmail_id: id,

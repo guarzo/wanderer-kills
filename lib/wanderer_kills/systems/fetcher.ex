@@ -44,7 +44,7 @@ defmodule WandererKills.Systems.Fetcher do
   require Logger
 
   alias WandererKills.Zkb.Client, as: ZkbClient
-  alias WandererKills.Cache.Unified, as: Cache
+  alias WandererKills.Cache
 
   @type system_id :: pos_integer()
   @type fetch_opts :: [force: boolean()]

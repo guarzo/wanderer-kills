@@ -1,13 +1,13 @@
-defmodule WandererKills.Parser.CsvUtilTest do
+defmodule WandererKills.Shared.CSVTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Parser.CsvUtil
+  alias WandererKills.Shared.CSV
 
-  describe "read_rows/2" do
+  describe "read_file/3" do
     test "handles missing file" do
       parser = fn _row -> %{id: 1, name: "test"} end
 
-      result = CsvUtil.read_rows("nonexistent.csv", parser)
+      result = CSV.read_file("nonexistent.csv", parser)
       assert {:error, _reason} = result
     end
 
@@ -16,7 +16,7 @@ defmodule WandererKills.Parser.CsvUtilTest do
       file_path = "test/fixtures/empty.csv"
       File.write!(file_path, "")
 
-      result = CsvUtil.read_rows(file_path, parser)
+      result = CSV.read_file(file_path, parser)
       assert {:error, :empty_file} = result
 
       File.rm!(file_path)
@@ -27,7 +27,7 @@ defmodule WandererKills.Parser.CsvUtilTest do
       file_path = "test/fixtures/invalid.csv"
       File.write!(file_path, "invalid\"csv,\"content\nunclosed\"quote")
 
-      result = CsvUtil.read_rows(file_path, parser)
+      result = CSV.read_file(file_path, parser)
       assert {:error, :parse_error} = result
 
       File.rm!(file_path)
@@ -38,7 +38,7 @@ defmodule WandererKills.Parser.CsvUtilTest do
       file_path = "test/fixtures/valid.csv"
       File.write!(file_path, "id,name\n1,test1\n2,test2")
 
-      result = CsvUtil.read_rows(file_path, parser)
+      result = CSV.read_file(file_path, parser)
       assert {:ok, records} = result
       assert length(records) == 2
       assert records == [%{id: 1, name: "test1"}, %{id: 2, name: "test2"}]
@@ -52,49 +52,49 @@ defmodule WandererKills.Parser.CsvUtilTest do
       headers = ["id", "name", "value"]
       row = ["1", "test", "100"]
 
-      result = CsvUtil.parse_row(row, headers)
+      result = CSV.parse_row(row, headers)
       assert result == %{"id" => "1", "name" => "test", "value" => "100"}
     end
   end
 
   describe "parse_integer/1" do
     test "parses valid integers" do
-      assert {:ok, 123} = CsvUtil.parse_integer("123")
-      assert {:ok, 0} = CsvUtil.parse_integer("0")
-      assert {:ok, -45} = CsvUtil.parse_integer("-45")
+      assert {:ok, 123} = CSV.parse_integer("123")
+      assert {:ok, 0} = CSV.parse_integer("0")
+      assert {:ok, -45} = CSV.parse_integer("-45")
     end
 
     test "handles invalid integers" do
-      assert {:error, :invalid_integer} = CsvUtil.parse_integer("abc")
-      assert {:error, :invalid_integer} = CsvUtil.parse_integer("12.5")
-      assert {:error, :invalid_integer} = CsvUtil.parse_integer("")
-      assert {:error, :invalid_integer} = CsvUtil.parse_integer(nil)
+      assert {:error, :invalid_integer} = CSV.parse_integer("abc")
+      assert {:error, :invalid_integer} = CSV.parse_integer("12.5")
+      assert {:error, :invalid_integer} = CSV.parse_integer("")
+      assert {:error, :invalid_integer} = CSV.parse_integer(nil)
     end
   end
 
   describe "parse_float/1" do
     test "parses valid floats" do
-      assert {:ok, 123.45} = CsvUtil.parse_float("123.45")
-      assert {:ok, +0.0} = CsvUtil.parse_float("0.0")
-      assert {:ok, -12.34} = CsvUtil.parse_float("-12.34")
+      assert {:ok, 123.45} = CSV.parse_float("123.45")
+      assert {:ok, +0.0} = CSV.parse_float("0.0")
+      assert {:ok, -12.34} = CSV.parse_float("-12.34")
     end
 
     test "handles invalid floats" do
-      assert {:error, :invalid_float} = CsvUtil.parse_float("abc")
-      assert {:error, :invalid_float} = CsvUtil.parse_float("")
-      assert {:error, :invalid_float} = CsvUtil.parse_float(nil)
+      assert {:error, :invalid_float} = CSV.parse_float("abc")
+      assert {:error, :invalid_float} = CSV.parse_float("")
+      assert {:error, :invalid_float} = CSV.parse_float(nil)
     end
   end
 
-  describe "parse_float_with_default/2" do
+  describe "parse_number_with_default/3" do
     test "parses valid floats" do
-      assert 123.45 = CsvUtil.parse_float_with_default("123.45")
-      assert +0.0 = CsvUtil.parse_float_with_default("0.0")
+      assert 123.45 = CSV.parse_number_with_default("123.45", :float, 0.0)
+      assert +0.0 = CSV.parse_number_with_default("0.0", :float, 0.0)
     end
 
     test "returns default for invalid floats" do
-      assert +0.0 = CsvUtil.parse_float_with_default("abc")
-      assert 5.0 = CsvUtil.parse_float_with_default("invalid", 5.0)
+      assert +0.0 = CSV.parse_number_with_default("abc", :float, 0.0)
+      assert 5.0 = CSV.parse_number_with_default("invalid", :float, 5.0)
     end
   end
 end

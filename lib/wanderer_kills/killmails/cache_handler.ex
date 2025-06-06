@@ -4,7 +4,7 @@ defmodule WandererKills.Killmails.CacheHandler do
   """
 
   require Logger
-  alias WandererKills.Cache.Unified, as: Cache
+  alias WandererKills.Cache
 
   @type killmail :: map()
   @type result :: {:ok, killmail()} | {:error, term()}

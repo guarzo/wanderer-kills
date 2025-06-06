@@ -13,8 +13,8 @@ defmodule WandererKills.PreloaderSupervisor do
     children = [
       WandererKills.Preloader.Worker,
       %{
-        id: WandererKills.Fetcher.Zkb.RedisQ,
-        start: {WandererKills.Fetcher.Zkb.RedisQ, :start_link, []},
+        id: WandererKills.External.ZKB.RedisQ,
+        start: {WandererKills.External.ZKB.RedisQ, :start_link, []},
         restart: :permanent,
         type: :worker,
         timeout: :timer.seconds(30)

@@ -24,7 +24,7 @@ defmodule WandererKills.Data do
   # Data Sources API
   alias WandererKills.Zkb.Client, as: ZkbClient
   alias WandererKills.Data.Sources.CsvSource
-  alias WandererKills.Fetcher.Esi.Source, as: EsiSource
+  alias WandererKills.External.ESI.Client, as: EsiSource
 
   # Data Stores API
   alias WandererKills.Data.Stores.KillmailStore

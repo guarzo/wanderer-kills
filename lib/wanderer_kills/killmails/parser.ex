@@ -36,7 +36,8 @@ defmodule WandererKills.Killmails.Parser do
 
   require Logger
 
-  alias WandererKills.Parser.{KillmailStats, KillmailEnricher, KillmailCache}
+  alias WandererKills.Killmails.{Enricher, Cache}
+  alias WandererKills.Observability.Monitoring
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -66,11 +67,11 @@ defmodule WandererKills.Killmails.Parser do
          {:ok, time_checked} <- check_killmail_time(validated, cutoff_time),
          {:ok, built} <- build_killmail_data(time_checked),
          {:ok, enriched} <- enrich_killmail_data(built) do
-      KillmailStats.increment_stored()
+      Monitoring.increment_stored()
       {:ok, enriched}
     else
       {:error, :kill_too_old} ->
-        KillmailStats.increment_skipped()
+        Monitoring.increment_skipped()
         {:ok, :kill_older}
 
       {:error, reason} ->
@@ -236,10 +237,10 @@ defmodule WandererKills.Killmails.Parser do
 
   @spec enrich_killmail_data(killmail()) :: {:ok, killmail()} | {:error, term()}
   defp enrich_killmail_data(killmail) do
-    case KillmailEnricher.enrich_killmail(killmail) do
+    case Enricher.enrich_killmail(killmail) do
       {:ok, enriched} ->
         # Store in cache after successful enrichment
-        KillmailCache.store_killmail(enriched)
+        Cache.store_killmail(enriched)
         {:ok, enriched}
 
       {:error, reason} ->
@@ -249,7 +250,7 @@ defmodule WandererKills.Killmails.Parser do
         )
 
         # Store basic data even if enrichment fails
-        KillmailCache.store_killmail(killmail)
+        Cache.store_killmail(killmail)
         {:ok, killmail}
     end
   end
@@ -258,17 +259,30 @@ defmodule WandererKills.Killmails.Parser do
   defp fetch_full_killmail(killmail_id, zkb) do
     hash = zkb["hash"]
 
-    case WandererKills.Cache.Specialized.EsiCache.get_killmail(killmail_id, hash) do
+    # Try to get from cache first, then fetch from ESI if needed
+    case Cache.get_killmail(killmail_id) do
       {:ok, full_data} ->
         {:ok, full_data}
 
-      {:error, reason} ->
-        Logger.error("Failed to fetch full killmail from ESI",
-          killmail_id: killmail_id,
-          hash: hash,
-          error: reason
-        )
+      {:error, :not_found} ->
+        # Fallback to ZKB client to fetch the killmail
+        case WandererKills.Zkb.Client.fetch_killmail(killmail_id) do
+          {:ok, zkb_data} when is_map(zkb_data) ->
+            # Cache the result
+            Cache.store_killmail(zkb_data)
+            {:ok, zkb_data}
 
+          {:error, reason} ->
+            Logger.error("Failed to fetch full killmail from ZKB",
+              killmail_id: killmail_id,
+              hash: hash,
+              error: reason
+            )
+
+            {:error, reason}
+        end
+
+      {:error, reason} ->
         {:error, reason}
     end
   end

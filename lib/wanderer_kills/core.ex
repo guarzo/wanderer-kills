@@ -22,7 +22,7 @@ defmodule WandererKills.Core do
   """
 
   # Core utilities
-  alias WandererKills.Core.{BatchProcessor, Clock, CircuitBreaker}
+  alias WandererKills.{BatchProcessor, Clock, CircuitBreaker}
   alias WandererKills.{Config, Constants}
 
   #

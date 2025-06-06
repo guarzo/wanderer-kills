@@ -49,6 +49,7 @@ defmodule WandererKills.Observability.Monitoring do
 
   @cache_names [:killmails_cache, :system_cache, :esi_cache]
   @health_check_interval :timer.minutes(5)
+  @summary_interval :timer.minutes(5)
 
   # Client API
 
@@ -153,6 +154,51 @@ defmodule WandererKills.Observability.Monitoring do
     GenServer.call(__MODULE__, {:get_cache_stats, cache_name})
   end
 
+  # Parser statistics functions
+
+  @doc """
+  Increments the count of successfully stored killmails.
+  """
+  @spec increment_stored() :: :ok
+  def increment_stored do
+    :telemetry.execute([:wanderer_kills, :parser, :stored], %{count: 1}, %{})
+    GenServer.cast(__MODULE__, {:increment, :stored})
+  end
+
+  @doc """
+  Increments the count of skipped killmails (too old).
+  """
+  @spec increment_skipped() :: :ok
+  def increment_skipped do
+    :telemetry.execute([:wanderer_kills, :parser, :skipped], %{count: 1}, %{})
+    GenServer.cast(__MODULE__, {:increment, :skipped})
+  end
+
+  @doc """
+  Increments the count of failed killmail parsing attempts.
+  """
+  @spec increment_failed() :: :ok
+  def increment_failed do
+    :telemetry.execute([:wanderer_kills, :parser, :failed], %{count: 1}, %{})
+    GenServer.cast(__MODULE__, {:increment, :failed})
+  end
+
+  @doc """
+  Gets the current parsing statistics.
+  """
+  @spec get_parser_stats() :: {:ok, map()} | {:error, term()}
+  def get_parser_stats do
+    GenServer.call(__MODULE__, :get_parser_stats)
+  end
+
+  @doc """
+  Resets all parser statistics counters to zero.
+  """
+  @spec reset_parser_stats() :: :ok
+  def reset_parser_stats do
+    GenServer.call(__MODULE__, :reset_parser_stats)
+  end
+
   # Telemetry measurement functions (called by TelemetryPoller)
 
   @doc """
@@ -252,7 +298,20 @@ defmodule WandererKills.Observability.Monitoring do
       schedule_health_check()
     end
 
-    {:ok, %{}}
+    # Schedule parser stats summary
+    schedule_parser_summary()
+
+    state = %{
+      parser_stats: %{
+        stored: 0,
+        skipped: 0,
+        failed: 0,
+        total_processed: 0,
+        last_reset: DateTime.utc_now()
+      }
+    }
+
+    {:ok, state}
   end
 
   @impl true
@@ -274,6 +333,38 @@ defmodule WandererKills.Observability.Monitoring do
   end
 
   @impl true
+  def handle_call(:get_parser_stats, _from, state) do
+    {:reply, {:ok, state.parser_stats}, state}
+  end
+
+  @impl true
+  def handle_call(:reset_parser_stats, _from, state) do
+    new_parser_stats = %{
+      stored: 0,
+      skipped: 0,
+      failed: 0,
+      total_processed: 0,
+      last_reset: DateTime.utc_now()
+    }
+
+    new_state = %{state | parser_stats: new_parser_stats}
+    {:reply, :ok, new_state}
+  end
+
+  @impl true
+  def handle_cast({:increment, key}, state) when key in [:stored, :skipped, :failed] do
+    current_stats = state.parser_stats
+
+    new_stats =
+      current_stats
+      |> Map.update!(key, &(&1 + 1))
+      |> Map.update!(:total_processed, &(&1 + 1))
+
+    new_state = %{state | parser_stats: new_stats}
+    {:noreply, new_state}
+  end
+
+  @impl true
   def handle_info(:check_health, state) do
     Logger.debug("[Monitoring] Running periodic health check")
     _health = build_comprehensive_health_status()
@@ -281,10 +372,43 @@ defmodule WandererKills.Observability.Monitoring do
     {:noreply, state}
   end
 
+  @impl true
+  def handle_info(:log_parser_summary, state) do
+    stats = state.parser_stats
+
+    Logger.info(
+      "[Parser] Killmail processing summary - Stored: #{stats.stored}, Skipped: #{stats.skipped}, Failed: #{stats.failed}"
+    )
+
+    # Emit telemetry for the summary
+    :telemetry.execute(
+      [:wanderer_kills, :parser, :summary],
+      %{stored: stats.stored, skipped: stats.skipped, failed: stats.failed},
+      %{}
+    )
+
+    # Reset counters after summary
+    new_parser_stats = %{
+      stored: 0,
+      skipped: 0,
+      failed: 0,
+      total_processed: 0,
+      last_reset: DateTime.utc_now()
+    }
+
+    schedule_parser_summary()
+    new_state = %{state | parser_stats: new_parser_stats}
+    {:noreply, new_state}
+  end
+
   # Private helper functions
 
   defp schedule_health_check do
     Process.send_after(self(), :check_health, @health_check_interval)
+  end
+
+  defp schedule_parser_summary do
+    Process.send_after(self(), :log_parser_summary, @summary_interval)
   end
 
   @spec build_comprehensive_health_status() :: map()

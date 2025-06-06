@@ -25,7 +25,7 @@ defmodule WandererKills.Application do
     base_children = [
       {Task.Supervisor, name: WandererKills.TaskSupervisor},
       {Phoenix.PubSub, name: WandererKills.PubSub},
-      WandererKills.KillmailStore,
+      WandererKills.Killmails.Store,
       # Direct Cachex supervision instead of single-child supervisor
       {Cachex, name: :unified_cache, ttl: WandererKills.Config.cache_ttl(:killmails)},
       WandererKills.Observability.Monitoring,
@@ -33,7 +33,6 @@ defmodule WandererKills.Application do
        scheme: :http,
        plug: WandererKillsWeb.Api,
        options: [port: Application.fetch_env!(:wanderer_kills, :port)]},
-      WandererKills.Parser.Stats,
       {:telemetry_poller,
        measurements: [
          {WandererKills.Observability.Monitoring, :measure_http_requests, []},
@@ -44,8 +43,8 @@ defmodule WandererKills.Application do
        period: :timer.seconds(10)}
     ]
 
-    # Add PreloaderSupervisor to the supervision tree
-    children = [WandererKills.PreloaderSupervisor | base_children]
+    # Add PreloaderSupervisor to the supervision tree (after cache is started)
+    children = base_children ++ [WandererKills.PreloaderSupervisor]
 
     opts = [strategy: :one_for_one, name: WandererKills.Supervisor]
 

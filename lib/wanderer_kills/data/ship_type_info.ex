@@ -7,7 +7,7 @@ defmodule WandererKills.Data.ShipTypeInfo do
   """
 
   require Logger
-  alias WandererKills.Cache.Specialized.EsiCache
+  alias WandererKills.Cache
 
   @doc """
   Gets ship type information from the ESI cache.
@@ -17,7 +17,7 @@ defmodule WandererKills.Data.ShipTypeInfo do
   """
   @spec get_ship_type(integer()) :: {:ok, map()} | {:error, term()}
   def get_ship_type(type_id) when is_integer(type_id) and type_id > 0 do
-    EsiCache.get_type_info(type_id)
+    Cache.get_type_info(type_id)
   end
 
   def get_ship_type(_type_id), do: {:error, :invalid_type_id}

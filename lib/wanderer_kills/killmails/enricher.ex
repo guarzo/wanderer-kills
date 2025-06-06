@@ -26,7 +26,7 @@ defmodule WandererKills.Killmails.Enricher do
   """
 
   require Logger
-  alias WandererKills.Cache.Specialized.EsiCache
+  alias WandererKills.Cache
 
   @type killmail :: map()
   @type enrichment_option :: :characters | :corporations | :alliances | :ship_types | :locations
@@ -109,7 +109,7 @@ defmodule WandererKills.Killmails.Enricher do
   """
   @spec enrich_character_data(integer(), map()) :: map()
   def enrich_character_data(character_id, base_data \\ %{}) when is_integer(character_id) do
-    case EsiCache.get_character_info(character_id) do
+    case Cache.get_character_info(character_id) do
       {:ok, character_info} ->
         Logger.debug("Enriched character data", character_id: character_id)
 
@@ -140,7 +140,7 @@ defmodule WandererKills.Killmails.Enricher do
   """
   @spec enrich_corporation_data(integer(), map()) :: map()
   def enrich_corporation_data(corporation_id, base_data \\ %{}) when is_integer(corporation_id) do
-    case EsiCache.get_corporation_info(corporation_id) do
+    case Cache.get_corporation_info(corporation_id) do
       {:ok, corp_info} ->
         Logger.debug("Enriched corporation data", corporation_id: corporation_id)
 
@@ -173,7 +173,7 @@ defmodule WandererKills.Killmails.Enricher do
   def enrich_alliance_data(nil, base_data), do: base_data
 
   def enrich_alliance_data(alliance_id, base_data) when is_integer(alliance_id) do
-    case EsiCache.get_alliance_info(alliance_id) do
+    case Cache.get_alliance_info(alliance_id) do
       {:ok, alliance_info} ->
         Logger.debug("Enriched alliance data", alliance_id: alliance_id)
 
@@ -204,7 +204,7 @@ defmodule WandererKills.Killmails.Enricher do
   """
   @spec enrich_ship_type_data(integer(), map()) :: map()
   def enrich_ship_type_data(ship_type_id, base_data \\ %{}) when is_integer(ship_type_id) do
-    case EsiCache.get_type_info(ship_type_id) do
+    case Cache.get_type_info(ship_type_id) do
       {:ok, type_info} ->
         Logger.debug("Enriched ship type data", ship_type_id: ship_type_id)
 
@@ -260,7 +260,7 @@ defmodule WandererKills.Killmails.Enricher do
   defp enrich_location_data(%{"solar_system_id" => system_id} = killmail, options)
        when is_integer(system_id) do
     if :locations in options do
-      case EsiCache.get_system_info(system_id) do
+      case Cache.get_system_info(system_id) do
         {:ok, system_info} ->
           Logger.debug("Enriched location data", solar_system_id: system_id)
 

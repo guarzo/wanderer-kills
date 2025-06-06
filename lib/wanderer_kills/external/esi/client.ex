@@ -1,33 +1,33 @@
 defmodule WandererKills.External.ESI.Client do
   @moduledoc """
-  ESI-based ship type data fetcher implementation.
+  ESI (EVE Swagger Interface) API client for WandererKills.
 
-  This module handles fetching ship type data directly from the EVE Swagger
-  Interface (ESI) API and is organized under the ESI fetcher namespace
-  for better source-specific organization.
+  This module handles fetching data directly from the EVE Swagger
+  Interface (ESI) API, including ship type data and killmail details.
 
   ## Features
 
   - Fetches ship group and type data from ESI API
+  - Fetches killmail data using killmail ID and hash
   - Handles batch processing with configurable concurrency
-  - Integrates with existing ESI cache infrastructure
+  - Integrates with existing cache infrastructure
   - Supports partial updates by ship group
 
   ## Usage
 
   ```elixir
-  # Use the behaviour interface
-  alias WandererKills.Data.Sources.EsiSource
+  # Use the behaviour interface for ship types
+  alias WandererKills.External.ESI.Client
 
-  case EsiSource.update() do
+  case Client.update() do
     :ok -> Logger.info("ESI update successful")
-    {:error, reason} -> Logger.error("ESI update failed: {inspect(reason)}")
+    {:error, reason} -> Logger.error("ESI update failed: \#{inspect(reason)}")
   end
 
-  # Update specific ship groups
-  case EsiSource.update(group_ids: [6, 7, 9]) do
-    :ok -> Logger.info("Partial ESI update successful")
-    {:error, reason} -> Logger.error("Partial ESI update failed: {inspect(reason)}")
+  # Fetch a specific killmail
+  case Client.get_killmail(killmail_id, killmail_hash) do
+    {:ok, killmail} -> Logger.info("Killmail fetched successfully")
+    {:error, reason} -> Logger.error("Failed to fetch killmail: \#{inspect(reason)}")
   end
   ```
   """
@@ -36,12 +36,139 @@ defmodule WandererKills.External.ESI.Client do
 
   require Logger
   alias WandererKills.Constants
+  alias WandererKills.Config
   alias WandererKills.BatchProcessor
   alias WandererKills.TaskSupervisor
-  alias WandererKills.Cache.Specialized.EsiCache
+  alias WandererKills.Cache
+  alias WandererKills.Http.Client, as: HttpClient
 
   # Default ship group IDs that contain ship types
   @ship_group_ids [6, 7, 9, 11, 16, 17, 23]
+
+  defp http_client, do: Application.get_env(:wanderer_kills, :http_client, HttpClient)
+
+  @doc """
+  Base URL for ESI API.
+  """
+  def base_url do
+    Config.esi().base_url
+  end
+
+  @doc """
+  Ensures ESI data is cached by fetching it from the API if not present.
+  """
+  @spec ensure_cached(atom(), integer()) :: :ok | {:error, term()}
+  def ensure_cached(:group, group_id) do
+    case Cache.get_group_info(group_id) do
+      {:ok, _group_info} ->
+        :ok
+
+      {:error, :not_found} ->
+        fetch_and_cache_group_info(group_id)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def ensure_cached(:type, type_id) do
+    case Cache.get_type_info(type_id) do
+      {:ok, _type_info} ->
+        :ok
+
+      {:error, :not_found} ->
+        fetch_and_cache_type_info(type_id)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp fetch_and_cache_group_info(group_id) do
+    url = "#{base_url()}/universe/groups/#{group_id}/"
+
+    case http_client().get_with_rate_limit(url, []) do
+      {:ok, %{body: body}} ->
+        group_info = %{
+          group_id: group_id,
+          name: Map.get(body, "name"),
+          category_id: Map.get(body, "category_id"),
+          published: Map.get(body, "published"),
+          types: Map.get(body, "types", [])
+        }
+
+        case Cache.set_group_info(group_id, group_info) do
+          :ok -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to fetch group info for #{group_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp fetch_and_cache_type_info(type_id) do
+    url = "#{base_url()}/universe/types/#{type_id}/"
+
+    case http_client().get_with_rate_limit(url, []) do
+      {:ok, %{body: body}} ->
+        type_info = %{
+          type_id: type_id,
+          name: Map.get(body, "name"),
+          description: Map.get(body, "description"),
+          group_id: Map.get(body, "group_id"),
+          market_group_id: Map.get(body, "market_group_id"),
+          mass: Map.get(body, "mass"),
+          packaged_volume: Map.get(body, "packaged_volume"),
+          portion_size: Map.get(body, "portion_size"),
+          published: Map.get(body, "published"),
+          radius: Map.get(body, "radius"),
+          volume: Map.get(body, "volume")
+        }
+
+        case Cache.set_type_info(type_id, type_info) do
+          :ok -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to fetch type info for #{type_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Fetches a killmail from the ESI API using killmail ID and hash.
+
+  ## Parameters
+  - `killmail_id` - The killmail ID (integer)
+  - `killmail_hash` - The killmail hash (string)
+
+  ## Returns
+  - `{:ok, killmail}` - Successfully fetched killmail data
+  - `{:error, reason}` - Failed to fetch killmail
+
+  ## Example
+  ```elixir
+  case WandererKills.External.ESI.Client.get_killmail(123456, "abc123def") do
+    {:ok, killmail} ->
+      # Process the killmail data
+      IO.inspect(killmail)
+    {:error, reason} ->
+      Logger.error("Failed to fetch killmail: \#{inspect(reason)}")
+  end
+  ```
+  """
+  @spec get_killmail(integer(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_killmail(killmail_id, killmail_hash) do
+    url = "#{base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
+
+    case http_client().get_with_rate_limit(url, []) do
+      {:ok, %{body: body}} -> {:ok, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   @impl true
   def source_name, do: "ESI"
@@ -68,7 +195,7 @@ defmodule WandererKills.External.ESI.Client do
   def parse(ship_groups) when is_list(ship_groups) do
     # Parse ship group data into ship types
     # Note: Individual ship types are automatically cached during ESI fetch
-    # via EsiCache.get_type_info when we fetch type details
+    # via Cache.get_type_info when we fetch type details
 
     # Extract all type IDs from the groups
     type_ids =
@@ -159,7 +286,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   defp fetch_group_info(group_id) do
-    case EsiCache.ensure_cached(:group, group_id) do
+    case ensure_cached(:group, group_id) do
       :ok ->
         Logger.debug("Successfully fetched group info for group #{group_id}")
         :ok
@@ -171,7 +298,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   defp fetch_group_types(group_id) do
-    case EsiCache.get_group_info(group_id) do
+    case Cache.get_group_info(group_id) do
       {:ok, group_info} ->
         handle_group_info(group_id, group_info)
 
@@ -210,7 +337,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   defp fetch_ship_type_details(type_id) do
-    case EsiCache.ensure_cached(:type, type_id) do
+    case ensure_cached(:type, type_id) do
       :ok ->
         Logger.debug("Successfully fetched ship type #{type_id}")
         :ok
@@ -224,7 +351,7 @@ defmodule WandererKills.External.ESI.Client do
   defp collect_ship_types(type_ids) do
     type_ids
     |> Enum.map(fn type_id ->
-      case EsiCache.get_type_info(type_id) do
+      case Cache.get_type_info(type_id) do
         {:ok, type_info} -> type_info
         {:error, _reason} -> nil
       end
@@ -243,7 +370,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   defp extract_types_from_group(group_id) do
-    case EsiCache.get_group_info(group_id) do
+    case Cache.get_group_info(group_id) do
       {:ok, %{types: types}} when is_list(types) -> types
       _ -> []
     end

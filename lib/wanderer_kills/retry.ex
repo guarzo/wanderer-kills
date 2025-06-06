@@ -45,7 +45,7 @@ defmodule WandererKills.Retry do
 
     max_retries = Keyword.get(opts, :max_retries, Map.get(http_config, :max_retries, 3))
     base_delay = Keyword.get(opts, :base_delay, Map.get(http_config, :base_delay, 1000))
-    max_delay = Keyword.get(opts, :max_delay, Map.get(http_config, :max_delay, 30000))
+    max_delay = Keyword.get(opts, :max_delay, Map.get(http_config, :max_delay, 30_000))
     operation_name = Keyword.get(opts, :operation_name, "operation")
 
     rescue_only =

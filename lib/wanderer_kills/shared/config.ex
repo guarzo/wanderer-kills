@@ -159,6 +159,56 @@ defmodule WandererKills.Config do
   @spec clock() :: term()
   def clock, do: get(:clock)
 
+  @doc """
+  Gets cache configuration - returns entire cache config map.
+  """
+  @spec cache() :: map()
+  def cache, do: get(:cache, %{})
+
+  @doc """
+  Gets cache configuration for a specific cache type and key.
+
+  ## Parameters
+  - `cache_type` - Type of cache (:killmails, :system, :esi)
+  - `key` - Configuration key (:ttl, etc.)
+  """
+  @spec cache(atom(), atom()) :: term()
+  def cache(cache_type, key) do
+    get([:cache, cache_type, key])
+  end
+
+  @doc """
+  Gets the recent fetch threshold for systems.
+  """
+  @spec recent_fetch_threshold() :: pos_integer()
+  def recent_fetch_threshold do
+    get(:cache_system_recent_fetch_threshold, WandererKills.Constants.threshold(:recent_fetch))
+  end
+
+  @doc """
+  Gets killmail store configuration.
+  """
+  @spec killmail_store() :: map()
+  def killmail_store, do: get(:killmail_store, %{})
+
+  @doc """
+  Gets parser configuration (alias for parser_config).
+  """
+  @spec parser() :: map()
+  def parser, do: parser_config()
+
+  @doc """
+  Gets enricher configuration (alias for enricher_config).
+  """
+  @spec enricher() :: map()
+  def enricher, do: enricher_config()
+
+  @doc """
+  Gets ESI configuration (alias for esi_config).
+  """
+  @spec esi() :: map()
+  def esi, do: esi_config()
+
   # Private helper function for nested key access
   defp get_nested(nil, _keys, default), do: default
   defp get_nested(value, [], _default), do: value

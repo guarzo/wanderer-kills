@@ -4,6 +4,8 @@ import Config
 config :wanderer_kills,
   # Use mock HTTP client for testing
   http_client: WandererKills.MockHttpClient,
+  # Use mock ZKB client for testing
+  zkb_client: WandererKills.Zkb.Client.Mock,
   # Use test cache names
   killmails_cache_name: :wanderer_test_killmails_cache,
   system_cache_name: :wanderer_test_system_cache,

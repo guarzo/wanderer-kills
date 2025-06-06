@@ -1,7 +1,7 @@
-defmodule WandererKills.KillmailStoreTest do
+defmodule WandererKills.Killmails.StoreTest do
   use WandererKills.TestCase
 
-  alias WandererKills.KillmailStore
+  alias WandererKills.Killmails.Store
   alias WandererKills.TestHelpers
 
   @system_id_1 30_000_142
@@ -34,81 +34,81 @@ defmodule WandererKills.KillmailStoreTest do
   setup do
     WandererKills.TestHelpers.clear_all_caches()
     # Clean up ETS tables before each test
-    KillmailStore.cleanup_tables()
+    Store.cleanup_tables()
     :ok
   end
 
   describe "killmail operations" do
     test "can store and retrieve a killmail" do
       killmail = @test_killmail_1
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      assert {:ok, ^killmail} = KillmailStore.get_killmail(12_345)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      assert {:ok, ^killmail} = Store.get_killmail(12_345)
     end
 
     test "returns error for non-existent killmail" do
-      assert {:error, :not_found} = KillmailStore.get_killmail(999)
+      assert {:error, :not_found} = Store.get_killmail(999)
     end
 
     test "can delete a killmail" do
       killmail = TestHelpers.create_test_killmail(123)
-      assert :ok = KillmailStore.store_killmail(killmail)
-      assert :ok = KillmailStore.delete_killmail(123)
-      assert {:error, :not_found} = KillmailStore.get_killmail(123)
+      assert :ok = Store.store_killmail(killmail)
+      assert :ok = Store.delete_killmail(123)
+      assert {:error, :not_found} = Store.get_killmail(123)
     end
   end
 
   describe "system operations" do
     test "can store and retrieve system killmails" do
-      assert :ok = KillmailStore.add_system_killmail(30_000_142, 123)
-      assert :ok = KillmailStore.add_system_killmail(30_000_142, 456)
-      assert {:ok, killmail_ids} = KillmailStore.get_killmails_for_system(30_000_142)
+      assert :ok = Store.add_system_killmail(30_000_142, 123)
+      assert :ok = Store.add_system_killmail(30_000_142, 456)
+      assert {:ok, killmail_ids} = Store.get_killmails_for_system(30_000_142)
       assert Enum.sort(killmail_ids) == [123, 456]
     end
 
     test "returns empty list for system with no killmails" do
-      assert {:ok, []} = KillmailStore.get_killmails_for_system(30_000_142)
+      assert {:ok, []} = Store.get_killmails_for_system(30_000_142)
     end
 
     test "can remove killmail from system" do
       _killmail = TestHelpers.create_test_killmail(123)
-      assert :ok = KillmailStore.add_system_killmail(30_000_142, 123)
-      assert :ok = KillmailStore.remove_system_killmail(30_000_142, 123)
-      assert {:ok, []} = KillmailStore.get_killmails_for_system(30_000_142)
+      assert :ok = Store.add_system_killmail(30_000_142, 123)
+      assert :ok = Store.remove_system_killmail(30_000_142, 123)
+      assert {:ok, []} = Store.get_killmails_for_system(30_000_142)
     end
   end
 
   describe "kill count operations" do
     test "can increment and get system kill count" do
-      assert :ok = KillmailStore.increment_system_kill_count(30_000_142)
-      assert :ok = KillmailStore.increment_system_kill_count(30_000_142)
-      assert {:ok, 2} = KillmailStore.get_system_kill_count(30_000_142)
+      assert :ok = Store.increment_system_kill_count(30_000_142)
+      assert :ok = Store.increment_system_kill_count(30_000_142)
+      assert {:ok, 2} = Store.get_system_kill_count(30_000_142)
     end
 
     test "returns 0 for system with no kills" do
-      assert {:ok, 0} = KillmailStore.get_system_kill_count(30_000_142)
+      assert {:ok, 0} = Store.get_system_kill_count(30_000_142)
     end
   end
 
   describe "fetch timestamp operations" do
     test "can set and get system fetch timestamp" do
       timestamp = DateTime.utc_now()
-      assert :ok = KillmailStore.set_system_fetch_timestamp(30_000_142, timestamp)
-      assert {:ok, ^timestamp} = KillmailStore.get_system_fetch_timestamp(30_000_142)
+      assert :ok = Store.set_system_fetch_timestamp(30_000_142, timestamp)
+      assert {:ok, ^timestamp} = Store.get_system_fetch_timestamp(30_000_142)
     end
 
     test "returns error for system with no fetch timestamp" do
-      assert {:error, :not_found} = KillmailStore.get_system_fetch_timestamp(30_000_142)
+      assert {:error, :not_found} = Store.get_system_fetch_timestamp(30_000_142)
     end
   end
 
   describe "basic functionality" do
     test "can insert and fetch events for a client" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
-      Process.sleep(10)
-      {:ok, events} = KillmailStore.fetch_for_client("client1", [@system_id_1])
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_2)
+      Process.sleep(50)
+      {:ok, events} = Store.fetch_for_client("client1", [@system_id_1])
       assert length(events) == 2
 
       event_ids = Enum.map(events, &elem(&1, 0))
@@ -132,7 +132,7 @@ defmodule WandererKills.KillmailStoreTest do
       Phoenix.PubSub.subscribe(WandererKills.PubSub, "system:#{@system_id_1}")
 
       # Insert an event
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
 
       # Should receive PubSub message
       assert_receive {:new_killmail, @system_id_1, killmail}
@@ -142,22 +142,22 @@ defmodule WandererKills.KillmailStoreTest do
 
   describe "offset tracking" do
     test "client offsets prevent duplicate fetches" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
-      Process.sleep(10)
-      {:ok, events_1} = KillmailStore.fetch_for_client("client1", [@system_id_1])
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_2)
+      Process.sleep(50)
+      {:ok, events_1} = Store.fetch_for_client("client1", [@system_id_1])
       assert length(events_1) == 2
-      {:ok, events_2} = KillmailStore.fetch_for_client("client1", [@system_id_1])
+      {:ok, events_2} = Store.fetch_for_client("client1", [@system_id_1])
       assert events_2 == []
     end
 
     test "fetch_one_event returns single event and updates offset" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
 
       {:ok, {event_id_1, sys_id, killmail_1}} =
-        KillmailStore.fetch_one_event("client1", [@system_id_1])
+        Store.fetch_one_event("client1", [@system_id_1])
 
       assert event_id_1 > 0
       assert sys_id == @system_id_1
@@ -167,39 +167,39 @@ defmodule WandererKills.KillmailStoreTest do
 
   describe "multi-client support" do
     test "different clients have independent offsets" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
-      Process.sleep(10)
-      {:ok, events_1} = KillmailStore.fetch_for_client("client1", [@system_id_1])
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_2)
+      Process.sleep(50)
+      {:ok, events_1} = Store.fetch_for_client("client1", [@system_id_1])
       assert length(events_1) == 2
-      {:ok, events_2} = KillmailStore.fetch_for_client("client2", [@system_id_1])
+      {:ok, events_2} = Store.fetch_for_client("client2", [@system_id_1])
       assert length(events_2) == 2
     end
 
     test "clients can track different systems independently" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_2, @test_killmail_3)
-      Process.sleep(10)
-      {:ok, sys1_events} = KillmailStore.fetch_for_client("client1", [@system_id_1])
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      :ok = Store.insert_event(@system_id_2, @test_killmail_3)
+      Process.sleep(50)
+      {:ok, sys1_events} = Store.fetch_for_client("client1", [@system_id_1])
       assert length(sys1_events) == 1
-      {:ok, sys2_events} = KillmailStore.fetch_for_client("client2", [@system_id_2])
+      {:ok, sys2_events} = Store.fetch_for_client("client2", [@system_id_2])
       assert length(sys2_events) == 1
     end
   end
 
   describe "system filtering" do
     test "only returns events for requested systems" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_2, @test_killmail_3)
-      Process.sleep(10)
-      {:ok, sys1_events} = KillmailStore.fetch_for_client("client1", [@system_id_1])
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_2)
+      Process.sleep(50)
+      :ok = Store.insert_event(@system_id_2, @test_killmail_3)
+      Process.sleep(50)
+      {:ok, sys1_events} = Store.fetch_for_client("client1", [@system_id_1])
       assert length(sys1_events) == 2
-      {:ok, sys2_events} = KillmailStore.fetch_for_client("client1", [@system_id_2])
+      {:ok, sys2_events} = Store.fetch_for_client("client1", [@system_id_2])
       assert length(sys2_events) == 1
     end
   end
@@ -209,20 +209,20 @@ defmodule WandererKills.KillmailStoreTest do
       client_id = "empty-systems-client"
 
       # Insert events
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
 
       # Fetch with empty system list
-      {:ok, events} = KillmailStore.fetch_for_client(client_id, [])
+      {:ok, events} = Store.fetch_for_client(client_id, [])
       assert events == []
 
       # fetch_one with empty system list
-      assert :empty = KillmailStore.fetch_one_event(client_id, [])
+      assert :empty = Store.fetch_one_event(client_id, [])
     end
 
     test "handles non-existent client" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      {:ok, events} = KillmailStore.fetch_for_client("new_client", [@system_id_1])
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      {:ok, events} = Store.fetch_for_client("new_client", [@system_id_1])
       assert length(events) == 1
     end
 
@@ -231,24 +231,24 @@ defmodule WandererKills.KillmailStoreTest do
       non_existent_system = 99_999_999
 
       # Insert events for existing system
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
 
       # Fetch for non-existent system
-      {:ok, events} = KillmailStore.fetch_for_client(client_id, [non_existent_system])
+      {:ok, events} = Store.fetch_for_client(client_id, [non_existent_system])
       assert events == []
 
       # fetch_one for non-existent system
-      assert :empty = KillmailStore.fetch_one_event(client_id, [non_existent_system])
+      assert :empty = Store.fetch_one_event(client_id, [non_existent_system])
     end
   end
 
   describe "event ordering" do
     test "events are returned in chronological order" do
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      Process.sleep(10)
-      :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
-      Process.sleep(10)
-      {:ok, events} = KillmailStore.fetch_for_client("client1", [@system_id_1])
+      :ok = Store.insert_event(@system_id_1, @test_killmail_1)
+      Process.sleep(50)
+      :ok = Store.insert_event(@system_id_1, @test_killmail_2)
+      Process.sleep(50)
+      {:ok, events} = Store.fetch_for_client("client1", [@system_id_1])
       assert length(events) == 2
       [event1, event2] = events
       assert elem(event1, 0) < elem(event2, 0)
