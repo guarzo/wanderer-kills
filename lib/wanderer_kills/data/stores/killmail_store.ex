@@ -314,11 +314,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
       sorted_events = Enum.sort_by(events, &elem(&1, 0))
 
       # Update client offsets for each system
-      updated_offsets =
-        Enum.reduce(sorted_events, client_offsets, fn {event_id, sys_id, _}, acc ->
-          current_offset = Map.get(acc, sys_id, 0)
-          if event_id > current_offset, do: Map.put(acc, sys_id, event_id), else: acc
-        end)
+      updated_offsets = update_client_offsets(sorted_events, client_offsets)
 
       # Store updated offsets
       :ets.insert(:client_offsets, {client_id, updated_offsets})
@@ -336,44 +332,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
     if Enum.empty?(system_ids) do
       {:reply, :empty, state}
     else
-      # Create conditions for each system
-      conditions =
-        Enum.map(system_ids, fn sys_id ->
-          {:andalso, {:==, :"$2", sys_id},
-           {:>, :"$1", get_offset_for_system(sys_id, client_offsets)}}
-        end)
-
-      # Build the match specification guard
-      guard =
-        case conditions do
-          [single] -> single
-          multiple -> List.to_tuple([:orelse | multiple])
-        end
-
-      # Create match specification for :ets.select
-      match_spec = [
-        {
-          {:"$1", :"$2", :"$3"},
-          [guard],
-          [{{:"$1", :"$2", :"$3"}}]
-        }
-      ]
-
-      # Use :ets.select to get matching events
-      case :ets.select(:killmail_events, match_spec, 1) do
-        {[{event_id, sys_id, km}], _continuation} ->
-          # Update offset for this system only
-          updated_offsets = Map.put(client_offsets, sys_id, event_id)
-          :ets.insert(:client_offsets, {client_id, updated_offsets})
-
-          {:reply, {:ok, {event_id, sys_id, km}}, state}
-
-        {[], _continuation} ->
-          {:reply, :empty, state}
-
-        :"$end_of_table" ->
-          {:reply, :empty, state}
-      end
+      fetch_one_event(client_id, system_ids, client_offsets, state)
     end
   end
 
@@ -494,6 +453,47 @@ defmodule WandererKills.Data.Stores.KillmailStore do
 
   # Private Functions
 
+  defp fetch_one_event(client_id, system_ids, client_offsets, state) do
+    # Create conditions for each system
+    conditions =
+      Enum.map(system_ids, fn sys_id ->
+        {:andalso, {:==, :"$2", sys_id},
+         {:>, :"$1", get_offset_for_system(sys_id, client_offsets)}}
+      end)
+
+    # Build the match specification guard
+    guard =
+      case conditions do
+        [single] -> single
+        multiple -> List.to_tuple([:orelse | multiple])
+      end
+
+    # Create match specification for :ets.select
+    match_spec = [
+      {
+        {:"$1", :"$2", :"$3"},
+        [guard],
+        [{{:"$1", :"$2", :"$3"}}]
+      }
+    ]
+
+    # Use :ets.select to get matching events
+    case :ets.select(:killmail_events, match_spec, 1) do
+      {[{event_id, sys_id, km}], _continuation} ->
+        # Update offset for this system only
+        updated_offsets = Map.put(client_offsets, sys_id, event_id)
+        :ets.insert(:client_offsets, {client_id, updated_offsets})
+
+        {:reply, {:ok, {event_id, sys_id, km}}, state}
+
+      {[], _continuation} ->
+        {:reply, :empty, state}
+
+      :"$end_of_table" ->
+        {:reply, :empty, state}
+    end
+  end
+
   @spec get_client_offsets(client_id()) :: client_offsets()
   defp get_client_offsets(client_id) do
     case :ets.lookup(:client_offsets, client_id) do
@@ -505,6 +505,15 @@ defmodule WandererKills.Data.Stores.KillmailStore do
   @spec get_offset_for_system(system_id(), client_offsets()) :: event_id()
   defp get_offset_for_system(system_id, offsets) do
     Map.get(offsets, system_id, 0)
+  end
+
+  defp update_client_offsets(sorted_events, client_offsets) do
+    Enum.reduce(sorted_events, client_offsets, &update_offset_for_event/2)
+  end
+
+  defp update_offset_for_event({event_id, sys_id, _}, acc) do
+    current_offset = Map.get(acc, sys_id, 0)
+    if event_id > current_offset, do: Map.put(acc, sys_id, event_id), else: acc
   end
 
   @spec schedule_garbage_collection() :: :ok

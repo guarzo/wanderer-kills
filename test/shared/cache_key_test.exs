@@ -85,9 +85,11 @@ defmodule WandererKills.CacheKeyTest do
       case Cache.stats() do
         {:ok, stats} ->
           assert is_map(stats)
+
         {:error, :stats_disabled} ->
           # Stats may be disabled in test environment, which is acceptable
           assert true
+
         {:error, reason} ->
           flunk("Unexpected error getting cache stats: #{inspect(reason)}")
       end

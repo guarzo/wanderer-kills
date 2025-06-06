@@ -20,7 +20,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
       byte_size(client_id) == 0 ->
         {:error, :client_id_empty}
 
-      byte_size(client_id) > Constants.validation(:client_id_max_length) ->
+      byte_size(client_id) > 100 ->
         {:error, :client_id_too_long}
 
       not String.match?(client_id, ~r/^[a-zA-Z0-9_-]+$/) ->
@@ -50,8 +50,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   defp validate_system_ids(_), do: {:error, :systems_invalid_type}
 
   defp validate_system_id(system_id) when is_integer(system_id) do
-    if system_id >= Constants.validation(:system_id_min) and
-         system_id <= Constants.validation(:system_id_max) do
+    if system_id >= 30_000_000 and system_id <= Constants.validation(:max_system_id) do
       {:ok, system_id}
     else
       {:error, :system_id_out_of_range}
@@ -126,9 +125,14 @@ defmodule WandererKillsWeb.Api.KillfeedController do
 
   def next(conn, %{"client_id" => client_id, "systems" => systems}) do
     with {:ok, valid_client_id} <- validate_client_id(client_id),
-         {:ok, valid_systems} <- validate_system_ids(systems),
-         {:ok, event} <- Store.fetch_one_event(valid_client_id, valid_systems) do
-      send_json_resp(conn, 200, transform_event(event))
+         {:ok, valid_systems} <- validate_system_ids(systems) do
+      case Store.fetch_one_event(valid_client_id, valid_systems) do
+        {:ok, event} ->
+          send_json_resp(conn, 200, transform_event(event))
+
+        :empty ->
+          send_resp(conn, 204, "")
+      end
     else
       {:error, reason} ->
         handle_error(conn, reason)

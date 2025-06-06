@@ -28,12 +28,12 @@ defmodule WandererKills.Esi.Data.Types do
   """
 
   @type t ::
-          CharacterInfo.t()
-          | CorporationInfo.t()
-          | AllianceInfo.t()
-          | TypeInfo.t()
-          | GroupInfo.t()
-          | SystemInfo.t()
+          __MODULE__.CharacterInfo.t()
+          | __MODULE__.CorporationInfo.t()
+          | __MODULE__.AllianceInfo.t()
+          | __MODULE__.TypeInfo.t()
+          | __MODULE__.GroupInfo.t()
+          | __MODULE__.SystemInfo.t()
 
   defmodule CharacterInfo do
     @moduledoc """

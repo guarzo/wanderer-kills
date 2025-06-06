@@ -36,17 +36,7 @@ defmodule WandererKills.External.ZKB.Fetcher do
 
     case actual_client.fetch_system_killmails(system_id) do
       {:ok, killmails} when is_list(killmails) ->
-        Enum.each(killmails, fn killmail ->
-          if is_map(killmail) do
-            Store.store_killmail(killmail)
-            killmail_id = killmail["killID"] || killmail["killmail_id"]
-
-            if killmail_id do
-              Store.add_system_killmail(system_id, killmail_id)
-            end
-          end
-        end)
-
+        Enum.each(killmails, &process_killmail(&1, system_id))
         {:ok, killmails}
 
       error ->
@@ -56,5 +46,20 @@ defmodule WandererKills.External.ZKB.Fetcher do
 
   defp get_client(client) do
     client || ZkbClient
+  end
+
+  defp process_killmail(killmail, system_id) do
+    if is_map(killmail) do
+      Store.store_killmail(killmail)
+      store_system_killmail_if_valid(killmail, system_id)
+    end
+  end
+
+  defp store_system_killmail_if_valid(killmail, system_id) do
+    killmail_id = killmail["killID"] || killmail["killmail_id"]
+
+    if killmail_id do
+      Store.add_system_killmail(system_id, killmail_id)
+    end
   end
 end
