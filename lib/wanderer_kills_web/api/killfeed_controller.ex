@@ -2,7 +2,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   @moduledoc """
   Controller for handling killfeed polling and real-time event access.
 
-  Integrates with WandererKills.KillmailStore to provide:
+  Integrates with WandererKills.Killmails.Store to provide:
   - Batch polling for multiple events
   - Single event fetching with client offset tracking
   - Integration with existing logging and error handling patterns
@@ -11,7 +11,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   require Logger
   import Plug.Conn
 
-  alias WandererKills.KillmailStore
+  alias WandererKills.Killmails.Store
   alias WandererKills.Constants
 
   # Client ID validation
@@ -106,7 +106,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   def poll(conn, %{"client_id" => client_id, "systems" => systems}) do
     with {:ok, valid_client_id} <- validate_client_id(client_id),
          {:ok, valid_systems} <- validate_system_ids(systems),
-         {:ok, events} <- KillmailStore.fetch_for_client(valid_client_id, valid_systems) do
+         {:ok, events} <- Store.fetch_for_client(valid_client_id, valid_systems) do
       if Enum.empty?(events) do
         send_resp(conn, 204, "")
       else
@@ -127,7 +127,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   def next(conn, %{"client_id" => client_id, "systems" => systems}) do
     with {:ok, valid_client_id} <- validate_client_id(client_id),
          {:ok, valid_systems} <- validate_system_ids(systems),
-         {:ok, event} <- KillmailStore.fetch_one_event(valid_client_id, valid_systems) do
+         {:ok, event} <- Store.fetch_one_event(valid_client_id, valid_systems) do
       send_json_resp(conn, 200, transform_event(event))
     else
       {:error, reason} ->

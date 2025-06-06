@@ -5,9 +5,9 @@ defmodule WandererKills.Parser.Core do
 
   require Logger
   alias WandererKills.Parser.{CacheHandler, Stats, Flatten}
-  alias WandererKills.Core.Clock
+  alias WandererKills.Clock
   alias WandererKills.Cache.Unified, as: Cache
-  alias WandererKills.Core.Config
+  # Config now accessed via WandererKills.Config
 
   @type raw_km :: map()
   @type merged_km :: map()
@@ -248,7 +248,7 @@ defmodule WandererKills.Parser.Core do
   """
   @spec get_cutoff_time() :: DateTime.t()
   def get_cutoff_time do
-    cutoff_seconds = Config.parser().cutoff_seconds
+    cutoff_seconds = WandererKills.Config.parser().cutoff_seconds
     Clock.seconds_ago(cutoff_seconds)
   end
 

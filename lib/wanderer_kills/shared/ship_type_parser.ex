@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.ShipTypeParser do
+defmodule WandererKills.ShipTypeParser do
   @moduledoc """
   Parser for EVE Online ship type data from the official data dump.
   Uses invTypes.csv and invGroups.csv files from fuzzwork.co.uk.

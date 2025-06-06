@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.TimeHandler do
+defmodule WandererKills.TimeHandler do
   @moduledoc """
   Handles time-related operations for killmails.
   """

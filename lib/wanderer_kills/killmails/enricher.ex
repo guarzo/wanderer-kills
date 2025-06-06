@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.KillmailEnricher do
+defmodule WandererKills.Killmails.Enricher do
   @moduledoc """
   Enrichment functionality for parsed killmail data.
 

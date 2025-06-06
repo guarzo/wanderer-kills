@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.Flatten do
+defmodule WandererKills.Killmails.Flatten do
   @moduledoc """
   Provides functionality for flattening nested fields in killmail data.
   """

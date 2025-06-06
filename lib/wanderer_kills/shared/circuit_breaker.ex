@@ -1,6 +1,8 @@
-defmodule WandererKills.Core.CircuitBreaker do
+defmodule WandererKills.CircuitBreaker do
   @moduledoc """
   Circuit breaker implementation for external API calls to prevent cascade failures.
+
+  Moved from WandererKills.Core.CircuitBreaker to improve module organization.
 
   Features:
   - Failure threshold detection

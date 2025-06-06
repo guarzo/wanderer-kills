@@ -327,10 +327,10 @@ Standardize return types and create shared result utilities.
 
 ### Phase 2: Architecture (Week 3-4)
 
-1. **Reorganize by domain** - Move modules to new context structure
-2. **Simplify cache architecture** - Flatten hierarchy and remove single-child supervisors
-3. **Consolidate core utilities** - Move away from "core" namespace
-4. **Update web layer** - Align wanderer_kills_web with new context paths
+1. ✅ **Reorganize by domain** - Move modules to new context structure
+2. ✅ **Simplify cache architecture** - Flatten hierarchy and remove single-child supervisors
+3. ✅ **Consolidate core utilities** - Move away from "core" namespace
+4. ✅ **Update web layer** - Align wanderer_kills_web with new context paths
 
 ### Phase 3: Polish (Week 5-6)
 

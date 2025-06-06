@@ -46,7 +46,7 @@ defmodule WandererKills.Data.Sources.CsvSource do
   use WandererKills.Data.Behaviours.ShipTypeSource
 
   require Logger
-  alias WandererKills.Core.BatchProcessor
+  alias WandererKills.BatchProcessor
   alias WandererKills.Shared.CSV
   # Note: Cache.Base and Cache.Key removed since CSV source no longer caches to ESI
 

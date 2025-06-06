@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.Zkb.RedisQ do
+defmodule WandererKills.External.ZKB.RedisQ do
   @moduledoc """
   Client for interacting with the zKillboard RedisQ API.
 
@@ -17,7 +17,7 @@ defmodule WandererKills.Fetcher.Zkb.RedisQ do
 
   alias WandererKills.Parser.Coordinator
   alias WandererKills.Cache.Specialized.EsiCache
-  alias WandererKills.Core.Clock
+  alias WandererKills.Clock
   alias WandererKills.Http.Client, as: HttpClient
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"

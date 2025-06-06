@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.Coordinator do
+defmodule WandererKills.Killmails.Coordinator do
   @moduledoc """
   Main parser coordinator that handles the parsing pipeline.
 

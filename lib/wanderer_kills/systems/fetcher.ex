@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.Zkb.ActiveSystemsFetcher do
+defmodule WandererKills.Systems.Fetcher do
   @moduledoc """
   Fetches and manages active PVP systems from zKillboard.
 

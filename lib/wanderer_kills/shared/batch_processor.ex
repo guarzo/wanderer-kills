@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.BatchProcessor do
+defmodule WandererKills.BatchProcessor do
   @moduledoc """
   Unified batch processing module for handling parallel and sequential operations.
 
@@ -10,6 +10,8 @@ defmodule WandererKills.Core.BatchProcessor do
 
   All batch operations use the same configuration and error handling patterns,
   making it easier to reason about concurrency across the application.
+
+  Moved from WandererKills.Core.BatchProcessor to improve module organization.
 
   ## Configuration
 
@@ -201,72 +203,64 @@ defmodule WandererKills.Core.BatchProcessor do
 
       process_batch_results(stream_results, length(tasks), description, duration_ms)
     rescue
-      error ->
-        Logger.error("Task execution failed: #{inspect(error)}")
-        {:error, :task_execution_failed}
+      e ->
+        duration = System.monotonic_time() - start_time
+        duration_ms = System.convert_time_unit(duration, :native, :millisecond)
+
+        Logger.error(
+          "Failed to await #{length(tasks)} #{description} after #{duration_ms}ms: #{inspect(e)}"
+        )
+
+        {:error, e}
     end
   end
 
   # Private helper functions
 
-  @spec process_batch_results(
-          [{:ok, task_result()} | {:exit, term()}],
-          pos_integer(),
-          String.t(),
-          pos_integer()
-        ) :: batch_result()
   defp process_batch_results(results, total_count, description, duration_ms) do
-    {successes, failures} = partition_results(results)
+    {successes, failures} = categorize_results(results)
 
     success_count = length(successes)
     failure_count = length(failures)
 
-    Logger.info(
-      "Completed processing #{description}: " <>
-        "#{success_count}/#{total_count} succeeded, " <>
-        "#{failure_count}/#{total_count} failed " <>
-        "(#{duration_ms}ms)"
-    )
+    log_batch_completion(total_count, success_count, failure_count, description, duration_ms)
 
-    case {successes, failures} do
-      {results, []} when length(results) == total_count ->
-        success_values = Enum.map(results, fn {:ok, value} -> value end)
-        {:ok, success_values}
+    case {success_count, failure_count} do
+      {^total_count, 0} ->
+        {:ok, successes}
 
-      {[], _failures} ->
-        Logger.error("All #{description} failed")
+      {0, ^total_count} ->
         {:error, :all_failed}
 
-      {partial_results, failures} ->
-        Logger.warning("Partial success for #{description}: #{success_count}/#{total_count}")
-        success_values = Enum.map(partial_results, fn {:ok, value} -> value end)
-        failure_reasons = Enum.map(failures, fn {:error, reason} -> reason end)
-        {:partial, success_values, failure_reasons}
+      {_, _} ->
+        {:partial, successes, failures}
     end
   end
 
-  @spec partition_results([{:ok, task_result()} | {:exit, term()}]) ::
-          {[{:ok, term()}], [{:error, term()}]}
-  defp partition_results(results) do
-    Enum.split_with(results, fn
-      {:ok, {:ok, _value}} -> true
-      {:ok, :ok} -> true
-      _ -> false
-    end)
-    |> then(fn {successes, failures} ->
-      formatted_successes =
-        Enum.map(successes, fn
-          {:ok, {:ok, value}} -> {:ok, value}
-          {:ok, :ok} -> {:ok, :ok}
-        end)
+  defp categorize_results(results) do
+    Enum.reduce(results, {[], []}, fn
+      {:ok, {:ok, result}}, {successes, failures} ->
+        {[result | successes], failures}
 
-      formatted_failures =
-        Enum.map(failures, fn
-          {:ok, {:error, reason}} -> {:error, reason}
-          {:exit, reason} -> {:error, {:exit, reason}}
-        end)
+      {:ok, {:error, reason}}, {successes, failures} ->
+        {successes, [reason | failures]}
 
-      {formatted_successes, formatted_failures}
+      {:error, reason}, {successes, failures} ->
+        {successes, [reason | failures]}
+
+      {:exit, reason}, {successes, failures} ->
+        {successes, [{:exit, reason} | failures]}
     end)
+  end
+
+  defp log_batch_completion(total_count, success_count, failure_count, description, duration_ms) do
+    if failure_count > 0 do
+      Logger.warning(
+        "Processed #{total_count} #{description} in #{duration_ms}ms: " <>
+          "#{success_count} succeeded, #{failure_count} failed"
+      )
+    else
+      Logger.info("Successfully processed #{total_count} #{description} in #{duration_ms}ms")
+    end
   end
 end

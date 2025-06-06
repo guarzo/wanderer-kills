@@ -1,17 +1,26 @@
-defmodule WandererKills.Core.Clock do
+defmodule WandererKills.Clock do
   @moduledoc """
-  Provides a configurable time interface for the application.
+  Mockable time utilities for WandererKills.
 
-  This module allows time to be mocked in tests while providing
-  real time values in production. It consolidates various time
-  operations into a clean, testable interface.
+  This module provides time-related functions that can be mocked during testing.
+  In production, it calls the system time functions directly. In test mode,
+  you can configure fixed times or custom time functions.
+
+  Moved from WandererKills.Core.Clock to improve module organization.
 
   ## Configuration
 
-  You can override the clock behavior in config/test.exs:
+  For testing, you can override the time source via application config:
 
   ```elixir
-  config :wanderer_kills, :clock, fn -> ~U[2025-01-01T00:00:00Z] end
+  # Use a fixed time
+  config :wanderer_kills, :clock, ~U[2025-01-01T00:00:00Z]
+
+  # Use a custom function
+  config :wanderer_kills, :clock, fn -> DateTime.utc_now() end
+
+  # Use a module and function
+  config :wanderer_kills, :clock, {MyTimeModule, :current_time}
   ```
 
   ## Usage
@@ -20,12 +29,10 @@ defmodule WandererKills.Core.Clock do
   # Get current time
   now = Clock.now()
 
-  # Get system time in various units
-  ms = Clock.system_time(:millisecond)
-  ns = Clock.system_time(:nanosecond)
+  # Get milliseconds since epoch
+  ms = Clock.now_milliseconds()
 
-  # Convenience functions
-  iso = Clock.now_iso8601()
+  # Get time N hours ago
   past = Clock.hours_ago(2)
   ```
   """
@@ -153,7 +160,7 @@ defmodule WandererKills.Core.Clock do
       nil ->
         System.system_time(unit)
 
-      {WandererKills.Core.Clock, :system_time} ->
+      {WandererKills.Clock, :system_time} ->
         # Avoid recursion by calling System directly
         System.system_time(unit)
 

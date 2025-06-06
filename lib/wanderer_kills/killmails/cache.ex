@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.KillmailCache do
+defmodule WandererKills.Killmails.Cache do
   @moduledoc """
   Cache operations for parsed killmail data.
 

@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.Zkb.KillmailFetcher do
+defmodule WandererKills.External.ZKB.Fetcher do
   @moduledoc """
   Fetches killmails from zKillboard sources and stores them.
 

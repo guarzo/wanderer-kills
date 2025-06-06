@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.KillmailStats do
+defmodule WandererKills.Killmails.Stats do
   @moduledoc """
   Statistics tracking for killmail parsing operations.
 

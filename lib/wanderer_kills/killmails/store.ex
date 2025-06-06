@@ -1,4 +1,4 @@
-defmodule WandererKills.KillmailStore do
+defmodule WandererKills.Killmails.Store do
   @moduledoc """
   Backward compatibility alias for KillmailStore.
 

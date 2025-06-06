@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.KillmailParser do
+defmodule WandererKills.Killmails.Parser do
   @moduledoc """
   Core killmail parsing functionality with a focused API.
 

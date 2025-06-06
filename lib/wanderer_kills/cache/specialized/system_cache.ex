@@ -37,8 +37,8 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   require Logger
   alias WandererKills.Cache.Base
   alias WandererKills.Cache.Key
-  alias WandererKills.Core.Clock
-  alias WandererKills.Core.Config
+  alias WandererKills.Clock
+  # Config now accessed via WandererKills.Config
   alias Cachex
 
   @type cache_result :: {:ok, term()} | {:error, term()}
@@ -67,7 +67,7 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   """
   @spec add_system_killmail(integer(), integer()) :: cache_status()
   def add_system_killmail(system_id, killmail_id) do
-    ttl = Config.cache(:system, :ttl)
+    ttl = WandererKills.Config.cache(:system, :ttl)
     Base.add_to_list(:system, Key.system_killmails_key(system_id), killmail_id, ttl)
   end
 
@@ -89,7 +89,7 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
         {:ok, false}
 
       {:ok, timestamp} ->
-        threshold = Config.recent_fetch_threshold()
+        threshold = WandererKills.Config.recent_fetch_threshold()
         now = System.system_time(:second)
         {:ok, now - timestamp < threshold}
 
@@ -291,7 +291,7 @@ defmodule WandererKills.Cache.Specialized.SystemCache do
   """
   @spec add_system_killmail_id(integer(), integer()) :: cache_status()
   def add_system_killmail_id(system_id, killmail_id) do
-    ttl = Config.cache(:system, :ttl)
+    ttl = WandererKills.Config.cache(:system, :ttl)
 
     Base.add_to_list(
       :system,

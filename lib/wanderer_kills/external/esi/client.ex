@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.Esi.Source do
+defmodule WandererKills.External.ESI.Client do
   @moduledoc """
   ESI-based ship type data fetcher implementation.
 
@@ -36,7 +36,7 @@ defmodule WandererKills.Fetcher.Esi.Source do
 
   require Logger
   alias WandererKills.Constants
-  alias WandererKills.Core.BatchProcessor
+  alias WandererKills.BatchProcessor
   alias WandererKills.TaskSupervisor
   alias WandererKills.Cache.Specialized.EsiCache
 

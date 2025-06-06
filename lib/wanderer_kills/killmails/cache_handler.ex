@@ -1,4 +1,4 @@
-defmodule WandererKills.Parser.CacheHandler do
+defmodule WandererKills.Killmails.CacheHandler do
   @moduledoc """
   Handles caching of killmails.
   """
