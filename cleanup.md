@@ -1,349 +1,521 @@
-# WandererKills Codebase Cleanup Recommendations
+# Elixir Codebase Cleanup Recommendations
 
-This document outlines a comprehensive refactoring plan for the WandererKills application to improve code organization, reduce duplication, and align with Elixir/Phoenix conventions.
+Based on the merged codebase analysis, here are comprehensive recommendations to improve organization, remove duplication and legacy code, adopt more idiomatic Elixir patterns, and tighten up naming conventions.
 
-## 1. Reorganize by Business Domain (High Priority)
+## 1. Reorganize Modules into Clear, Domain-Driven Contexts
 
-### Current State
+### Current Issues
 
-The codebase is organized by technical layers:
+- Modules are grouped by technical layers rather than business domains
+- Related functionality is scattered across different directories
 
-- `lib/wanderer_kills/core/` - Generic utilities (5 modules)
-- `lib/wanderer_kills/parser/` - Mixed parsing logic (14 modules)
-- `lib/wanderer_kills/cache/` - Cache implementations (4 directories)
-- `lib/wanderer_kills/data/` - Data layer concerns (3 directories)
+### Recommendations
 
-### Recommended Structure
+**Group by business domain:**
 
-Reorganize into domain-driven contexts:
+- **Killmail handling**: Move all killmail-related modules (`KillmailStore`, `Killmails.Parser`, `Killmails.Enricher`, etc.) under:
 
-```
-lib/wanderer_kills/
-├── killmails/           # Killmail business logic
-│   ├── parser.ex        # From parser/killmail_parser.ex
-│   ├── enricher.ex      # From parser/killmail_enricher.ex
-│   ├── stats.ex         # From parser/killmail_stats.ex
-│   └── store.ex         # From killmail_store.ex
-├── ship_types/          # Ship type management
-│   ├── parser.ex        # From parser/ship_type_parser.ex
-│   ├── updater.ex       # From data/ship_type_updater.ex
-│   └── info.ex          # From data/ship_type_info.ex
-├── systems/             # Solar system data and caching
-│   └── cache.ex         # From cache/specialized/system_cache.ex
-├── esi/                 # ESI API client (keep existing)
-├── zkb/                 # ZKillboard client (keep existing)
-└── shared/              # Cross-cutting concerns
-    ├── http_client.ex   # From http/
-    ├── config.ex        # From core/config.ex
-    └── utils/           # General utilities
-```
+  ```
+  lib/wanderer_kills/killmails/
+  ```
 
-## 2. Eliminate CSV Parsing Duplication (High Priority)
+  Namespace: `WandererKills.Killmails.*`
+
+- **Ship type logic**: Consolidate under:
+
+  ```
+  lib/wanderer_kills/ship_types/
+  ```
+
+  Include: `ShipTypeUpdater`, `ShipTypeInfo`, `ShipTypeConstants`, plus CSV vs. ESI sources
+
+- **ESI-specific modules**: Place under:
+
+  ```
+  lib/wanderer_kills/esi/
+  ```
+
+  Include: `WandererKills.ESI.Client`, `WandererKills.ESI.Data.*`
+
+- **Real-time streaming**: Combine RedisQ, preloader, supervisor into:
+
+  ```
+  lib/wanderer_kills/streaming/
+  ```
+
+  or
+
+  ```
+  lib/wanderer_kills/preloader/
+  ```
+
+- **Eliminate generic `Shared` folder**: Rename or relocate helpers like:
+
+  - `lib/wanderer_kills/shared/CSV.ex`
+  - `shared/batch_processor.ex`
+  - `shared/circuit_breaker.ex`
+
+  Move into contexts that consume them or into `shared/utils` if truly application-wide.
+
+### Benefits
+
+- New maintainers can immediately find "all killmail behavior here" or "all ship type behavior here"
+- Reduces cognitive overhead when navigating the codebase
+
+---
+
+## 2. Remove Duplicated CSV and Parsing Utilities
 
 ### Current Duplication
 
-CSV parsing logic is duplicated across:
-
-- `parser/csv_util.ex` (186 lines)
-- `parser/csv_row_parser.ex` (130 lines)
-- `parser/ship_type_parser.ex` (65 lines)
-- `data/sources/csv_source.ex` (220 lines)
+- `lib/wanderer_kills/shared/csv.ex` (with `parse_ship_group/1` and `parse_ship_type/1`)
+- `lib/wanderer_kills/data/sources/csv_source.ex` (invokes `CSV.read_file/2` and `CSV.parse_ship_type/1`/`parse_ship_group/1`)
 
 ### Solution
 
-Create unified CSV module consolidating all parsing logic:
+1. **Consolidate all CSV parsing logic** into a single module:
+
+   ```elixir
+   WandererKills.ShipTypes.CSVHelpers
+   # or
+   WandererKills.ShipTypes.CSVHelpers
+   ```
+
+2. **Delete duplicate variants** - ensure exactly one set of:
+
+   - `parse_ship_type/1`
+   - `parse_ship_group/1` functions
+
+3. **HTTP utilities cleanup**: `RequestUtils`, `ClientUtil`, `Util` under `lib/wanderer_kills/http/` appear to overlap
+   - Consolidate into single `WandererKills.HTTP.Utils` module
+   - Remove extra modules that replicate functionality
+
+---
+
+## 3. Prune Legacy Compatibility Code
+
+### Target Areas
+
+**RedisQ Legacy Format** ⚠️ **REQUIRES VALIDATION**:
+
+**Found in `lib/wanderer_kills/external/zkb/redisq.ex` lines 146-165:**
 
 ```elixir
-# lib/wanderer_kills/shared/csv.ex
-defmodule WandererKills.Shared.CSV do
-  def read_file(path, parser_fn, opts \\ [])
-  def parse_row(row, headers)
-  def parse_number(value, type, default \\ nil)
-  def parse_with_schema(csv_data, schema)
-end
+# New‐format: "package" → %{ "killID" => _, "killmail" => killmail, "zkb" => zkb }
+{:ok, %{body: %{"package" => %{"killID" => _id, "killmail" => killmail, "zkb" => zkb}}}} ->
+  Logger.info("[RedisQ] New‐format killmail received.")
+  process_kill(killmail, zkb)
+
+# Alternate new‐format (sometimes `killID` is absent, but `killmail`+`zkb` exist)
+{:ok, %{body: %{"package" => %{"killmail" => killmail, "zkb" => zkb}}}} ->
+  Logger.info("[RedisQ] New‐format killmail (no killID) received.")
+  process_kill(killmail, zkb)
+
+# Legacy format: { "killID" => id, "zkb" => zkb }
+{:ok, %{body: %{"killID" => id, "zkb" => zkb}}} ->
+  Logger.info("[RedisQ] Legacy‐format killmail ID=#{id}.  Fetching full payload…")
+  process_legacy_kill(id, zkb)
 ```
 
-**Expected Impact**: ~300 lines of duplicate code eliminated
+**Investigation Required:**
 
-## 3. Simplify Core Module Architecture (Medium Priority)
+- **RedisQ Stream API** (`listen.php`) might return minimal format requiring ESI fetch
+- **ZKB REST API** (`/api/killmail/`) might return full killmail data
+- **User's concern is valid** - need to validate if this is truly "legacy" vs different endpoints
 
-### Current Problems
+**Recommended Actions:**
 
-The `core/` directory contains over-abstracted modules:
+1. **Add format tracking telemetry** to `do_poll/1` function
+2. **Monitor for 1-2 weeks** to see which formats are actually received
+3. **Only remove after confirmation** that minimal format is truly unused
+4. **Consider adding configuration flag** to disable legacy handling during transition
 
-- `config.ex` (168 lines) - Just wraps `Application.get_env/2`
-- `batch_processor.ex` (279 lines) - Custom batching logic
-- `circuit_breaker.ex` (208 lines) - Custom circuit breaker
-- `clock.ex` (230 lines) - Complex time abstraction
+**Deprecated ESI Endpoints**:
 
-### Recommended Changes
+- Audit code paths supporting old ESI endpoints or deprecated payload shapes
+- Remove guards around old response fields in RedisQ
+- Verify you're not querying both `/universe/types/{type_id}` and older endpoints
 
-1. **Simplify config access** - Remove unnecessary wrapper functions
-2. **Evaluate custom implementations** - Consider library alternatives
-3. **Move to shared namespace** - Remove "Core" designation
+---
 
-## 4. Streamline Cache Architecture (Medium Priority)
-
-### Current Issues
-
-- Verbose hierarchy: Base → Unified → Specialized
-- Single-child supervisor adds no value
-- Mixed access patterns (some call Cachex directly)
-
-### Solution
-
-Flatten cache hierarchy and enforce consistent access:
-
-```elixir
-# Single cache interface
-WandererKills.Cache.get_killmail(id)
-WandererKills.Cache.Systems.get_active()
-WandererKills.Cache.ESI.get_character(id)
-```
-
-## 5. Consolidate Parser Architecture (Medium Priority)
-
-### Current Problems
-
-Parser directory has 14 modules with mixed responsibilities:
-
-- Cache logic in parser directory
-- Duplicate statistics modules
-- Complex coordination patterns
-
-### Solution
-
-Move domain-specific parsers to appropriate contexts and separate concerns.
-
-## 6. Test Suite Reorganization (Medium Priority)
-
-### Why It Matters
-
-As modules move by domain, test files should mirror that structure so `mix test test/killmails/` works as expected and contributors can locate tests quickly.
-
-### Current Test Issues
-
-- Tests organized by technical layer, not business domain
-- Orphaned integration tests at top level
-- Mixed unit and integration test types
-
-### Solution
-
-Reorganize tests to match new domain structure:
-
-```
-test/
-├── killmails/           # All killmail-related tests
-│   ├── parser_test.exs
-│   ├── enricher_test.exs
-│   ├── store_test.exs
-│   └── integration_test.exs
-├── ship_types/          # Ship type functionality tests
-│   ├── parser_test.exs
-│   ├── updater_test.exs
-│   └── integration_test.exs
-├── systems/             # System cache tests
-├── integration/         # Cross-domain integration tests
-│   ├── api_test.exs
-│   └── end_to_end_test.exs
-└── support/            # Test helpers
-```
-
-**Benefits**: Domain-focused testing, easier test discovery, cleaner CI runs
-
-## 7. Enable and Enforce Linting/Static Analysis in CI (Medium Priority)
-
-### Why It Matters
-
-During re-architecting, consistent code quality prevents introducing new spec mismatches or style divergences.
+## 4. Rename "Shared" or "Infrastructure" to Descriptive Modules
 
 ### Current State
 
-Basic dependencies exist but may not be enforced in CI.
+`lib/wanderer_kills/shared/` contains cross-cutting concerns
 
-### Solution
+### Recommended Approach
 
-Add comprehensive static analysis to CI pipeline:
+**Option A: Infrastructure namespace**
 
 ```elixir
-# In mix.exs
-{:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-{:dialyxir, "~> 1.4.3", only: [:dev], runtime: false}
+WandererKills.Infrastructure.Clock
+WandererKills.Infrastructure.CSV
+WandererKills.Infrastructure.Enricher
 ```
 
-**CI Pipeline Steps:**
+**Option B: Utils namespace**
 
-- `mix format --check-formatted` - Ensure consistent formatting
-- `mix credo --strict` - Code quality and style checks
-- `mix dialyzer --halt-exit-status` - Type checking for relocated modules
+```elixir
+WandererKills.Utils.Clock
+WandererKills.Utils.CSV
+WandererKills.Utils.Enricher
+```
 
-## 8. Prune and Audit Dependencies (Low-Medium Priority)
+### Benefits
 
-### Why It Matters
+- Clear meaning instead of ambiguous "Shared" namespace
+- Easier to understand module responsibilities
 
-Refactoring is ideal time to remove unused libraries, shortening compile times and reducing surface area.
+---
 
-### Action Items
+## 5. Adopt Idiomatic OTP/Erlang Patterns
 
-1. **Audit current dependencies** - Check if all `mix.exs` entries are used
-2. **Remove unused packages** - Run `mix deps.unlock --unused`
-3. **Evaluate alternatives** - Replace custom implementations with standard libraries
+### Supervisor Improvements
 
-### Current Dependencies to Evaluate
+**Current pattern in `WandererKills.Preloader.Supervisor`:**
 
-- `:backoff` - Can retry logic be simplified?
-- `:uuid` - Is UUID generation actually used?
-- Custom circuit breaker - Replace with `:fuse` library?
+```elixir
+# Avoid manual map building
+children = [%{id: ..., start: {...}, ...}]
+```
 
-## 9. Flatten Single-Child Supervisors (Low Priority)
+**Recommended idiomatic pattern:**
 
-### Why It Matters
+```elixir
+children = [
+  WandererKills.Preloader.Worker,
+  {WandererKills.External.ZKB.RedisQ,
+   restart: :permanent,
+   timeout: :timer.seconds(30)}
+]
+Supervisor.init(children, strategy: :one_for_one)
+```
 
-Single-child supervisors add unnecessary indirection without providing value.
+### Additional OTP Improvements
+
+- **Child specifications**: Use `YourModule.child_spec/1` rather than raw maps
+- **ETS tables**: Move logic out of `init/1` into separate "ETS supervisor" or dedicated module
+- **Leaner init callbacks**: Keep `init/1` focused and minimal
+
+---
+
+## 6. Ensure Consistent Naming Conventions
+
+### Module Names (PascalCase)
+
+**Current issues and fixes:**
+
+- `WandererKills.Data.Behaviours.ShipTypeSource` → move to `lib/wanderer_kills/ship_types/source.ex`
+
+  - Module: `WandererKills.ShipTypes.Source`
+
+- `WandererKills.Fetcher` vs. `WandererKills.Fetcher.Shared`:
+
+  - Rename to `WandererKills.Fetcher.Unified`
+  - Or split into `WandererKills.KillmailFetcher` and `WandererKills.SystemFetcher`
+
+- **Avoid overloading**: If module is exclusively used by "fetchers":
+  - Use `Fetcher.BatchOperations`
+  - Move to `lib/wanderer_kills/fetcher/batch_operations.ex`
+
+### Function Names (snake_case)
+
+- Ensure all function names use `snake_case`
+- Translate JSON keys to `snake_case` early in parsing
+- Use consistent atom/string patterns (e.g., `killmail_id` vs `"killID"`)
+
+### Constants Consolidation
+
+**Current duplication:**
+
+- `lib/wanderer_kills/data/` has Constants modules
+- `lib/wanderer_kills/shared/constants.ex` exists
+
+**Solution:**
+
+- Consolidate into single `WandererKills.Constants` or `WandererKills.Config.Constants`
+
+---
+
+## 7. Remove Overlapping HTTP Client Behavior Definitions
+
+### Current Overlap
+
+- `WandererKills.Http.ClientBehaviour` (in `http/client_behaviour.ex`)
+- `WandererKills.Http.Client` implementing nearly identical callbacks
+
+### Solutions
+
+**If no other HTTP implementation planned:**
+
+- Drop `ClientBehaviour` module altogether
+- Treat `Http.Client` as single source of truth
+
+**If mocking needed for tests:**
+
+- Keep behaviour but remove duplicate specs in `client_util.ex` or `request_utils.ex`
+- Ensure "HTTP util" modules only contain orthogonal logic (URL formatting, headers)
+
+---
+
+## 8. Consolidate Configuration and Remove Hard-coded Values
 
 ### Current Issues
 
-- `WandererKills.Cache.Supervisor` only supervises one Cachex instance
-- Similar patterns in preloader and batch processor supervisors
+- Many modules use `Application.fetch_env!` with inline key lookups
+- Magic numbers scattered throughout code (e.g., ship group IDs `[6,7,9,11,16,17,23]`)
 
-### Solution
+### Recommended Approach
 
-Update `WandererKills.Application.start/2` to supervise processes directly:
+**Create centralized config module:**
 
 ```elixir
-# Instead of intermediate supervisors
-children = [
-  {Cachex, name: :killmails_cache, ttl: config.killmail_ttl},
-  {Cachex, name: :systems_cache, ttl: config.system_ttl},
-  WandererKills.Preloader.Worker,  # Direct supervision
-  # ... other children
-]
+# Instead of manual config lookups
+Config.redisq(:fast_interval_ms)
+
+# Single source for constants
+ShipTypeConstants.ship_group_ids()
 ```
 
-## 10. Align Web Layer (Low Priority)
+**Benefits:**
 
-### Why It Matters
+- Normalized config shapes
+- Single point of configuration management
+- Easier testing and maintenance
 
-When reorganizing `lib/wanderer_kills/` by domain, ensure `wanderer_kills_web/` references updated context paths.
+---
 
-### Action Items
+## 9. Eliminate "Mixed Responsibility" Modules
 
-Update web layer imports to match new structure:
+### Problem: `WandererKills.Fetcher.Shared`
+
+- Currently ~500 lines doing everything:
+  - Fetching from ZKB
+  - Caching
+  - Parsing
+  - Enriching
+  - Telemetry
+
+### Solution: Break into Single-Responsibility Modules
 
 ```elixir
-# Before
-alias WandererKills.Parser.KillmailParser
+# Raw ZKB API calls and parsing
+WandererKills.Fetcher.ZkbFetch
 
-# After
-alias WandererKills.Killmails.Parser
+# Caching concerns: updating ETS, PubSub
+WandererKills.CacheHouseKeeper
+
+# Already separate
+WandererKills.Killmails.Enricher
+
+# Thin orchestrator ties them together
+WandererKills.Fetcher.Orchestrator
 ```
 
-**Check Points:**
+### Benefits
 
-- Controllers using correct context modules
-- Views referencing updated aliases
-- Any channels or live views using old paths
+- Easier testing
+- Clearer reasoning about each component
+- Simpler maintenance
 
-## 11. Configuration Environment Consistency (Low Priority)
+---
 
-### Why It Matters
+## 10. Standardize Error Tuples and Remove Redundant Wrappers
 
-Consolidating `core/config.ex` requires updating environment configuration files to prevent missing runtime config.
+### Current Approach
 
-### Action Items
+Frequent wrapping as:
 
-1. **Migrate config keys** - Update `config/*.exs` files
-2. **Search for references** - Run `grep -R "Core\." config/`
-3. **Test all environments** - Verify dev/test/prod configs work
+- `{:error, reason}`
+- `{:error, {:cache, reason}}`
+- `{:error, {:http, reason}}`
 
-```elixir
-# Before
-config :wanderer_kills, Core.Clock, enable_mocking: true
+### Recommended Solutions
 
-# After
-config :wanderer_kills, WandererKills.Clock, enable_mocking: true
-```
-
-## 12. Document Public APIs and Add Module Docs (Low Priority)
-
-### Why It Matters
-
-Renamed/relocated modules need clear documentation so maintainers understand context responsibilities.
-
-### Action Items
-
-1. **Update @moduledoc** - Every context module needs clear purpose documentation
-2. **Review @doc and @spec** - Ensure public functions are properly documented
-3. **Add usage examples** - Show how contexts interact
+**Option A: Consistent `with` patterns**
 
 ```elixir
-defmodule WandererKills.Killmails do
-  @moduledoc """
-  Context for managing EVE Online killmail data.
-
-  Handles parsing, enriching, storing, and retrieving killmail information
-  from various sources including zKillboard and ESI API.
-  """
+with {:ok, val} <- ... do
+  # Handle success
+else
+  error -> translate_error(error)
 end
 ```
 
-## 13. Ensure Logging/Telemetry Consistency (Low Priority)
-
-### Why It Matters
-
-Module moves can break telemetry events and make logs reference incorrect module names.
-
-### Action Items
-
-1. **Update telemetry events** - Ensure event metadata uses new module names
-2. **Verify log output** - Run end-to-end scenarios and check log sources
-3. **Update monitoring** - Adjust any dashboards expecting old module names
+**Option B: Custom Error struct**
 
 ```elixir
-# Ensure logs show new paths
-Logger.info("Ship types updated", module: WandererKills.ShipTypes.Updater)
+%WandererKills.Error{context: :cache, reason: reason}
 ```
 
-## 14. Enhance Type Safety (Low Priority)
+### Additional Guidelines
 
-### Issues
+- Remove "catch-all" rescue clauses that swallow exceptions
+- Use `rescue` only when specifically needed
+- Let top-level functions translate nested error tuples
 
-- Inconsistent return patterns
-- Specs don't match actual return values
-- Duplicate result handling code
+---
 
-### Solution
+## 11. Validate and Remove Obsolete Test Support Code
 
-Standardize return types and create shared result utilities.
+### Test Configuration
 
-## Implementation Roadmap
+- `config/test.exs` disables `start_preloader: false`
+- If no tests need preloader, remove startup logic references
 
-### Phase 1: Foundation (Week 1-2)
+### Cleanup Actions
 
-1. ✅ **Consolidate CSV parsing** - Create unified CSV module (~300 lines reduction)
-2. ✅ **Clean up configuration** - Simplify config access and migrate config/\*.exs keys
-3. ✅ **Remove dead code** - Clean up unused code and audit/remove unused dependencies
-4. ✅ **Standardize return types** - Create shared result utilities
+1. **Guard preloader startup:**
 
-### Phase 2: Architecture (Week 3-4)
+   ```elixir
+   if Application.get_env(:wanderer_kills, :start_preloader) do
+     # Add to supervision tree
+   end
+   ```
 
-1. ✅ **Reorganize by domain** - Move modules to new context structure
-2. ✅ **Simplify cache architecture** - Flatten hierarchy and remove single-child supervisors
-3. ✅ **Consolidate core utilities** - Move away from "core" namespace
-4. ✅ **Update web layer** - Align wanderer_kills_web with new context paths
+2. **Remove unused mocks:**
+   - `WandererKills.Zkb.Client.Mock` (if unused)
+   - Corresponding test files (e.g., `external/zkb_fetcher_test.exs`)
 
-### Phase 3: Polish (Week 5-6)
+---
 
-1. ✅ **Reorganize tests** - Mirror new domain structure in test directory
-2. **Improve naming consistency** - Standardize module naming patterns
-3. **Enhance documentation** - Update @moduledoc/@doc for all contexts
-4. **Enable CI checks** - Add Credo/Dialyzer/format checking to pipeline
-5. **Verify logging/telemetry** - Ensure consistent module names in observability
+## 12. Streamline Telemetry and Observability Modules
 
-## Success Metrics
+### Current Structure
 
-- **Reduce LOC**: 15-20% reduction through deduplication
-- **Improve maintainability**: Clearer module responsibilities
-- **Better developer experience**: Easier code navigation
-- **Align with conventions**: Follow Elixir best practices
-- **Consistent quality**: All CI checks passing with new structure
+```
+lib/wanderer_kills/observability/
+├── behaviours/health_check.ex
+├── health_checks/
+├── monitoring.ex
+└── telemetry.ex
+```
+
+### Recommendations
+
+**If not using multiple health checks:**
+
+- Collapse into single `Observability.Health` context
+- Remove unused behaviour definitions
+
+**Telemetry cleanup:**
+
+- Instrument only actual boundaries (HTTP, ETS, fetch processes)
+- Remove duplicate events (e.g., `"fetch_system_start"` vs `"telemetry.fetch_system_start"`)
+- Consider renaming `WandererKills.Observability.Telemetry` to `WandererKills.Instrumentation`
+
+---
+
+## 13. Remove Deep Nesting of Configuration Sections
+
+### Current Deep Nesting
+
+```elixir
+config :wanderer_kills, retry: %{
+  http: %{max_retries: 3, base_delay: 1000},
+  redisq: %{max_retries: 5, base_delay: 500}
+}
+```
+
+### Recommended Flattening
+
+```elixir
+config :wanderer_kills, :retry_http, %{max_retries: 3, base_delay: 1000}
+config :wanderer_kills, :retry_redisq, %{max_retries: 5, base_delay: 500}
+```
+
+### Benefits
+
+- Simpler access: `Application.get_env(:wanderer_kills, :retry_http)`
+- No need to dig into nested keys
+- Clearer configuration structure
+
+---
+
+## 14. Ensure Supervisors Honor Configuration Flags
+
+### Application Supervisor Improvements
+
+**Instead of unconditional preloader:**
+
+```elixir
+children = [
+  # ... other children
+] ++ if(Application.get_env(:wanderer_kills, :start_preloader, true),
+       do: [WandererKills.Preloader.Supervisor],
+       else: [])
+```
+
+### Configuration Function Standardization
+
+**Current inconsistency:**
+
+- `get_config(:idle_interval_ms)` in RedisQ
+- Mixed string keys and atom keys
+
+**Recommended approach:**
+
+```elixir
+# Consistent function naming
+Config.redisq(:idle_interval_ms)
+# or
+Config.redisq_idle_interval_ms()
+```
+
+**Ensure alignment:**
+
+- Config keys (`:base_url`, `:fast_interval_ms`) align exactly with module functions
+- Prevent runtime errors from key mismatches
+
+---
+
+## Implementation Action Items
+
+### Phase 1: Structure and Organization
+
+1. **Refactor directory structure** into context folders:
+
+   - `killmails/`
+   - `ship_types/`
+   - `esi/`
+   - `streaming/`
+   - `http/`
+   - `observability/`
+
+2. **Merge duplicate utilities**:
+   - All CSV parsing into single module
+   - All HTTP utility logic consolidation
+
+### Phase 2: Code Cleanup
+
+3. **Delete legacy code**:
+
+   - Legacy-only branches in RedisQ -- validate this is actually legacy, and not the difference between the api path and the redisq path?????
+   - Unused ESI endpoints
+   - Obsolete test support code
+
+4. **Rename for clarity**:
+   - `shared/` → `infrastructure/` or `utils/`
+   - Update all module names accordingly
+
+### Phase 3: Pattern Adoption
+
+5. **Simplify OTP components**:
+
+   - Use built-in child specs
+   - Lean `init/1` callbacks
+   - Proper supervisor patterns
+
+6. **Standardize naming**:
+   - Module and function consistency
+   - Eliminate Constants confusion
+   - Unified config approach
+
+### Expected Outcomes
+
+- **Reduced duplication**: Single source of truth for common functionality
+- **Clearer architecture**: Domain-driven organization
+- **More "Elixir-ish" feel**: Idiomatic OTP and naming patterns
+- **Easier maintenance**: Simplified navigation and understanding
+- **Better testability**: Single-responsibility modules
