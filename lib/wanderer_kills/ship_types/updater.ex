@@ -32,12 +32,12 @@ defmodule WandererKills.ShipTypes.Updater do
 
   ## Dependencies
 
-  - `WandererKills.Data.Sources.CsvSource` - CSV-based updates
-  - `WandererKills.External.ESI.Client` - ESI-based updates
+  - `WandererKills.ShipTypes.CSVHelpers` - CSV-based updates
+  - `WandererKills.ESI.Client` - ESI-based updates
   """
 
   require Logger
-  alias WandererKills.Data.Sources.CsvSource
+  alias WandererKills.ShipTypes.CSVHelpers
   alias WandererKills.ESI.Client, as: EsiSource
   alias WandererKills.Core.Error
 
@@ -122,7 +122,7 @@ defmodule WandererKills.ShipTypes.Updater do
   def update_with_csv do
     Logger.info("Attempting ship type update from CSV")
 
-    case CsvSource.update() do
+    case CSVHelpers.update() do
       :ok ->
         Logger.info("CSV ship type update completed successfully")
         :ok
@@ -228,7 +228,7 @@ defmodule WandererKills.ShipTypes.Updater do
   def download_csv_files do
     Logger.info("Downloading CSV files for ship type data")
 
-    case CsvSource.download(force_download: true) do
+    case CSVHelpers.download(force_download: true) do
       {:ok, _file_paths} ->
         Logger.info("CSV files downloaded successfully")
         :ok
@@ -265,7 +265,7 @@ defmodule WandererKills.ShipTypes.Updater do
     %{
       ship_groups: EsiSource.ship_group_ids(),
       sources: %{
-        csv: CsvSource.source_name(),
+        csv: "CSV",
         esi: EsiSource.source_name()
       },
       csv_files: ["invGroups.csv", "invTypes.csv"]

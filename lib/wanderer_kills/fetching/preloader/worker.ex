@@ -269,7 +269,8 @@ defmodule WandererKills.Preloader.Worker do
 
   @spec fetch_system(integer(), pos_integer(), pos_integer()) :: fetch_result()
   defp fetch_system(system_id, since_hours, limit) do
-    alias WandererKills.Fetching.{ZkbService, Processor}
+    alias WandererKills.External.ZKB
+    alias WandererKills.Killmails.Coordinator
 
     # Check cache first
     case Cache.system_recently_fetched?(system_id) do
@@ -300,11 +301,12 @@ defmodule WandererKills.Preloader.Worker do
   end
 
   defp fetch_remote_killmails(system_id, since_hours, limit) do
-    alias WandererKills.Fetching.{ZkbService, Processor}
+    alias WandererKills.External.ZKB
+    alias WandererKills.Killmails.Coordinator
 
-    with {:ok, raw_killmails} <- ZkbService.fetch_system_killmails(system_id, limit, since_hours),
+    with {:ok, raw_killmails} <- ZKB.fetch_system_killmails(system_id, limit, since_hours),
          {:ok, processed_killmails} <-
-           Processor.process_killmails(raw_killmails, system_id, since_hours),
+           Coordinator.process_killmails(raw_killmails, system_id, since_hours),
          :ok <- cache_killmails_for_system(system_id, processed_killmails) do
       Logger.debug("Successfully fetched killmails for system",
         system_id: system_id,

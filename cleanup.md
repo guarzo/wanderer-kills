@@ -1,6 +1,18 @@
-- [ ] “Delete the entire `lib/wanderer_kills/data/` directory and the façade `lib/wanderer_kills/data.ex`; remove related behaviours (`CsvSource`, `EsiSource`, etc.) and update any imports to use the new domain modules directly.”
-- [ ] “Remove `lib/wanderer_kills/shared/csv.ex` and `lib/wanderer_kills/shared/constants.ex` now that CSV parsing and constants live in `Core.CSV` and `Core.Constants`; update any references and delete the `shared/` folder.”
-- [ ] “Delete `lib/wanderer_kills/ship_types/csv_parser.ex`—all code should call `ShipTypes.CSVHelpers` directly—and remove its tests and imports.”
-- [ ] “Remove `lib/wanderer_kills/killmails/cache.ex`; merge any unique logic into `Core.Cache` (or drop if unused) and delete the file.”
-- [ ] “Pick one killmail store implementation (prefer `lib/wanderer_kills/killmails/store.ex`), update all callers, and delete `lib/wanderer_kills/data/stores/killmail_store.ex`.”
-- [ ] “Delete `lib/wanderer_kills/fetching/processor.ex` and `lib/wanderer_kills/fetching/zkb_service.ex`; fold necessary functionality into `Killmails.Coordinator` or `External.ZKB` modules and remove the `fetching/` folder if empty.”
+- [ ] Refactor `WandererKills.Core.Config` into a single canonical module: remove all duplicate `lib/wanderer_kills/core/config.ex` files and update callers to use the new module.
+- [ ] Consolidate CSV parsing into `WandererKills.Core.CSVHelpers`: merge `lib/wanderer_kills/core/csv.ex`, `lib/wanderer_kills/ship_types/csv_helpers.ex` and `lib/wanderer_kills/data/sources/csv_source.ex`; update `@behaviour` and `alias` usages; delete `ship_types/csv_parser.ex`, `data/sources/` and `data/behaviours/`.
+- [ ] Remove legacy compatibility APIs from `WandererKills.Core.Cache` (e.g. `set_character_info/2`, `get_killmail/1`, `del/1`); update callers to use the primary ETS/context-based API and delete deprecated functions.
+- [ ] Prune vestigial killmail format code: delete any clauses or helpers referencing “partial” or “minimal” formats.
+- [ ] Delete `lib/wanderer_kills/data/` and its façade `lib/wanderer_kills/data.ex`; remove related behaviours (`CsvSource`, `EsiSource`, etc.) and rewire imports to domain modules directly.
+- [ ] Standardize on one killmail store: keep `lib/wanderer_kills/killmails/store.ex`, update all callers, and delete `lib/wanderer_kills/data/stores/killmail_store.ex`.
+- [ ] Delete `lib/wanderer_kills/fetching/processor.ex` and `lib/wanderer_kills/fetching/zkb_service.ex`; fold the needed logic into `Killmails.Coordinator` or ZKB client modules; remove the empty `fetching/` folder.
+- [ ] Move the `ShipTypeSource` behaviour from `lib/wanderer_kills/data/behaviours/ship_type_source.ex` into `lib/wanderer_kills/core/behaviours.ex`; update every `@behaviour` reference; delete the now-empty `lib/wanderer_kills/data/behaviours/` directory.
+- [ ] Merge single-file folders: integrate `lib/wanderer_kills/systems/fetcher.ex` into your fetching context and fold `lib/wanderer_kills/zkb/client.ex` + `client_behaviour.ex` into one ZKB module under `fetching/` or `preloader/`.
+- [ ] Reorganize directory layout by business domain: group modules under `killmails/`, `ship_types/`, `systems/`, `fetching/`, and `observability/`.
+- [ ] Run `mix xref graph` and `mix xref unused` to identify dead code (e.g. unused modules like `Core.CircuitBreaker` or unused health-check behaviours); delete or archive them; verify tests still pass.
+- [ ] Clean up test support: remove obsolete fixtures in `test/shared/` or `test/support/`; centralize repetitive mocks or factories.
+- [ ] Refactor nested `case` statements (e.g. in `Core.Client` and `ShipTypeUpdater`) into `with … do` flows for clearer error handling.
+- [ ] Replace runtime `Config.get/2` calls with `Application.compile_env/3` for compile-time config lookups.
+- [ ] Eliminate `try/rescue` around ETS access by guarding with `:ets.whereis/1` or supervising table creation.
+- [ ] Simplify your supervision tree in `Application.start/2`: remove unused child flags (`start_preloader?`, `start_redisq?`, `start_ets_supervisor`) and flatten the children list.
+- [ ] Consolidate observability modules: merge trivial health-check behaviours and monitoring modules into fewer cohesive units.
+- [ ] Annotate public API modules in `WandererKillsWeb.Api` with `@spec` and formally define your stable public interface.

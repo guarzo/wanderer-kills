@@ -266,11 +266,12 @@ defmodule WandererKillsWeb.Api do
   # Helper functions to replace Fetching.Coordinator functionality
 
   defp fetch_and_cache_killmail(killmail_id) do
-    alias WandererKills.Fetching.{ZkbService, Processor}
+    alias WandererKills.External.ZKB
+    alias WandererKills.Killmails.Coordinator
     alias WandererKills.Core.Cache
 
-    with {:ok, raw_killmail} <- ZkbService.fetch_killmail(killmail_id),
-         {:ok, processed_killmail} <- Processor.process_single_killmail(raw_killmail),
+    with {:ok, raw_killmail} <- ZKB.fetch_killmail(killmail_id),
+         {:ok, processed_killmail} <- Coordinator.process_single_killmail(raw_killmail),
          :ok <- Cache.put(:killmails, killmail_id, processed_killmail) do
       {:ok, processed_killmail}
     else
@@ -279,7 +280,8 @@ defmodule WandererKillsWeb.Api do
   end
 
   defp fetch_killmails_for_system(system_id) do
-    alias WandererKills.Fetching.{ZkbService, Processor}
+    alias WandererKills.External.ZKB
+    alias WandererKills.Killmails.Coordinator
     alias WandererKills.Core.Cache
 
     # Check cache first
@@ -302,7 +304,8 @@ defmodule WandererKillsWeb.Api do
   end
 
   defp fetch_remote_killmails(system_id) do
-    alias WandererKills.Fetching.{ZkbService, Processor}
+    alias WandererKills.External.ZKB
+    alias WandererKills.Killmails.Coordinator
     alias WandererKills.Core.Cache
 
     # Default limit
@@ -310,9 +313,9 @@ defmodule WandererKillsWeb.Api do
     # Default since hours
     since_hours = 24
 
-    with {:ok, raw_killmails} <- ZkbService.fetch_system_killmails(system_id, limit, since_hours),
+    with {:ok, raw_killmails} <- ZKB.fetch_system_killmails(system_id, limit, since_hours),
          {:ok, processed_killmails} <-
-           Processor.process_killmails(raw_killmails, system_id, since_hours),
+           Coordinator.process_killmails(raw_killmails, system_id, since_hours),
          :ok <- cache_killmails_for_system(system_id, processed_killmails) do
       {:ok, processed_killmails}
     else

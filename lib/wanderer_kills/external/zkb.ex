@@ -1,10 +1,10 @@
-defmodule WandererKills.Fetching.ZkbService do
+defmodule WandererKills.External.ZKB do
   @moduledoc """
-  Pure ZKB API interaction service.
+  External ZKB API service with telemetry and processing.
 
-  This module handles all direct interactions with zKillboard API,
-  including fetching individual killmails, system killmails, and kill counts.
-  It focuses solely on API communication without caching or processing logic.
+  This module consolidates ZKB API interactions with telemetry, logging,
+  and processing functionality. It replaces the previous fetching architecture
+  with a more direct approach.
   """
 
   require Logger
@@ -17,22 +17,7 @@ defmodule WandererKills.Fetching.ZkbService do
   @type killmail :: map()
 
   @doc """
-  Fetches a single killmail from zKillboard.
-
-  ## Parameters
-  - `killmail_id` - The ID of the killmail to fetch
-  - `client` - Optional ZKB client module (for testing)
-
-  ## Returns
-  - `{:ok, killmail}` - On successful fetch
-  - `{:error, reason}` - On failure
-
-  ## Examples
-
-  ```elixir
-  {:ok, killmail} = ZkbService.fetch_killmail(12345)
-  {:error, reason} = ZkbService.fetch_killmail(99999)
-  ```
+  Fetches a single killmail from zKillboard with telemetry.
   """
   @spec fetch_killmail(killmail_id(), module() | nil) :: {:ok, killmail()} | {:error, term()}
   def fetch_killmail(killmail_id, client \\ nil)
@@ -85,24 +70,7 @@ defmodule WandererKills.Fetching.ZkbService do
   end
 
   @doc """
-  Fetches killmails for a specific system from zKillboard.
-
-  ## Parameters
-  - `system_id` - The system ID to fetch killmails for
-  - `limit` - Maximum number of killmails to fetch (used for telemetry)
-  - `since_hours` - Only fetch killmails newer than this (used for telemetry)
-  - `client` - Optional ZKB client module (for testing)
-
-  ## Returns
-  - `{:ok, [killmail]}` - On successful fetch
-  - `{:error, reason}` - On failure
-
-  ## Examples
-
-  ```elixir
-  {:ok, killmails} = ZkbService.fetch_system_killmails(30000142, 10, 24)
-  {:error, reason} = ZkbService.fetch_system_killmails(99999, 5, 24)
-  ```
+  Fetches killmails for a specific system from zKillboard with telemetry.
   """
   @spec fetch_system_killmails(system_id(), pos_integer(), pos_integer(), module() | nil) ::
           {:ok, [killmail()]} | {:error, term()}
@@ -122,8 +90,6 @@ defmodule WandererKills.Fetching.ZkbService do
 
     Telemetry.fetch_system_start(system_id, limit, :zkb)
 
-    # ZKB client doesn't accept limit or since_hours parameters directly
-    # These parameters are used for telemetry and will be handled in the processor
     case actual_client.fetch_system_killmails(system_id) do
       {:ok, killmails} when is_list(killmails) ->
         Telemetry.fetch_system_success(system_id, length(killmails), :zkb)
@@ -157,22 +123,7 @@ defmodule WandererKills.Fetching.ZkbService do
   end
 
   @doc """
-  Gets the kill count for a system from zKillboard stats.
-
-  ## Parameters
-  - `system_id` - The system ID (integer)
-  - `client` - Optional ZKB client module (for testing)
-
-  ## Returns
-  - `{:ok, count}` - On success
-  - `{:error, reason}` - On failure
-
-  ## Examples
-
-  ```elixir
-  {:ok, 15} = ZkbService.get_system_kill_count(30000142)
-  {:error, reason} = ZkbService.get_system_kill_count(99999)
-  ```
+  Gets the kill count for a system from zKillboard with telemetry.
   """
   @spec get_system_kill_count(system_id(), module() | nil) :: {:ok, integer()} | {:error, term()}
   def get_system_kill_count(system_id, client \\ nil)
@@ -216,17 +167,59 @@ defmodule WandererKills.Fetching.ZkbService do
   end
 
   @doc """
-  Handles ZKB API response standardization.
-
-  This function can be used to normalize responses from different ZKB endpoints
-  or handle common response patterns.
+  Fetches active systems from zKillboard with caching.
   """
-  @spec handle_zkb_response(term()) :: {:ok, term()} | {:error, term()}
-  def handle_zkb_response({:ok, data}), do: {:ok, data}
-  def handle_zkb_response({:error, reason}), do: {:error, reason}
+  @spec fetch_active_systems(keyword()) :: {:ok, [system_id()]} | {:error, term()}
+  def fetch_active_systems(opts \\ []) do
+    force = Keyword.get(opts, :force, false)
 
-  def handle_zkb_response(other) do
-    Logger.warning("Unexpected ZKB response format", response: inspect(other))
-    {:error, Error.zkb_error(:unexpected_response, "Unexpected response format from ZKB")}
+    if force do
+      do_fetch_active_systems()
+    else
+      case fetch_from_cache() do
+        {:ok, systems} -> {:ok, systems}
+        {:error, _reason} -> do_fetch_active_systems()
+      end
+    end
+  end
+
+  defp fetch_from_cache do
+    alias WandererKills.Core.Cache
+
+    case Cache.get_active_systems() do
+      {:ok, systems} when is_list(systems) ->
+        {:ok, systems}
+
+      {:error, reason} ->
+        Logger.warning("Cache error for active systems, falling back to fresh fetch",
+          operation: :fetch_active_systems,
+          step: :cache_error,
+          error: reason
+        )
+
+        do_fetch_active_systems()
+    end
+  end
+
+  defp do_fetch_active_systems do
+    case ZkbClient.fetch_active_systems() do
+      {:ok, systems} ->
+        Logger.debug("Successfully fetched active systems from ZKB",
+          system_count: length(systems),
+          operation: :fetch_active_systems,
+          step: :success
+        )
+
+        {:ok, systems}
+
+      {:error, reason} ->
+        Logger.error("API error for active systems",
+          operation: :fetch_active_systems,
+          step: :api_call,
+          error: reason
+        )
+
+        {:error, reason}
+    end
   end
 end

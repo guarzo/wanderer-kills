@@ -1,10 +1,10 @@
-defmodule WandererKills.Fetching.ZkbServiceTest do
+defmodule WandererKills.External.ZKBTest do
   use ExUnit.Case, async: true
   import Mox
 
-  @moduletag :fetcher
+  @moduletag :external
 
-  alias WandererKills.Fetching.ZkbService
+  alias WandererKills.External.ZKB
   alias WandererKills.TestHelpers
   alias WandererKills.Zkb.Client.Mock, as: ZkbClient
 
@@ -23,7 +23,7 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:fetch_killmail, fn ^killmail_id -> {:ok, killmail} end)
 
-      assert {:ok, ^killmail} = ZkbService.fetch_killmail(killmail_id, ZkbClient)
+      assert {:ok, ^killmail} = ZKB.fetch_killmail(killmail_id, ZkbClient)
     end
 
     test "handles killmail not found (nil response)" do
@@ -32,7 +32,7 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:fetch_killmail, fn ^killmail_id -> {:ok, nil} end)
 
-      assert {:error, error} = ZkbService.fetch_killmail(killmail_id, ZkbClient)
+      assert {:error, error} = ZKB.fetch_killmail(killmail_id, ZkbClient)
       assert error.domain == :zkb
       assert error.type == :not_found
       assert String.contains?(error.message, "not found")
@@ -44,17 +44,17 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:fetch_killmail, fn ^killmail_id -> {:error, :rate_limited} end)
 
-      assert {:error, :rate_limited} = ZkbService.fetch_killmail(killmail_id, ZkbClient)
+      assert {:error, :rate_limited} = ZKB.fetch_killmail(killmail_id, ZkbClient)
     end
 
     test "validates killmail ID format" do
-      assert {:error, error} = ZkbService.fetch_killmail("invalid", ZkbClient)
+      assert {:error, error} = ZKB.fetch_killmail("invalid", ZkbClient)
       assert error.domain == :validation
       assert String.contains?(error.message, "Invalid killmail ID format")
     end
 
     test "validates positive killmail ID" do
-      assert {:error, error} = ZkbService.fetch_killmail(-1, ZkbClient)
+      assert {:error, error} = ZKB.fetch_killmail(-1, ZkbClient)
       assert error.domain == :validation
     end
   end
@@ -69,7 +69,7 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, killmails} end)
 
-      assert {:ok, ^killmails} = ZkbService.fetch_system_killmails(system_id, 10, 24, ZkbClient)
+      assert {:ok, ^killmails} = ZKB.fetch_system_killmails(system_id, 10, 24, ZkbClient)
     end
 
     test "handles empty killmail list" do
@@ -78,7 +78,7 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, []} end)
 
-      assert {:ok, []} = ZkbService.fetch_system_killmails(system_id, 10, 24, ZkbClient)
+      assert {:ok, []} = ZKB.fetch_system_killmails(system_id, 10, 24, ZkbClient)
     end
 
     test "handles client errors" do
@@ -87,17 +87,17 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:fetch_system_killmails, fn ^system_id -> {:error, :timeout} end)
 
-      assert {:error, :timeout} = ZkbService.fetch_system_killmails(system_id, 10, 24, ZkbClient)
+      assert {:error, :timeout} = ZKB.fetch_system_killmails(system_id, 10, 24, ZkbClient)
     end
 
     test "validates system ID format" do
-      assert {:error, error} = ZkbService.fetch_system_killmails("invalid", 10, 24, ZkbClient)
+      assert {:error, error} = ZKB.fetch_system_killmails("invalid", 10, 24, ZkbClient)
       assert error.domain == :validation
       assert String.contains?(error.message, "Invalid system ID format")
     end
 
     test "validates positive system ID" do
-      assert {:error, error} = ZkbService.fetch_system_killmails(-1, 10, 24, ZkbClient)
+      assert {:error, error} = ZKB.fetch_system_killmails(-1, 10, 24, ZkbClient)
       assert error.domain == :validation
     end
   end
@@ -110,7 +110,7 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:get_system_kill_count, fn ^system_id -> {:ok, expected_count} end)
 
-      assert {:ok, ^expected_count} = ZkbService.get_system_kill_count(system_id, ZkbClient)
+      assert {:ok, ^expected_count} = ZKB.get_system_kill_count(system_id, ZkbClient)
     end
 
     test "handles client errors" do
@@ -119,17 +119,17 @@ defmodule WandererKills.Fetching.ZkbServiceTest do
       ZkbClient
       |> expect(:get_system_kill_count, fn ^system_id -> {:error, :not_found} end)
 
-      assert {:error, :not_found} = ZkbService.get_system_kill_count(system_id, ZkbClient)
+      assert {:error, :not_found} = ZKB.get_system_kill_count(system_id, ZkbClient)
     end
 
     test "validates system ID format" do
-      assert {:error, error} = ZkbService.get_system_kill_count("invalid", ZkbClient)
+      assert {:error, error} = ZKB.get_system_kill_count("invalid", ZkbClient)
       assert error.domain == :validation
       assert String.contains?(error.message, "Invalid system ID format")
     end
 
     test "validates positive system ID" do
-      assert {:error, error} = ZkbService.get_system_kill_count(-1, ZkbClient)
+      assert {:error, error} = ZKB.get_system_kill_count(-1, ZkbClient)
       assert error.domain == :validation
     end
   end
