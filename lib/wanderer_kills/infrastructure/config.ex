@@ -135,7 +135,7 @@ defmodule WandererKills.Infrastructure.Config do
     app: %{
       port: 4004,
       http_client: "WandererKills.Core.Http.Client",
-      zkb_client: WandererKills.Zkb.Client
+      zkb_client: WandererKills.Killmails.ZkbClient
     }
   ]
 
@@ -212,7 +212,7 @@ defmodule WandererKills.Infrastructure.Config do
       app: %{
         port: get_env(:port, 4004),
         http_client: get_env(:http_client, "WandererKills.Http.Client"),
-        zkb_client: get_env(:zkb_client, WandererKills.Zkb.Client)
+        zkb_client: get_env(:zkb_client, WandererKills.Killmails.ZkbClient)
       }
     }
   end
@@ -315,75 +315,10 @@ defmodule WandererKills.Infrastructure.Config do
     end
   end
 
-  # Legacy compatibility functions (deprecated)
-  @doc false
-  @deprecated "Use Config.cache().killmails_ttl instead"
-  def cache_ttl(:killmails), do: cache().killmails_ttl
-  def cache_ttl(:system), do: cache().system_ttl
-  def cache_ttl(:esi), do: cache().esi_ttl
-  def cache_ttl(:esi_killmail), do: cache().esi_killmail_ttl
-
-  @doc false
-  @deprecated "Use Config.batch().concurrency_* instead"
-  def batch_concurrency(:esi), do: batch().concurrency_esi
-  def batch_concurrency(:zkb), do: batch().concurrency_zkb
-  def batch_concurrency(_), do: batch().concurrency_default
-
-  @doc false
-  @deprecated "Use Config.timeouts().* instead"
-  def request_timeout(:esi), do: timeouts().esi_request_ms
-  def request_timeout(:zkb), do: timeouts().zkb_request_ms
-  def request_timeout(:http), do: timeouts().http_request_ms
-  def request_timeout(_), do: timeouts().default_request_ms
-
-  @doc false
-  @deprecated "Use Config.retry().http_max_retries instead"
-  def retry_http_max_retries, do: retry().http_max_retries
-
-  @doc false
-  @deprecated "Use Config.retry().http_base_delay instead"
-  def retry_http_base_delay, do: retry().http_base_delay
-
-  @doc false
-  @deprecated "Use Config.retry().http_max_delay instead"
-  def retry_http_max_delay, do: retry().http_max_delay
-
-  @doc false
-  @deprecated "Use Config.app().port instead"
-  def port, do: app().port
-
-  @doc false
-  @deprecated "Use Config.app().http_client instead"
-  def http_client do
-    case app().http_client do
-      module when is_atom(module) ->
-        module
-
-      module_string when is_binary(module_string) ->
-        String.to_existing_atom("Elixir.#{module_string}")
-    end
-  end
-
-  # Additional legacy functions for compatibility
-  @doc false
+  # Non-deprecated utility functions
+  @doc "Checks if preloader should start"
+  @spec start_preloader?() :: boolean()
   def start_preloader?, do: get_env(:start_preloader, true)
-
-  @doc false
-  def clock, do: get_env(:clock, nil)
-
-  @doc false
-  def cache_killmails_name, do: get_env(:cache_killmails_name, :unified_cache)
-
-  @doc false
-  def cache_system_name, do: get_env(:cache_system_name, :system_cache)
-
-  @doc false
-  def cache_esi_name, do: get_env(:cache_esi_name, :esi_cache)
-
-  @doc false
-  @deprecated "Use Config.services().esi_base_url instead"
-  def service_url(:esi), do: services().esi_base_url
-  def service_url(_), do: nil
 
   # Private helper function
   defp get_env(key, default) do

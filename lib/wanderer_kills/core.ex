@@ -13,10 +13,10 @@ defmodule WandererKills.Core do
   ### HTTP Modules
   - `WandererKills.Core.Http.Client` → `WandererKills.Http.Client`
   - `WandererKills.Core.Http.ClientProvider` → `WandererKills.Http.ClientProvider`
-  - `WandererKills.Core.Http.Util` → `WandererKills.Http.Util`
+  - `WandererKills.Core.Http.Util` → **REMOVED** (functionality moved to `WandererKills.Http.Client`)
 
   ### Processing Modules
-  - `WandererKills.Core.BatchProcessor` → `WandererKills.Processing.BatchProcessor`
+  - `WandererKills.Core.BatchProcessor` → `WandererKills.Infrastructure.BatchProcessor`
   - `WandererKills.Core.CSV` → `WandererKills.ShipTypes.CSV`
 
   ### Cache Modules
@@ -94,9 +94,9 @@ defmodule WandererKills.Core do
   defmodule BatchProcessor do
     @moduledoc false
     defdelegate process_parallel(items, process_fn, opts \\ []),
-      to: WandererKills.Processing.BatchProcessor
+      to: WandererKills.Infrastructure.BatchProcessor
 
-    defdelegate await_tasks(tasks, opts \\ []), to: WandererKills.Processing.BatchProcessor
+    defdelegate await_tasks(tasks, opts \\ []), to: WandererKills.Infrastructure.BatchProcessor
   end
 
   defmodule CSV do
@@ -131,7 +131,7 @@ defmodule WandererKills.Core do
     defdelegate telemetry(), to: WandererKills.Infrastructure.Config
     defdelegate app(), to: WandererKills.Infrastructure.Config
 
-    def start_preloader?(), do: Application.get_env(:wanderer_kills, :start_preloader, false)
+    def start_preloader?(), do: WandererKills.Infrastructure.Config.start_preloader?()
     def cache_killmails_name(), do: :wanderer_kills_cache
     def cache_system_name(), do: :wanderer_kills_system_cache
     def cache_esi_name(), do: :wanderer_kills_esi_cache
@@ -148,7 +148,6 @@ defmodule WandererKills.Core do
   defmodule Clock do
     @moduledoc false
     defdelegate now(), to: WandererKills.Infrastructure.Clock
-    defdelegate system_time(), to: WandererKills.Infrastructure.Clock
     defdelegate system_time(unit), to: WandererKills.Infrastructure.Clock
     defdelegate now_iso8601(), to: WandererKills.Infrastructure.Clock
     defdelegate now_milliseconds(), to: WandererKills.Infrastructure.Clock

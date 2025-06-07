@@ -9,7 +9,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   import Plug.Conn
   import WandererKillsWeb.Api.Helpers, only: [send_json_resp: 3]
 
-  alias WandererKills.KillStore
+  alias WandererKills.Killmails.Store
   alias WandererKills.Core.Constants
 
   # System ID validation
@@ -60,7 +60,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
     with {:ok, valid_systems} <- validate_system_ids(systems) do
       killmails =
         valid_systems
-        |> Enum.flat_map(&KillStore.list_by_system/1)
+        |> Enum.flat_map(&Store.list_by_system/1)
         # Limit to prevent large responses
         |> Enum.take(100)
 
@@ -84,7 +84,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   def next(conn, %{"systems" => systems}) do
     with {:ok, valid_systems} <- validate_system_ids(systems) do
       case valid_systems
-           |> Enum.flat_map(&KillStore.list_by_system/1)
+           |> Enum.flat_map(&Store.list_by_system/1)
            |> Enum.take(1) do
         [killmail] ->
           send_json_resp(conn, 200, killmail)

@@ -55,14 +55,6 @@ defmodule WandererKills.Infrastructure.Clock do
   end
 
   @doc """
-  Returns the current system time in **nanoseconds** by default.
-  """
-  @spec system_time() :: integer()
-  def system_time() do
-    System.system_time(:nanosecond)
-  end
-
-  @doc """
   Returns the current system time in the specified `unit`.
   """
   @spec system_time(System.time_unit()) :: integer()

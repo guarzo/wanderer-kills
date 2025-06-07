@@ -134,12 +134,12 @@ defmodule WandererKills.Killmails.Enricher do
     end
   end
 
-  defp get_character_info(id) when is_integer(id), do: Helper.esi_get_character(id)
+  defp get_character_info(id) when is_integer(id), do: Helper.character_get(id)
   defp get_character_info(_), do: {:ok, nil}
 
-  defp get_corporation_info(id) when is_integer(id), do: Helper.esi_get_corporation(id)
+  defp get_corporation_info(id) when is_integer(id), do: Helper.corporation_get(id)
   defp get_corporation_info(_), do: {:ok, nil}
 
-  defp get_alliance_info(id) when is_integer(id), do: Helper.esi_get_alliance(id)
+  defp get_alliance_info(id) when is_integer(id), do: Helper.alliance_get(id)
   defp get_alliance_info(_), do: {:ok, nil}
 end

@@ -8,7 +8,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   require Logger
   alias WandererKills.Core.{Config, Error}
-  alias WandererKills.Infrastructure.Behaviours.{ESIClient, DataFetcher}
+  alias WandererKills.Behaviours.{ESIClient, DataFetcher}
   alias WandererKills.Cache.Helper
 
   @behaviour ESIClient
@@ -23,7 +23,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_character(character_id) when is_integer(character_id) do
-    Helper.esi_get_or_set_character(character_id, fn ->
+    Helper.character_get_or_set(character_id, fn ->
       fetch_from_api(:character, character_id)
     end)
   end
@@ -35,7 +35,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_corporation(corporation_id) when is_integer(corporation_id) do
-    Helper.esi_get_or_set_corporation(corporation_id, fn ->
+    Helper.corporation_get_or_set(corporation_id, fn ->
       fetch_from_api(:corporation, corporation_id)
     end)
   end
@@ -47,7 +47,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_alliance(alliance_id) when is_integer(alliance_id) do
-    Helper.esi_get_or_set_alliance(alliance_id, fn ->
+    Helper.alliance_get_or_set(alliance_id, fn ->
       fetch_from_api(:alliance, alliance_id)
     end)
   end
@@ -59,7 +59,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_type(type_id) when is_integer(type_id) do
-    Helper.esi_get_or_set_type(type_id, fn ->
+    Helper.ship_type_get_or_set(type_id, fn ->
       fetch_from_api(:type, type_id)
     end)
   end
@@ -71,7 +71,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_group(group_id) when is_integer(group_id) do
-    Helper.esi_get_or_set_group(group_id, fn ->
+    Helper.get_or_set("groups", to_string(group_id), fn ->
       fetch_from_api(:group, group_id)
     end)
   end
@@ -129,7 +129,7 @@ defmodule WandererKills.ESI.DataFetcher do
   """
   def get_killmail(killmail_id, killmail_hash)
       when is_integer(killmail_id) and is_binary(killmail_hash) do
-    Helper.esi_get_or_set_killmail(killmail_id, fn ->
+    Helper.killmail_get_or_set(killmail_id, fn ->
       fetch_killmail_from_api(killmail_id, killmail_hash)
     end)
   end

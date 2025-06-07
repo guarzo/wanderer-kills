@@ -1,4 +1,4 @@
-defmodule WandererKills.Zkb.ClientBehaviour do
+defmodule WandererKills.Killmails.ZkbClientBehaviour do
   @moduledoc """
   Behaviour for ZKB (zKillboard) client implementations.
   """
@@ -19,7 +19,7 @@ defmodule WandererKills.Zkb.ClientBehaviour do
   @callback get_system_kill_count(integer()) :: {:ok, integer()} | {:error, term()}
 end
 
-defmodule WandererKills.Zkb.Client do
+defmodule WandererKills.Killmails.ZkbClient do
   @moduledoc """
   Unified ZKB API client for zKillboard with telemetry and processing.
 
@@ -28,7 +28,7 @@ defmodule WandererKills.Zkb.Client do
   with a single unified approach.
   """
 
-  @behaviour WandererKills.Zkb.ClientBehaviour
+  @behaviour WandererKills.Killmails.ZkbClientBehaviour
 
   require Logger
   alias WandererKills.Infrastructure.{Config, Error}

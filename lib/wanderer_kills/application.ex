@@ -21,7 +21,7 @@ defmodule WandererKills.Application do
   @impl true
   def start(_type, _args) do
     # 1) Initialize ETS for our KillStore
-    WandererKills.KillStore.init_tables!()
+    WandererKills.Killmails.Store.init_tables!()
 
     # 2) Attach telemetry handlers
     WandererKills.Observability.Telemetry.attach_handlers()
@@ -85,7 +85,7 @@ defmodule WandererKills.Application do
 
   defp maybe_preloader(children) do
     if Config.start_preloader?() do
-      children ++ [WandererKills.PreloaderSupervisor]
+      children ++ [WandererKills.Preloader.Supervisor]
     else
       children
     end

@@ -283,7 +283,7 @@ defmodule WandererKillsWeb.Api do
 
   @spec fetch_and_cache_killmail(integer()) :: {:ok, map()} | {:error, term()}
   defp fetch_and_cache_killmail(killmail_id) do
-    alias WandererKills.Zkb.Client, as: ZKB
+    alias WandererKills.Killmails.ZkbClient, as: ZKB
     alias WandererKills.Killmails.Coordinator
     alias WandererKills.Cache.Helper
 
@@ -298,7 +298,7 @@ defmodule WandererKillsWeb.Api do
 
   @spec fetch_killmails_for_system(integer()) :: {:ok, list()} | {:error, term()}
   defp fetch_killmails_for_system(system_id) do
-    alias WandererKills.Zkb.Client, as: ZKB
+    alias WandererKills.Killmails.ZkbClient, as: ZKB
     alias WandererKills.Killmails.Coordinator
     alias WandererKills.Cache.Helper
 
@@ -323,7 +323,7 @@ defmodule WandererKillsWeb.Api do
 
   @spec fetch_remote_killmails(integer()) :: {:ok, list()} | {:error, term()}
   defp fetch_remote_killmails(system_id) do
-    alias WandererKills.Zkb.Client, as: ZKB
+    alias WandererKills.Killmails.ZkbClient, as: ZKB
     alias WandererKills.Killmails.Coordinator
 
     # Default limit

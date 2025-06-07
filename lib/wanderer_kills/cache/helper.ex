@@ -203,21 +203,6 @@ defmodule WandererKills.Cache.Helper do
   def alliance_delete(id), do: delete("alliances", to_string(id))
 
   @doc """
-  ESI-specific cache operations (legacy compatibility).
-  These functions provide direct ESI cache access for modules that expect ESI-prefixed functions.
-  """
-  def esi_get_character(id), do: character_get(id)
-  def esi_get_corporation(id), do: corporation_get(id)
-  def esi_get_alliance(id), do: alliance_get(id)
-
-  def esi_get_or_set_character(id, fallback_fn), do: character_get_or_set(id, fallback_fn)
-  def esi_get_or_set_corporation(id, fallback_fn), do: corporation_get_or_set(id, fallback_fn)
-  def esi_get_or_set_alliance(id, fallback_fn), do: alliance_get_or_set(id, fallback_fn)
-  def esi_get_or_set_type(id, fallback_fn), do: ship_type_get_or_set(id, fallback_fn)
-  def esi_get_or_set_group(id, fallback_fn), do: get_or_set("groups", to_string(id), fallback_fn)
-  def esi_get_or_set_killmail(id, fallback_fn), do: killmail_get_or_set(id, fallback_fn)
-
-  @doc """
   Ship type cache operations.
   """
   def ship_type_get(id), do: get_with_error("ship_types", to_string(id))

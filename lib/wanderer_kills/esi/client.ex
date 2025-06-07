@@ -9,7 +9,7 @@ defmodule WandererKills.ESI.Client do
   require Logger
   alias WandererKills.Infrastructure.Config
   alias WandererKills.ESI.DataFetcher
-  alias WandererKills.Infrastructure.Behaviours.ESIClient
+  alias WandererKills.Behaviours.ESIClient
 
   @behaviour ESIClient
 

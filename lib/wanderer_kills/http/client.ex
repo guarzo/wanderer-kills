@@ -43,7 +43,7 @@ defmodule WandererKills.Http.Client do
     - Metadata: `%{method: "GET", url: url, error: reason}` on failure
   """
 
-  @behaviour WandererKills.Infrastructure.Behaviours.HttpClient
+  @behaviour WandererKills.Behaviours.HttpClient
 
   require Logger
   alias WandererKills.Infrastructure.Error.{ConnectionError, TimeoutError, RateLimitError}
@@ -58,7 +58,7 @@ defmodule WandererKills.Http.Client do
 
   # Get the configured HTTP client implementation
   defp http_client do
-    Application.get_env(:wanderer_kills, :http_client, __MODULE__)
+    WandererKills.Infrastructure.Config.app().http_client
   end
 
   # Real HTTP implementation using Req

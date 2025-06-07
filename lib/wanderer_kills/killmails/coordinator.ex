@@ -191,7 +191,7 @@ defmodule WandererKills.Killmails.Coordinator do
     Task.start(fn ->
       try do
         killmail_id = enriched["killmail_id"]
-        :ok = WandererKills.KillStore.put(killmail_id, system_id, enriched)
+        :ok = WandererKills.Killmails.Store.put(killmail_id, system_id, enriched)
 
         Logger.info("Successfully enriched and stored killmail", %{
           killmail_id: killmail_id,
