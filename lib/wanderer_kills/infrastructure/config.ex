@@ -244,7 +244,16 @@ defmodule WandererKills.Infrastructure.Config do
 
   @doc "Gets RedisQ configuration"
   @spec redisq() :: map()
-  def redisq, do: config().redisq
+  def redisq do
+    get_env(:redisq, %{
+      task_timeout_ms: 10_000,
+      fast_interval_ms: 1_000,
+      idle_interval_ms: 5_000,
+      initial_backoff_ms: 1_000,
+      max_backoff_ms: 30_000,
+      backoff_factor: 2
+    })
+  end
 
   @doc "Gets parser configuration"
   @spec parser() :: map()
@@ -319,6 +328,10 @@ defmodule WandererKills.Infrastructure.Config do
   @doc "Checks if preloader should start"
   @spec start_preloader?() :: boolean()
   def start_preloader?, do: get_env(:start_preloader, true)
+
+  @doc "Checks if RedisQ should start"
+  @spec start_redisq?() :: boolean()
+  def start_redisq?, do: get_env(:start_redisq, true)
 
   # Private helper function
   defp get_env(key, default) do

@@ -421,9 +421,19 @@ defmodule WandererKills.Observability.Telemetry do
         )
 
       :cpu ->
-        Logger.debug(
-          "[System] CPU usage - Total: #{measurements.total_cpu}%, Process: #{measurements.process_cpu}%"
-        )
+        # Safely handle the case where total_cpu might not be present
+        case Map.get(measurements, :total_cpu) do
+          nil ->
+            # If total_cpu is not available, log the available metrics
+            Logger.debug(
+              "[System] System metrics - Processes: #{measurements.process_count}, Ports: #{measurements.port_count}, Schedulers: #{measurements.schedulers}, Run Queue: #{measurements.run_queue}"
+            )
+
+          total_cpu ->
+            # Log with total_cpu and process_cpu if available
+            process_cpu = Map.get(measurements, :process_cpu, "N/A")
+            Logger.debug("[System] CPU usage - Total: #{total_cpu}%, Process: #{process_cpu}%")
+        end
     end
   end
 end

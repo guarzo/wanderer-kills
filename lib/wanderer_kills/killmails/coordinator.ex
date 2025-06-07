@@ -109,11 +109,21 @@ defmodule WandererKills.Killmails.Coordinator do
     # Merge zkb data into the full killmail
     merged = Map.put(full, "zkb", zkb)
 
-    with {:ok, parsed} <- parse_killmail_with_cutoff(merged, cutoff, full["killmail_id"]),
-         {:ok, enriched} <- enrich_and_log_killmail(parsed, full["killmail_id"]),
-         {:ok, system_id} <- extract_system_id(enriched, full["killmail_id"]) do
-      store_killmail_async(system_id, enriched, full["killmail_id"])
-      {:ok, enriched}
+    case parse_killmail_with_cutoff(merged, cutoff, full["killmail_id"]) do
+      {:ok, :kill_older} ->
+        # Return immediately for older kills, don't try to enrich
+        {:ok, :kill_older}
+
+      {:ok, parsed} ->
+        # Continue with enrichment pipeline for valid killmails
+        with {:ok, enriched} <- enrich_and_log_killmail(parsed, full["killmail_id"]),
+             {:ok, system_id} <- extract_system_id(enriched, full["killmail_id"]) do
+          store_killmail_async(system_id, enriched, full["killmail_id"])
+          {:ok, enriched}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

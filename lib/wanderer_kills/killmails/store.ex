@@ -94,16 +94,22 @@ defmodule WandererKills.Killmails.Store do
   def list_by_system(system_id) when is_integer(system_id) do
     case :ets.lookup(@system_killmails_table, system_id) do
       [{^system_id, killmail_ids}] ->
-        # Retrieve the actual killmail data for each ID
-        Enum.flat_map(killmail_ids, fn killmail_id ->
-          case :ets.lookup(@killmail_table, killmail_id) do
-            [{^killmail_id, killmail_data}] -> [killmail_data]
-            [] -> []
-          end
-        end)
+        Enum.flat_map(killmail_ids, &get_killmail_data/1)
 
       [] ->
         []
+    end
+  end
+
+  # ============================================================================
+  # Private Helper Functions
+  # ============================================================================
+
+  @spec get_killmail_data(kill_id()) :: [kill_data()]
+  defp get_killmail_data(killmail_id) do
+    case :ets.lookup(@killmail_table, killmail_id) do
+      [{^killmail_id, killmail_data}] -> [killmail_data]
+      [] -> []
     end
   end
 

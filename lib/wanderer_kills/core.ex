@@ -33,6 +33,14 @@ defmodule WandererKills.Core do
 
   # HTTP Module Aliases (consolidated)
   defmodule Http do
+    @moduledoc """
+    Legacy HTTP module aliases for backward compatibility.
+
+    Provides aliases to new HTTP modules in the WandererKills.Http namespace.
+    This module maintains backward compatibility while the codebase transitions
+    to the new module structure.
+    """
+
     defmodule Client do
       @moduledoc false
       # Core HTTP client functions
@@ -63,9 +71,6 @@ defmodule WandererKills.Core do
       # Legacy compatibility
       def get(), do: get_client()
     end
-
-    # Removed Http.Util module - deprecated and unused
-    # All functionality has been moved to Client or ClientProvider
   end
 
   # Processing Module Aliases

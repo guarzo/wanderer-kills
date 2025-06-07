@@ -83,7 +83,13 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_system(system_id) when is_integer(system_id) do
-    fetch_from_api(:system, system_id)
+    try do
+      result = fetch_from_api(:system, system_id)
+      {:ok, result}
+    rescue
+      error ->
+        {:error, error}
+    end
   end
 
   @impl ESIClient

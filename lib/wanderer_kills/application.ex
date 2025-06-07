@@ -40,6 +40,7 @@ defmodule WandererKills.Application do
            {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
          ])
       |> maybe_preloader()
+      |> maybe_redisq()
 
     # 4) Start the supervisor
     opts = [strategy: :one_for_one, name: WandererKills.Supervisor]
@@ -86,6 +87,14 @@ defmodule WandererKills.Application do
   defp maybe_preloader(children) do
     if Config.start_preloader?() do
       children ++ [WandererKills.Preloader.Supervisor]
+    else
+      children
+    end
+  end
+
+  defp maybe_redisq(children) do
+    if Config.start_redisq?() do
+      children ++ [WandererKills.RedisQ]
     else
       children
     end

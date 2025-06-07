@@ -94,7 +94,7 @@ defmodule WandererKills.Preloader do
     ## Public API
 
     @doc false
-    @spec child_spec(keyword()) :: Supervisor.child_spec()
+    @spec child_spec(keyword()) :: Elixir.Supervisor.child_spec()
     def child_spec(opts) do
       %{
         id: __MODULE__,

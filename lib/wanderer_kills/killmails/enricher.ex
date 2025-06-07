@@ -10,7 +10,7 @@ defmodule WandererKills.Killmails.Enricher do
 
   require Logger
   alias WandererKills.Infrastructure.Config
-  alias WandererKills.Cache.Helper
+  alias WandererKills.ESI.Client, as: EsiClient
   alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
 
   @doc """
@@ -46,11 +46,16 @@ defmodule WandererKills.Killmails.Enricher do
     victim = Map.get(killmail, "victim", %{})
 
     with {:ok, character} <- get_character_info(Map.get(victim, "character_id")),
-         {:ok, corporation} <- get_corporation_info(Map.get(victim, "corporation_id")),
-         {:ok, alliance} <- get_alliance_info(Map.get(victim, "alliance_id")) do
-      victim = Map.put(victim, "character", character)
-      victim = Map.put(victim, "corporation", corporation)
-      victim = Map.put(victim, "alliance", alliance)
+         {:ok, corporation} <- get_corporation_info(Map.get(victim, "corporation_id")) do
+      # Alliance is optional - handle separately
+      alliance = get_alliance_info_safe(Map.get(victim, "alliance_id"))
+
+      victim =
+        victim
+        |> Map.put("character", character)
+        |> Map.put("corporation", corporation)
+        |> Map.put("alliance", alliance)
+
       killmail = Map.put(killmail, "victim", victim)
       {:ok, killmail}
     end
@@ -82,8 +87,8 @@ defmodule WandererKills.Killmails.Enricher do
       attackers,
       fn attacker ->
         case enrich_attacker(attacker) do
-          {:ok, enriched} -> {:ok, enriched}
-          {:error, _} -> {:ok, nil}
+          {:ok, enriched} -> enriched
+          {:error, _} -> nil
         end
       end,
       max_concurrency: enricher_config.max_concurrency,
@@ -111,11 +116,16 @@ defmodule WandererKills.Killmails.Enricher do
   @spec enrich_attacker(map()) :: {:ok, map()} | {:error, term()}
   defp enrich_attacker(attacker) do
     with {:ok, character} <- get_character_info(Map.get(attacker, "character_id")),
-         {:ok, corporation} <- get_corporation_info(Map.get(attacker, "corporation_id")),
-         {:ok, alliance} <- get_alliance_info(Map.get(attacker, "alliance_id")) do
-      attacker = Map.put(attacker, "character", character)
-      attacker = Map.put(attacker, "corporation", corporation)
-      attacker = Map.put(attacker, "alliance", alliance)
+         {:ok, corporation} <- get_corporation_info(Map.get(attacker, "corporation_id")) do
+      # Alliance is optional - handle separately
+      alliance = get_alliance_info_safe(Map.get(attacker, "alliance_id"))
+
+      attacker =
+        attacker
+        |> Map.put("character", character)
+        |> Map.put("corporation", corporation)
+        |> Map.put("alliance", alliance)
+
       {:ok, attacker}
     else
       error ->
@@ -126,20 +136,34 @@ defmodule WandererKills.Killmails.Enricher do
 
   defp enrich_ship(killmail) do
     victim = Map.get(killmail, "victim", %{})
+    ship_type_id = Map.get(victim, "ship_type_id")
 
-    with {:ok, ship} <- ShipTypeInfo.get_ship_type(Map.get(victim, "ship_type_id")) do
-      victim = Map.put(victim, "ship", ship)
-      killmail = Map.put(killmail, "victim", victim)
-      {:ok, killmail}
+    ship =
+      case ShipTypeInfo.get_ship_type(ship_type_id) do
+        {:ok, ship_data} -> ship_data
+        _ -> nil
+      end
+
+    victim = Map.put(victim, "ship", ship)
+    killmail = Map.put(killmail, "victim", victim)
+    {:ok, killmail}
+  end
+
+  defp get_character_info(id) when is_integer(id), do: EsiClient.get_character(id)
+  defp get_character_info(_), do: {:ok, nil}
+
+  defp get_corporation_info(id) when is_integer(id), do: EsiClient.get_corporation(id)
+  defp get_corporation_info(_), do: {:ok, nil}
+
+  defp get_alliance_info(id) when is_integer(id) and id > 0, do: EsiClient.get_alliance(id)
+  defp get_alliance_info(_), do: {:ok, nil}
+
+  defp get_alliance_info_safe(id) when is_integer(id) do
+    case get_alliance_info(id) do
+      {:ok, alliance} -> alliance
+      _ -> nil
     end
   end
 
-  defp get_character_info(id) when is_integer(id), do: Helper.character_get(id)
-  defp get_character_info(_), do: {:ok, nil}
-
-  defp get_corporation_info(id) when is_integer(id), do: Helper.corporation_get(id)
-  defp get_corporation_info(_), do: {:ok, nil}
-
-  defp get_alliance_info(id) when is_integer(id), do: Helper.alliance_get(id)
-  defp get_alliance_info(_), do: {:ok, nil}
+  defp get_alliance_info_safe(_), do: nil
 end

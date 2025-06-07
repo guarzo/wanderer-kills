@@ -6,6 +6,7 @@ defmodule WandererKills.Cache.Helper do
   with namespaced keys and appropriate TTLs per namespace.
   """
 
+  require Logger
   alias WandererKills.Infrastructure.Config
 
   @cache_name :wanderer_cache
@@ -128,9 +129,7 @@ defmodule WandererKills.Cache.Helper do
 
     case Cachex.stream(@cache_name, namespaced_pattern) do
       {:ok, stream} -> {:ok, stream}
-      stream when is_struct(stream, Stream) -> {:ok, stream}
       {:error, reason} -> {:error, reason}
-      other -> {:error, {:unexpected_result, other}}
     end
   end
 
@@ -143,13 +142,6 @@ defmodule WandererKills.Cache.Helper do
     try do
       case Cachex.stream(@cache_name, pattern) do
         {:ok, stream} ->
-          stream
-          |> Stream.each(fn {key, _value} -> Cachex.del(@cache_name, key) end)
-          |> Stream.run()
-
-          :ok
-
-        stream when is_struct(stream, Stream) ->
           stream
           |> Stream.each(fn {key, _value} -> Cachex.del(@cache_name, key) end)
           |> Stream.run()
@@ -249,11 +241,11 @@ defmodule WandererKills.Cache.Helper do
   def system_add_killmail(system_id, killmail_id) do
     case system_get_killmails(system_id) do
       {:ok, existing_ids} ->
-        if killmail_id not in existing_ids do
+        if killmail_id in existing_ids do
+          {:ok, true}
+        else
           new_ids = [killmail_id | existing_ids]
           system_put_killmails(system_id, new_ids)
-        else
-          {:ok, true}
         end
 
       {:error, :not_found} ->
@@ -353,27 +345,47 @@ defmodule WandererKills.Cache.Helper do
   def system_get_active_systems do
     case stream("systems", "active:*") do
       {:ok, stream} ->
-        system_ids =
-          stream
-          |> Enum.map(fn {key, _value} ->
-            # Extract system_id from "systems:active:12345" format
-            case String.split(key, ":") do
-              ["systems", "active", system_id_str] ->
-                case Integer.parse(system_id_str) do
-                  {system_id, ""} -> system_id
-                  _ -> nil
-                end
+        try do
+          # Convert stream to list and process entries
+          entries = Enum.to_list(stream)
+          Logger.debug("Stream entries count: #{length(entries)}")
 
-              _ ->
-                nil
-            end
-          end)
-          |> Enum.reject(&is_nil/1)
-          |> Enum.sort()
+          system_ids =
+            entries
+            |> Enum.map(fn entry ->
+              case entry do
+                # Handle the standard {key, value} format
+                {key, _value} when is_binary(key) ->
+                  extract_system_id_from_key(key)
 
-        {:ok, system_ids}
+                # Handle if it's just a key
+                key when is_binary(key) ->
+                  extract_system_id_from_key(key)
+
+                # Handle any other format
+                other ->
+                  Logger.debug("Unexpected stream entry format: #{inspect(other)}")
+                  nil
+              end
+            end)
+            |> Enum.reject(&is_nil/1)
+            |> Enum.sort()
+
+          Logger.debug("Found #{length(system_ids)} active systems")
+          {:ok, system_ids}
+        rescue
+          error ->
+            Logger.error("Error processing active systems stream: #{inspect(error)}")
+            {:error, error}
+        end
+
+      {:error, :invalid_match} ->
+        # This happens when there are no keys matching the pattern
+        Logger.debug("No active systems found (no matching keys)")
+        {:ok, []}
 
       {:error, reason} ->
+        Logger.error("Failed to create systems stream: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -475,6 +487,21 @@ defmodule WandererKills.Cache.Helper do
       :system -> cache_config.system_ttl * 1_000
       :killmails -> cache_config.killmails_ttl * 1_000
       _ -> cache_config.esi_ttl * 1_000
+    end
+  end
+
+  # Helper function to extract system ID from cache key
+  defp extract_system_id_from_key(key) do
+    # Extract system_id from "systems:active:12345" format
+    case String.split(key, ":") do
+      ["systems", "active", system_id_str] ->
+        case Integer.parse(system_id_str) do
+          {system_id, ""} -> system_id
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 end

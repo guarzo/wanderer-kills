@@ -60,14 +60,14 @@ defmodule WandererKillsWeb.Api do
     case validate_killmail_id(id) do
       {:ok, killmail_id} ->
         case fetch_and_cache_killmail(killmail_id) do
+          {:ok, killmail} ->
+            handle_killmail_response({:ok, killmail}, killmail_id, conn)
+
           {:error, :not_found} ->
             handle_killmail_response({:error, :not_found}, killmail_id, conn)
 
           {:error, reason} ->
             handle_killmail_response({:error, reason}, killmail_id, conn)
-
-          {:ok, killmail} ->
-            handle_killmail_response({:ok, killmail}, killmail_id, conn)
         end
 
       {:error, :invalid_format} ->
@@ -296,7 +296,7 @@ defmodule WandererKillsWeb.Api do
 
     with {:ok, raw_killmail} <- ZKB.fetch_killmail(killmail_id),
          {:ok, processed_killmail} <- Coordinator.process_single_killmail(raw_killmail),
-         :ok <- Helper.killmail_put(killmail_id, processed_killmail) do
+         {:ok, _} <- Helper.killmail_put(killmail_id, processed_killmail) do
       {:ok, processed_killmail}
     else
       {:error, reason} -> {:error, reason}

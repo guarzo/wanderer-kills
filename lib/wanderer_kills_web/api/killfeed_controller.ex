@@ -57,21 +57,22 @@ defmodule WandererKillsWeb.Api.KillfeedController do
 
   # Controller actions
   def poll(conn, %{"systems" => systems}) do
-    with {:ok, valid_systems} <- validate_system_ids(systems) do
-      killmails =
-        valid_systems
-        |> Enum.flat_map(&Store.list_by_system/1)
-        # Limit to prevent large responses
-        |> Enum.take(100)
+    case validate_system_ids(systems) do
+      {:ok, valid_systems} ->
+        killmails =
+          valid_systems
+          |> Enum.flat_map(&Store.list_by_system/1)
+          # Limit to prevent large responses
+          |> Enum.take(100)
 
-      if Enum.empty?(killmails) do
-        send_resp(conn, 204, "")
-      else
-        send_json_resp(conn, 200, %{
-          killmails: killmails
-        })
-      end
-    else
+        if Enum.empty?(killmails) do
+          send_resp(conn, 204, "")
+        else
+          send_json_resp(conn, 200, %{
+            killmails: killmails
+          })
+        end
+
       {:error, reason} ->
         handle_error(conn, reason)
     end
@@ -82,17 +83,18 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   end
 
   def next(conn, %{"systems" => systems}) do
-    with {:ok, valid_systems} <- validate_system_ids(systems) do
-      case valid_systems
-           |> Enum.flat_map(&Store.list_by_system/1)
-           |> Enum.take(1) do
-        [killmail] ->
-          send_json_resp(conn, 200, killmail)
+    case validate_system_ids(systems) do
+      {:ok, valid_systems} ->
+        case valid_systems
+             |> Enum.flat_map(&Store.list_by_system/1)
+             |> Enum.take(1) do
+          [killmail] ->
+            send_json_resp(conn, 200, killmail)
 
-        [] ->
-          send_resp(conn, 204, "")
-      end
-    else
+          [] ->
+            send_resp(conn, 204, "")
+        end
+
       {:error, reason} ->
         handle_error(conn, reason)
     end

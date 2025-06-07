@@ -343,7 +343,7 @@ defmodule WandererKills.Http.Client do
         {:ok, parsed}
 
       {:error, reason} ->
-        {:error, Error.parsing_error("Invalid JSON response", %{reason: reason})}
+        {:error, Error.parsing_error(:invalid_json, "Invalid JSON response", %{reason: reason})}
     end
   end
 
@@ -356,11 +356,11 @@ defmodule WandererKills.Http.Client do
   end
 
   def parse_json_response(%{status: status}) when status >= 500 do
-    {:error, Error.http_error("Server error", %{status: status})}
+    {:error, Error.http_error(:server_error, "Server error", false, %{status: status})}
   end
 
   def parse_json_response(%{status: status}) do
-    {:error, Error.http_error("HTTP error", %{status: status})}
+    {:error, Error.http_error(:http_error, "HTTP error", false, %{status: status})}
   end
 
   @doc """
@@ -389,8 +389,12 @@ defmodule WandererKills.Http.Client do
       |> Enum.reject(&Map.has_key?(data, &1))
 
     case missing_fields do
-      [] -> {:ok, data}
-      missing -> {:error, Error.validation_error("Missing required fields", %{missing: missing})}
+      [] ->
+        {:ok, data}
+
+      missing ->
+        {:error,
+         Error.validation_error(:missing_fields, "Missing required fields", %{missing: missing})}
     end
   end
 
@@ -399,7 +403,8 @@ defmodule WandererKills.Http.Client do
   end
 
   def validate_response_structure(data, _required_fields) do
-    {:error, Error.validation_error("Invalid response format", %{type: typeof(data)})}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid response format", %{type: typeof(data)})}
   end
 
   # ============================================================================
