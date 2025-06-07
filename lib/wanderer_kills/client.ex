@@ -45,6 +45,7 @@ defmodule WandererKills.Client do
           limit: limit,
           error: reason
         )
+
         {:error, reason}
     end
   end
@@ -96,6 +97,7 @@ defmodule WandererKills.Client do
           system_id: system_id,
           kill_count: length(kills)
         )
+
         kills
 
       {:error, reason} ->
@@ -103,12 +105,14 @@ defmodule WandererKills.Client do
           system_id: system_id,
           error: reason
         )
+
         []
 
       _ ->
         Logger.warning("Unexpected response from cache",
           system_id: system_id
         )
+
         []
     end
   end
@@ -151,6 +155,7 @@ defmodule WandererKills.Client do
           subscription_id: subscription_id,
           system_count: length(system_ids)
         )
+
         {:ok, subscription_id}
 
       {:error, reason} ->
@@ -158,6 +163,7 @@ defmodule WandererKills.Client do
           subscriber_id: subscriber_id,
           error: reason
         )
+
         {:error, reason}
     end
   end
@@ -176,6 +182,7 @@ defmodule WandererKills.Client do
           subscriber_id: subscriber_id,
           error: reason
         )
+
         {:error, reason}
     end
   end
@@ -194,6 +201,7 @@ defmodule WandererKills.Client do
           killmail_id: killmail_id,
           error: reason
         )
+
         nil
     end
   end
@@ -208,6 +216,7 @@ defmodule WandererKills.Client do
           system_id: system_id,
           count: count
         )
+
         count
 
       {:error, reason} ->
@@ -226,6 +235,7 @@ defmodule WandererKills.Client do
         Logger.warning("Unexpected response from cache for kill count",
           system_id: system_id
         )
+
         0
     end
   end
@@ -255,6 +265,7 @@ defmodule WandererKills.Client do
       # Try from ZKB metadata if available
       is_map(kill) and Map.has_key?(kill, "zkb") ->
         zkb = kill["zkb"]
+
         if is_map(zkb) and Map.has_key?(zkb, "killmail_time") do
           parse_datetime(zkb["killmail_time"])
         else
