@@ -55,9 +55,7 @@ defmodule WandererKills.MixProject do
 
       # HTTP client with retry support
       {:req, "~> 0.5"},
-      {:retry, "~> 0.19"},
       {:backoff, "~> 1.1"},
-      {:httpoison, "~> 2.2"},
 
       # CSV parsing
       {:nimble_csv, "~> 1.2"},
@@ -65,6 +63,9 @@ defmodule WandererKills.MixProject do
       # Telemetry
       {:telemetry_poller, "~> 1.2"},
       {:uuid, "~> 1.1"},
+
+      # Phoenix PubSub for real-time killmail distribution
+      {:phoenix_pubsub, "~> 2.1"},
 
       # Development and test tools
       {:credo, "~> 1.7.6", only: [:dev, :test], runtime: false},
@@ -80,7 +81,7 @@ defmodule WandererKills.MixProject do
     [
       name: "wanderer_kills",
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/yourusername/wanderer_kills"}
+      links: %{"GitHub" => "https://github.com/guarzo/wanderer_kills"}
     ]
   end
 

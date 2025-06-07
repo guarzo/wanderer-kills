@@ -1,22 +1,27 @@
-version: "0.1"
+version: "3.8"
 
 services:
   wanderer-kills:
-    environment:
-      PORT: 4004
-      WEB_APP_URL: "http://localhost:4004"
-      ERL_AFLAGS: "-kernel shell_history enabled"
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      PORT: 4004
+      MIX_ENV: dev
+      WEB_APP_URL: "http://localhost:4004"
+      ERL_AFLAGS: "-kernel shell_history enabled"
     ports:
-      - 4004:4004
+      - "4004:4004"
     volumes:
+      # Mount source code for development
       - ..:/app:delegated
+      # Mount git configuration for development workflow
       - ~/.gitconfig:/root/.gitconfig
       - ~/.gitignore:/root/.gitignore
       - ~/.ssh:/root/.ssh
+      # Cache Elixir artifacts for faster rebuilds
       - elixir-artifacts:/opt/elixir-artifacts
+    # Keep container running for development
     command: sleep infinity
 
 volumes:
