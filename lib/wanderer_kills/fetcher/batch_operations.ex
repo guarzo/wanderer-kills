@@ -63,7 +63,7 @@ defmodule WandererKills.Fetcher.BatchOperations do
 
   ```elixir
   fetch_fn = fn system_id ->
-    WandererKills.Fetcher.fetch_killmails_for_system(system_id)
+            WandererKills.Fetcher.Coordinator.fetch_killmails_for_system(system_id)
   end
 
   results = BatchOperations.process_systems_parallel([1001, 1002], fetch_fn)

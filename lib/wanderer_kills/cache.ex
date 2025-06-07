@@ -38,7 +38,7 @@ defmodule WandererKills.Cache do
   """
 
   require Logger
-  alias WandererKills.{Constants}
+  alias WandererKills.Infrastructure.Constants
   alias WandererKills.Infrastructure.Config
 
   @cache_name :unified_cache
@@ -288,6 +288,20 @@ defmodule WandererKills.Cache do
 
     case Cachex.put(@cache_name, key, timestamp, ttl: ttl) do
       {:ok, true} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets the fetch timestamp for a system.
+  """
+  @spec get_system_fetch_timestamp(system_id()) :: cache_result(DateTime.t())
+  def get_system_fetch_timestamp(system_id) do
+    key = "systems:#{system_id}:fetch_timestamp"
+
+    case Cachex.get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, timestamp} -> {:ok, timestamp}
       {:error, reason} -> {:error, reason}
     end
   end

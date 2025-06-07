@@ -47,14 +47,17 @@ defmodule WandererKills.Killmails.StoreTest do
     end
 
     test "returns error for non-existent killmail" do
-      assert {:error, :not_found} = Store.get_killmail(999)
+      assert {:error, %WandererKills.Infrastructure.Error{type: :not_found}} =
+               Store.get_killmail(999)
     end
 
     test "can delete a killmail" do
       killmail = TestHelpers.create_test_killmail(123)
       assert :ok = Store.store_killmail(killmail)
       assert :ok = Store.delete_killmail(123)
-      assert {:error, :not_found} = Store.get_killmail(123)
+
+      assert {:error, %WandererKills.Infrastructure.Error{type: :not_found}} =
+               Store.get_killmail(123)
     end
   end
 
@@ -98,7 +101,8 @@ defmodule WandererKills.Killmails.StoreTest do
     end
 
     test "returns error for system with no fetch timestamp" do
-      assert {:error, :not_found} = Store.get_system_fetch_timestamp(30_000_142)
+      assert {:error, %WandererKills.Infrastructure.Error{type: :not_found}} =
+               Store.get_system_fetch_timestamp(30_000_142)
     end
   end
 
@@ -117,7 +121,7 @@ defmodule WandererKills.Killmails.StoreTest do
       assert Enum.all?(event_ids, &(&1 > 0))
 
       # Verify event structure - gets the most recent event
-      [{event_id_1, sys_id_1, km_1}] = events
+      [{_event_id_1, sys_id_1, km_1}] = events
 
       assert sys_id_1 == @system_id_1
       # Should get the second killmail since it was inserted last

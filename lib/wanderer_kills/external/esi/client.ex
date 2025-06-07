@@ -35,7 +35,7 @@ defmodule WandererKills.External.ESI.Client do
   use WandererKills.Data.Behaviours.ShipTypeSource
 
   require Logger
-  alias WandererKills.Constants
+  alias WandererKills.Infrastructure.Constants
   alias WandererKills.Infrastructure.Config
   alias WandererKills.Infrastructure.BatchProcessor
   alias WandererKills.TaskSupervisor

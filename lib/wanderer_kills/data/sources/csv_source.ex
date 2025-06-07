@@ -47,7 +47,7 @@ defmodule WandererKills.Data.Sources.CsvSource do
 
   require Logger
   alias WandererKills.Infrastructure.BatchProcessor
-  alias WandererKills.Shared.CSV
+  alias WandererKills.ShipTypes.CSVHelpers
   alias WandererKills.Infrastructure.Error
   # Note: Cache.Base and Cache.Key removed since CSV source no longer caches to ESI
 
@@ -152,7 +152,7 @@ defmodule WandererKills.Data.Sources.CsvSource do
 
     Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
 
-    case WandererKills.Http.ClientUtil.fetch_raw(url, raw: true) do
+    case WandererKills.Http.Utils.fetch_raw(url, raw: true) do
       {:ok, body} ->
         case File.write(download_path, body) do
           :ok ->
@@ -245,8 +245,8 @@ defmodule WandererKills.Data.Sources.CsvSource do
   end
 
   defp process_csv_data(types_path, groups_path) do
-    with {:ok, types} <- CSV.read_file(types_path, &CSV.parse_ship_type/1),
-         {:ok, groups} <- CSV.read_file(groups_path, &CSV.parse_ship_group/1) do
+    with {:ok, types} <- CSVHelpers.read_file(types_path, &CSVHelpers.parse_ship_type/1),
+         {:ok, groups} <- CSVHelpers.read_file(groups_path, &CSVHelpers.parse_ship_group/1) do
       # Filter for ship types and enrich with group names
       ship_types = build_ship_types(types, groups)
 

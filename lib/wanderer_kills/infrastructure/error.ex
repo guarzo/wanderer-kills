@@ -36,7 +36,17 @@ defmodule WandererKills.Infrastructure.Error do
   defstruct [:domain, :type, :message, :details, :retryable]
 
   @type domain ::
-          :http | :cache | :killmail | :system | :esi | :zkb | :parsing | :enrichment | :redis_q
+          :http
+          | :cache
+          | :killmail
+          | :system
+          | :esi
+          | :zkb
+          | :parsing
+          | :enrichment
+          | :redis_q
+          | :ship_types
+          | :validation
   @type error_type :: atom()
   @type details :: map() | nil
 
@@ -236,6 +246,12 @@ defmodule WandererKills.Infrastructure.Error do
   @doc "Creates a validation error"
   @spec validation_error(String.t(), details()) :: t()
   def validation_error(message, details \\ nil) do
-    killmail_error(:validation, message, false, details)
+    %__MODULE__{
+      domain: :validation,
+      type: :invalid_input,
+      message: message,
+      details: details,
+      retryable: false
+    }
   end
 end

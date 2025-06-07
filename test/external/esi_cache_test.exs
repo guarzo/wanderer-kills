@@ -1,5 +1,6 @@
 defmodule WandererKills.EsiCacheTest do
-  use ExUnit.Case, async: true
+  # Disable async to avoid cache interference
+  use ExUnit.Case, async: false
   alias WandererKills.Cache
 
   setup do
@@ -10,6 +11,7 @@ defmodule WandererKills.EsiCacheTest do
 
     on_exit(fn ->
       Application.put_env(:wanderer_kills, :http_client, WandererKills.MockHttpClient)
+      WandererKills.TestHelpers.clear_all_caches()
     end)
   end
 

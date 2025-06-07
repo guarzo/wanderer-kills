@@ -26,6 +26,8 @@ defmodule WandererKills.Application do
     base_children = [
       {Task.Supervisor, name: WandererKills.TaskSupervisor},
       {Phoenix.PubSub, name: WandererKills.PubSub},
+      # ETS tables supervisor (must start before processes that use them)
+      WandererKills.Infrastructure.ETSSupervisor,
       WandererKills.Killmails.Store,
       # Direct Cachex supervision instead of single-child supervisor
       {Cachex, name: :unified_cache, ttl: Config.cache_ttl(:killmails)},
@@ -57,7 +59,7 @@ defmodule WandererKills.Application do
         start_ship_type_update()
         {:ok, pid}
 
-      {:error, _} = error ->
+      error ->
         error
     end
   end

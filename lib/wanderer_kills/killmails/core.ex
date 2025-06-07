@@ -47,7 +47,9 @@ defmodule WandererKills.Parser.Core do
         Logger.error("[Parser] Failed to build killmail data: #{inspect(reason)}")
 
         {:error,
-         Error.killmail_error(:build_failed, "Failed to build killmail data", %{reason: reason})}
+         Error.killmail_error(:build_failed, "Failed to build killmail data", false, %{
+           reason: reason
+         })}
     end
   end
 

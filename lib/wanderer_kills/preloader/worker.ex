@@ -115,29 +115,7 @@ defmodule WandererKills.Preloader.Worker do
         )
 
         # Spawn a quick preload for the test system
-        Task.start(fn ->
-          # Wait for system to be fully initialized
-          Process.sleep(2000)
-
-          Logger.info("Running test preload for validation",
-            system_id: test_system_id
-          )
-
-          case fetch_system(test_system_id, 1, 3) do
-            :ok ->
-              Logger.info("Test system preload completed successfully",
-                system_id: test_system_id,
-                status: :success
-              )
-
-            {:error, reason} ->
-              Logger.warning("Test system preload failed",
-                system_id: test_system_id,
-                error: reason,
-                status: :error
-              )
-          end
-        end)
+        spawn_test_preload_task(test_system_id)
 
       {:error, reason} ->
         Logger.warning("Failed to add test system",
@@ -243,9 +221,37 @@ defmodule WandererKills.Preloader.Worker do
     """)
   end
 
+  # Spawns a test preload task for validation during initialization
+  @spec spawn_test_preload_task(integer()) :: {:ok, pid()}
+  defp spawn_test_preload_task(test_system_id) do
+    Task.start(fn ->
+      # Wait for system to be fully initialized
+      Process.sleep(2000)
+
+      Logger.info("Running test preload for validation",
+        system_id: test_system_id
+      )
+
+      case fetch_system(test_system_id, 1, 3) do
+        :ok ->
+          Logger.info("Test system preload completed successfully",
+            system_id: test_system_id,
+            status: :success
+          )
+
+        {:error, reason} ->
+          Logger.warning("Test system preload failed",
+            system_id: test_system_id,
+            error: reason,
+            status: :error
+          )
+      end
+    end)
+  end
+
   @spec fetch_system(integer(), pos_integer(), pos_integer()) :: fetch_result()
   defp fetch_system(system_id, since_hours, limit) do
-    case WandererKills.Fetcher.fetch_killmails_for_system(system_id,
+    case WandererKills.Fetcher.Coordinator.fetch_killmails_for_system(system_id,
            since_hours: since_hours,
            limit: limit
          ) do

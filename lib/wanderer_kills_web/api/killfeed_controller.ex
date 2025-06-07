@@ -12,7 +12,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   import Plug.Conn
 
   alias WandererKills.Killmails.Store
-  alias WandererKills.Constants
+  alias WandererKills.Infrastructure.Constants
 
   # Client ID validation
   defp validate_client_id(client_id) when is_binary(client_id) do

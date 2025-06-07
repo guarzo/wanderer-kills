@@ -1,7 +1,7 @@
 defmodule WandererKills.Http.UtilTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Http.Util
+  alias WandererKills.Http.Utils, as: Util
   alias WandererKills.Retry
   alias WandererKills.Http.Errors.TimeoutError
 
@@ -22,11 +22,11 @@ defmodule WandererKills.Http.UtilTest do
     end
   end
 
-  describe "handle_http_response/1" do
+  describe "handle_response/1" do
     test "handles success responses" do
       response = %{status: 200, body: %{"test" => "data"}}
 
-      result = Util.handle_http_response(response, WandererKills.Http.Client.Mock)
+      result = Util.handle_response(response, WandererKills.Http.Client.Mock)
 
       assert {:ok, %{"test" => "data"}} = result
     end
@@ -34,7 +34,7 @@ defmodule WandererKills.Http.UtilTest do
     test "handles not found responses" do
       response = %{status: 404}
 
-      result = Util.handle_http_response(response, WandererKills.Http.Client.Mock)
+      result = Util.handle_response(response, WandererKills.Http.Client.Mock)
 
       assert {:error, :not_found} = result
     end
@@ -42,7 +42,7 @@ defmodule WandererKills.Http.UtilTest do
     test "handles rate limited responses" do
       response = %{status: 429}
 
-      result = Util.handle_http_response(response, WandererKills.Http.Client.Mock)
+      result = Util.handle_response(response, WandererKills.Http.Client.Mock)
 
       assert {:error, :rate_limited} = result
     end
@@ -50,7 +50,7 @@ defmodule WandererKills.Http.UtilTest do
     test "handles other error responses" do
       response = %{status: 500}
 
-      result = Util.handle_http_response(response, WandererKills.Http.Client.Mock)
+      result = Util.handle_response(response, WandererKills.Http.Client.Mock)
 
       assert {:error, "HTTP 500"} = result
     end

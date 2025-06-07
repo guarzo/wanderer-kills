@@ -1,467 +1,145 @@
 defmodule WandererKills.Killmails.Enricher do
   @moduledoc """
-  Enrichment functionality for parsed killmail data.
+  Enriches killmails with additional information.
 
-  This module provides a focused API for enriching killmail data with additional
-  information from ESI and other sources. It follows the consistent "Killmail"
-  naming convention and minimizes the public API surface.
-
-  ## Features
-
-  - Character/corporation/alliance information enrichment
-  - Ship type information enrichment
-  - Location and system information enrichment
-  - Batch enrichment operations
-  - Error handling and graceful degradation
-
-  ## Usage
-
-  ```elixir
-  # Enrich a single killmail
-  {:ok, enriched} = KillmailEnricher.enrich_killmail(killmail)
-
-  # Enrich with specific options
-  {:ok, enriched} = KillmailEnricher.enrich_killmail(killmail, [:characters, :ship_types])
-  ```
+  This module handles the enrichment of killmail data with additional
+  information such as character, corporation, alliance, and ship details.
+  It supports both sequential and parallel processing of attackers
+  depending on the number of attackers in the killmail.
   """
 
   require Logger
+  alias WandererKills.Infrastructure.Config
   alias WandererKills.Cache
-  alias WandererKills.Infrastructure.Error
-
-  @type killmail :: map()
-  @type enrichment_option :: :characters | :corporations | :alliances | :ship_types | :locations
-  @type enrichment_options :: [enrichment_option()]
-
-  @default_enrichment_options [:characters, :corporations, :alliances, :ship_types]
+  alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
 
   @doc """
-  Enriches a killmail with additional information from ESI.
-
-  This is the main entry point for killmail enrichment. It fetches additional
-  data about characters, corporations, alliances, ships, and locations involved
-  in the killmail.
+  Enriches a killmail with additional information.
 
   ## Parameters
-  - `killmail` - The killmail data to enrich
-  - `options` - List of enrichment options (optional, defaults to standard set)
+  - `killmail` - The killmail map to enrich
 
   ## Returns
   - `{:ok, enriched_killmail}` - On successful enrichment
-  - `{:error, Error.t()}` - On failure with standardized error
+  - `{:error, reason}` - On failure
 
   ## Examples
 
   ```elixir
-  # Basic enrichment with defaults
-  {:ok, enriched} = KillmailEnricher.enrich_killmail(killmail)
-
-  # Enrichment with specific options
-  {:ok, enriched} = KillmailEnricher.enrich_killmail(killmail, [:characters, :ship_types])
-
-  # Handle enrichment failure gracefully
-  case KillmailEnricher.enrich_killmail(killmail) do
-    {:ok, enriched} -> process_enriched_killmail(enriched)
-    {:error, _reason} -> Logger.warning("Enrichment failed")
-  end
+  {:ok, enriched} = Enricher.enrich_killmail(raw_killmail)
   ```
   """
-  @spec enrich_killmail(killmail(), enrichment_options()) ::
-          {:ok, killmail()} | {:error, Error.t()}
-  def enrich_killmail(killmail, options \\ @default_enrichment_options)
-
-  def enrich_killmail(%{"killmail_id" => killmail_id} = killmail, options)
-      when is_integer(killmail_id) and is_list(options) do
-    Logger.debug("Starting killmail enrichment",
-      killmail_id: killmail_id,
-      options: options
-    )
-
-    try do
-      enriched =
-        killmail
-        |> enrich_victim_data(options)
-        |> enrich_attackers_data(options)
-        |> enrich_location_data(options)
-
-      Logger.debug("Completed killmail enrichment", killmail_id: killmail_id)
-      {:ok, enriched}
-    rescue
+  @spec enrich_killmail(map()) :: {:ok, map()} | {:error, term()}
+  def enrich_killmail(killmail) do
+    with {:ok, killmail} <- enrich_victim(killmail),
+         {:ok, killmail} <- enrich_attackers(killmail),
+         {:ok, killmail} <- enrich_ship(killmail) do
+      {:ok, killmail}
+    else
       error ->
-        Logger.error("Exception during killmail enrichment",
-          killmail_id: killmail_id,
-          error: inspect(error)
-        )
-
-        {:error,
-         Error.enrichment_error(:exception, "Exception during killmail enrichment", false, %{
-           killmail_id: killmail_id,
-           error: inspect(error)
-         })}
+        Logger.error("Failed to enrich killmail: #{inspect(error)}")
+        error
     end
   end
 
-  def enrich_killmail(_, _) do
-    {:error,
-     Error.enrichment_error(:invalid_format, "Invalid killmail format - missing required fields")}
-  end
+  defp enrich_victim(killmail) do
+    victim = Map.get(killmail, "victim", %{})
 
-  @doc """
-  Enriches character information in killmail data.
-
-  ## Parameters
-  - `character_id` - The character ID to enrich
-  - `base_data` - Existing character data map
-
-  ## Returns
-  - Map with enriched character information
-  """
-  @spec enrich_character_data(integer(), map()) :: map()
-  def enrich_character_data(character_id, base_data \\ %{}) when is_integer(character_id) do
-    case Cache.get_character_info(character_id) do
-      {:ok, character_info} ->
-        Logger.debug("Enriched character data", character_id: character_id)
-
-        Map.merge(base_data, %{
-          "character_name" => character_info["name"],
-          "character_info" => character_info
-        })
-
-      {:error, :not_found} ->
-        # Try to fetch from ESI and cache it
-        case fetch_and_cache_character(character_id) do
-          {:ok, character_info} ->
-            Logger.debug("Fetched and enriched character data", character_id: character_id)
-
-            Map.merge(base_data, %{
-              "character_name" => character_info["name"],
-              "character_info" => character_info
-            })
-
-          {:error, reason} ->
-            Logger.debug("Failed to fetch character data from ESI",
-              character_id: character_id,
-              error: reason
-            )
-
-            base_data
-        end
-
-      {:error, reason} ->
-        Logger.debug("Failed to enrich character data",
-          character_id: character_id,
-          error: reason
-        )
-
-        base_data
+    with {:ok, character} <- get_character_info(Map.get(victim, "character_id")),
+         {:ok, corporation} <- get_corporation_info(Map.get(victim, "corporation_id")),
+         {:ok, alliance} <- get_alliance_info(Map.get(victim, "alliance_id")) do
+      victim = Map.put(victim, "character", character)
+      victim = Map.put(victim, "corporation", corporation)
+      victim = Map.put(victim, "alliance", alliance)
+      killmail = Map.put(killmail, "victim", victim)
+      {:ok, killmail}
     end
   end
 
-  @doc """
-  Enriches corporation information in killmail data.
+  defp enrich_attackers(killmail) do
+    attackers = Map.get(killmail, "attackers", [])
 
-  ## Parameters
-  - `corporation_id` - The corporation ID to enrich
-  - `base_data` - Existing corporation data map
+    enricher_config = %{
+      min_attackers_for_parallel: Config.enricher(:min_attackers_for_parallel),
+      max_concurrency: Config.enricher(:max_concurrency),
+      task_timeout_ms: Config.enricher(:task_timeout_ms)
+    }
 
-  ## Returns
-  - Map with enriched corporation information
-  """
-  @spec enrich_corporation_data(integer(), map()) :: map()
-  def enrich_corporation_data(corporation_id, base_data \\ %{}) when is_integer(corporation_id) do
-    case Cache.get_corporation_info(corporation_id) do
-      {:ok, corp_info} ->
-        Logger.debug("Enriched corporation data", corporation_id: corporation_id)
-
-        Map.merge(base_data, %{
-          "corporation_name" => corp_info["name"],
-          "corporation_info" => corp_info
-        })
-
-      {:error, :not_found} ->
-        # Try to fetch from ESI and cache it
-        case fetch_and_cache_corporation(corporation_id) do
-          {:ok, corp_info} ->
-            Logger.debug("Fetched and enriched corporation data", corporation_id: corporation_id)
-
-            Map.merge(base_data, %{
-              "corporation_name" => corp_info["name"],
-              "corporation_info" => corp_info
-            })
-
-          {:error, reason} ->
-            Logger.debug("Failed to fetch corporation data from ESI",
-              corporation_id: corporation_id,
-              error: reason
-            )
-
-            base_data
-        end
-
-      {:error, reason} ->
-        Logger.debug("Failed to enrich corporation data",
-          corporation_id: corporation_id,
-          error: reason
-        )
-
-        base_data
-    end
-  end
-
-  @doc """
-  Enriches alliance information in killmail data.
-
-  ## Parameters
-  - `alliance_id` - The alliance ID to enrich (optional)
-  - `base_data` - Existing alliance data map
-
-  ## Returns
-  - Map with enriched alliance information
-  """
-  @spec enrich_alliance_data(integer() | nil, map()) :: map()
-  def enrich_alliance_data(nil, base_data), do: base_data
-
-  def enrich_alliance_data(alliance_id, base_data) when is_integer(alliance_id) do
-    case Cache.get_alliance_info(alliance_id) do
-      {:ok, alliance_info} ->
-        Logger.debug("Enriched alliance data", alliance_id: alliance_id)
-
-        Map.merge(base_data, %{
-          "alliance_name" => alliance_info["name"],
-          "alliance_info" => alliance_info
-        })
-
-      {:error, :not_found} ->
-        # Try to fetch from ESI and cache it
-        case fetch_and_cache_alliance(alliance_id) do
-          {:ok, alliance_info} ->
-            Logger.debug("Fetched and enriched alliance data", alliance_id: alliance_id)
-
-            Map.merge(base_data, %{
-              "alliance_name" => alliance_info["name"],
-              "alliance_info" => alliance_info
-            })
-
-          {:error, reason} ->
-            Logger.debug("Failed to fetch alliance data from ESI",
-              alliance_id: alliance_id,
-              error: reason
-            )
-
-            base_data
-        end
-
-      {:error, reason} ->
-        Logger.debug("Failed to enrich alliance data",
-          alliance_id: alliance_id,
-          error: reason
-        )
-
-        base_data
-    end
-  end
-
-  @doc """
-  Enriches ship type information in killmail data.
-
-  ## Parameters
-  - `ship_type_id` - The ship type ID to enrich
-  - `base_data` - Existing ship data map
-
-  ## Returns
-  - Map with enriched ship type information
-  """
-  @spec enrich_ship_type_data(integer(), map()) :: map()
-  def enrich_ship_type_data(ship_type_id, base_data \\ %{}) when is_integer(ship_type_id) do
-    case Cache.get_type_info(ship_type_id) do
-      {:ok, type_info} ->
-        Logger.debug("Enriched ship type data", ship_type_id: ship_type_id)
-
-        Map.merge(base_data, %{
-          "ship_type_name" => type_info["name"],
-          "ship_type_info" => type_info
-        })
-
-      {:error, :not_found} ->
-        # Try to fetch from ESI and cache it
-        case fetch_and_cache_type(ship_type_id) do
-          {:ok, type_info} ->
-            Logger.debug("Fetched and enriched ship type data", ship_type_id: ship_type_id)
-
-            Map.merge(base_data, %{
-              "ship_type_name" => type_info["name"],
-              "ship_type_info" => type_info
-            })
-
-          {:error, reason} ->
-            Logger.debug("Failed to fetch ship type data from ESI",
-              ship_type_id: ship_type_id,
-              error: reason
-            )
-
-            base_data
-        end
-
-      {:error, reason} ->
-        Logger.debug("Failed to enrich ship type data",
-          ship_type_id: ship_type_id,
-          error: reason
-        )
-
-        base_data
-    end
-  end
-
-  # Private enrichment functions
-
-  @spec enrich_victim_data(killmail(), enrichment_options()) :: killmail()
-  defp enrich_victim_data(%{"victim" => victim} = killmail, options) do
-    enriched_victim =
-      victim
-      |> maybe_enrich_character(:characters, victim["character_id"], options)
-      |> maybe_enrich_corporation(:corporations, victim["corporation_id"], options)
-      |> maybe_enrich_alliance(:alliances, victim["alliance_id"], options)
-      |> maybe_enrich_ship_type(:ship_types, victim["ship_type_id"], options)
-
-    Map.put(killmail, "victim", enriched_victim)
-  end
-
-  defp enrich_victim_data(killmail, _), do: killmail
-
-  @spec enrich_attackers_data(killmail(), enrichment_options()) :: killmail()
-  defp enrich_attackers_data(%{"attackers" => attackers} = killmail, options)
-       when is_list(attackers) do
     enriched_attackers =
-      Enum.map(attackers, fn attacker ->
-        attacker
-        |> maybe_enrich_character(:characters, attacker["character_id"], options)
-        |> maybe_enrich_corporation(:corporations, attacker["corporation_id"], options)
-        |> maybe_enrich_alliance(:alliances, attacker["alliance_id"], options)
-        |> maybe_enrich_ship_type(:ship_types, attacker["ship_type_id"], options)
-      end)
-
-    Map.put(killmail, "attackers", enriched_attackers)
-  end
-
-  defp enrich_attackers_data(killmail, _), do: killmail
-
-  @spec enrich_location_data(killmail(), enrichment_options()) :: killmail()
-  defp enrich_location_data(%{"solar_system_id" => system_id} = killmail, options)
-       when is_integer(system_id) do
-    if :locations in options do
-      case Cache.get_system_info(system_id) do
-        {:ok, system_info} ->
-          Logger.debug("Enriched location data", solar_system_id: system_id)
-
-          Map.merge(killmail, %{
-            "solar_system_name" => system_info["name"],
-            "solar_system_info" => system_info
-          })
-
-        {:error, reason} ->
-          Logger.debug("Failed to enrich location data",
-            solar_system_id: system_id,
-            error: reason
-          )
-
-          killmail
+      if length(attackers) >= enricher_config.min_attackers_for_parallel do
+        process_attackers_parallel(attackers, enricher_config)
+      else
+        process_attackers_sequential(attackers)
       end
+
+    {:ok, Map.put(killmail, "attackers", enriched_attackers)}
+  end
+
+  @spec process_attackers_parallel([map()], map()) :: [map()]
+  defp process_attackers_parallel(attackers, enricher_config) when is_list(attackers) do
+    Task.Supervisor.async_stream_nolink(
+      WandererKills.TaskSupervisor,
+      attackers,
+      fn attacker ->
+        case enrich_attacker(attacker) do
+          {:ok, enriched} -> {:ok, enriched}
+          {:error, _} -> {:ok, nil}
+        end
+      end,
+      max_concurrency: enricher_config.max_concurrency,
+      timeout: enricher_config.task_timeout_ms
+    )
+    |> Stream.map(fn
+      {:ok, result} -> result
+      {:exit, _} -> nil
+    end)
+    |> Stream.filter(& &1)
+    |> Enum.to_list()
+  end
+
+  @spec process_attackers_sequential([map()]) :: [map()]
+  defp process_attackers_sequential(attackers) when is_list(attackers) do
+    Enum.map(attackers, fn attacker ->
+      case enrich_attacker(attacker) do
+        {:ok, enriched} -> enriched
+        {:error, _} -> nil
+      end
+    end)
+    |> Enum.filter(& &1)
+  end
+
+  @spec enrich_attacker(map()) :: {:ok, map()} | {:error, term()}
+  defp enrich_attacker(attacker) do
+    with {:ok, character} <- get_character_info(Map.get(attacker, "character_id")),
+         {:ok, corporation} <- get_corporation_info(Map.get(attacker, "corporation_id")),
+         {:ok, alliance} <- get_alliance_info(Map.get(attacker, "alliance_id")) do
+      attacker = Map.put(attacker, "character", character)
+      attacker = Map.put(attacker, "corporation", corporation)
+      attacker = Map.put(attacker, "alliance", alliance)
+      {:ok, attacker}
     else
-      killmail
+      error ->
+        Logger.warning("Failed to enrich attacker: #{inspect(error)}")
+        {:error, error}
     end
   end
 
-  defp enrich_location_data(killmail, _), do: killmail
+  defp enrich_ship(killmail) do
+    victim = Map.get(killmail, "victim", %{})
 
-  # Helper functions for conditional enrichment
-
-  @spec maybe_enrich_character(map(), enrichment_option(), integer() | nil, enrichment_options()) ::
-          map()
-  defp maybe_enrich_character(data, :characters, character_id, options)
-       when is_integer(character_id) do
-    if :characters in options do
-      enrich_character_data(character_id, data)
-    else
-      data
+    with {:ok, ship} <- ShipTypeInfo.get_ship_type(Map.get(victim, "ship_type_id")) do
+      victim = Map.put(victim, "ship", ship)
+      killmail = Map.put(killmail, "victim", victim)
+      {:ok, killmail}
     end
   end
 
-  defp maybe_enrich_character(data, _, _, _), do: data
+  defp get_character_info(id) when is_integer(id), do: Cache.get_character_info(id)
+  defp get_character_info(_), do: {:ok, nil}
 
-  @spec maybe_enrich_corporation(
-          map(),
-          enrichment_option(),
-          integer() | nil,
-          enrichment_options()
-        ) :: map()
-  defp maybe_enrich_corporation(data, :corporations, corp_id, options)
-       when is_integer(corp_id) do
-    if :corporations in options do
-      enrich_corporation_data(corp_id, data)
-    else
-      data
-    end
-  end
+  defp get_corporation_info(id) when is_integer(id), do: Cache.get_corporation_info(id)
+  defp get_corporation_info(_), do: {:ok, nil}
 
-  defp maybe_enrich_corporation(data, _, _, _), do: data
-
-  @spec maybe_enrich_alliance(map(), enrichment_option(), integer() | nil, enrichment_options()) ::
-          map()
-  defp maybe_enrich_alliance(data, :alliances, alliance_id, options)
-       when is_integer(alliance_id) do
-    if :alliances in options do
-      enrich_alliance_data(alliance_id, data)
-    else
-      data
-    end
-  end
-
-  defp maybe_enrich_alliance(data, _, _, _), do: data
-
-  @spec maybe_enrich_ship_type(map(), enrichment_option(), integer() | nil, enrichment_options()) ::
-          map()
-  defp maybe_enrich_ship_type(data, :ship_types, ship_type_id, options)
-       when is_integer(ship_type_id) do
-    if :ship_types in options do
-      enrich_ship_type_data(ship_type_id, data)
-    else
-      data
-    end
-  end
-
-  defp maybe_enrich_ship_type(data, _, _, _), do: data
-
-  # ESI fetch and cache helper functions
-
-  @spec fetch_and_cache_character(integer()) :: {:ok, map()} | {:error, term()}
-  defp fetch_and_cache_character(character_id) do
-    case WandererKills.External.ESI.Client.ensure_cached(:character, character_id) do
-      :ok -> Cache.get_character_info(character_id)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @spec fetch_and_cache_corporation(integer()) :: {:ok, map()} | {:error, term()}
-  defp fetch_and_cache_corporation(corporation_id) do
-    case WandererKills.External.ESI.Client.ensure_cached(:corporation, corporation_id) do
-      :ok -> Cache.get_corporation_info(corporation_id)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @spec fetch_and_cache_alliance(integer()) :: {:ok, map()} | {:error, term()}
-  defp fetch_and_cache_alliance(alliance_id) do
-    case WandererKills.External.ESI.Client.ensure_cached(:alliance, alliance_id) do
-      :ok -> Cache.get_alliance_info(alliance_id)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @spec fetch_and_cache_type(integer()) :: {:ok, map()} | {:error, term()}
-  defp fetch_and_cache_type(type_id) do
-    case WandererKills.External.ESI.Client.ensure_cached(:type, type_id) do
-      :ok -> Cache.get_type_info(type_id)
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  defp get_alliance_info(id) when is_integer(id), do: Cache.get_alliance_info(id)
+  defp get_alliance_info(_), do: {:ok, nil}
 end

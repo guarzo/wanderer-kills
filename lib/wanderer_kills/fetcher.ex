@@ -23,7 +23,6 @@ defmodule WandererKills.Fetcher.API do
   # Fetcher modules
   alias WandererKills.External.ZKB.Fetcher, as: KillmailFetcher
   alias WandererKills.Systems.Fetcher, as: ActiveSystemsFetcher
-  alias WandererKills.Fetcher, as: SharedFetcher
 
   #
   # Killmail Fetching API
@@ -79,8 +78,8 @@ defmodule WandererKills.Fetcher.API do
   """
   @spec fetch_systems_batch([integer()], keyword()) :: {:ok, map()} | {:error, term()}
   def fetch_systems_batch(system_ids, opts \\ []) do
-    # Use the shared fetcher's batch function directly
-    results = SharedFetcher.fetch_killmails_for_systems(system_ids, opts)
+    # Use the new Coordinator's batch function directly
+    results = WandererKills.Fetcher.Coordinator.fetch_killmails_for_systems(system_ids, opts)
     {:ok, results}
   end
 
@@ -93,7 +92,7 @@ defmodule WandererKills.Fetcher.API do
   """
   @spec get_fresh_system_killmails(integer()) :: {:ok, [map()]} | {:error, term()}
   def get_fresh_system_killmails(system_id) do
-    SharedFetcher.fetch_killmails_for_system(system_id)
+    WandererKills.Fetcher.Coordinator.fetch_killmails_for_system(system_id)
   end
 
   @doc """
@@ -101,7 +100,7 @@ defmodule WandererKills.Fetcher.API do
   """
   @spec get_system_kill_count(integer()) :: {:ok, integer()} | {:error, term()}
   def get_system_kill_count(system_id) do
-    SharedFetcher.get_system_kill_count(system_id)
+    WandererKills.Fetcher.Coordinator.get_system_kill_count(system_id)
   end
 
   #

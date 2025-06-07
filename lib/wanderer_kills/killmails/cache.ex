@@ -86,10 +86,15 @@ defmodule WandererKills.Killmails.Cache do
         )
 
         {:error,
-         Error.killmail_error(:storage_exception, "Exception occurred while storing killmail", %{
-           killmail_id: killmail_id,
-           exception: inspect(error)
-         })}
+         Error.killmail_error(
+           :storage_exception,
+           "Exception occurred while storing killmail",
+           false,
+           %{
+             killmail_id: killmail_id,
+             exception: inspect(error)
+           }
+         )}
     end
   end
 
@@ -150,10 +155,15 @@ defmodule WandererKills.Killmails.Cache do
         )
 
         {:error,
-         Error.killmail_error(:batch_storage_failed, "Failed to store some killmails in batch", %{
-           failed_ids: failed_ids,
-           failed_count: length(errors)
-         })}
+         Error.killmail_error(
+           :batch_storage_failed,
+           "Failed to store some killmails in batch",
+           false,
+           %{
+             failed_ids: failed_ids,
+             failed_count: length(errors)
+           }
+         )}
     end
   end
 

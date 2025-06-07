@@ -81,7 +81,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
     GenServer.call(
       __MODULE__,
       {:insert, system_id, killmail_map},
-      WandererKills.Constants.timeout(:gen_server_call)
+      WandererKills.Infrastructure.Constants.timeout(:gen_server_call)
     )
   end
 
@@ -101,7 +101,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
     GenServer.call(
       __MODULE__,
       {:fetch, client_id, system_ids},
-      WandererKills.Constants.timeout(:gen_server_call)
+      WandererKills.Infrastructure.Constants.timeout(:gen_server_call)
     )
   end
 
@@ -126,7 +126,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
     GenServer.call(
       __MODULE__,
       {:fetch_one, client_id, system_ids},
-      WandererKills.Constants.timeout(:gen_server_call)
+      WandererKills.Infrastructure.Constants.timeout(:gen_server_call)
     )
   end
 
@@ -204,40 +204,53 @@ defmodule WandererKills.Data.Stores.KillmailStore do
 
   @impl true
   def init(_opts) do
-    Logger.info("Starting KillmailStore with ETS tables")
+    Logger.info("Starting KillmailStore GenServer")
 
-    # Create ETS tables if they don't exist
-    create_table_if_not_exists(@killmail_events, [:ordered_set, :public, :named_table])
-    create_table_if_not_exists(@client_offsets, [:set, :public, :named_table])
-    create_table_if_not_exists(@counters, [:set, :public, :named_table])
-    create_table_if_not_exists(@killmails, [:named_table, :set, :public])
-    create_table_if_not_exists(@system_killmails, [:named_table, :set, :public])
-    create_table_if_not_exists(@system_kill_counts, [:named_table, :set, :public])
-    create_table_if_not_exists(@system_fetch_timestamps, [:named_table, :set, :public])
+    # ETS tables are now managed by ETSSupervisor and should already exist
+    # Verify that required tables are available
+    required_tables = [
+      @killmail_events,
+      @client_offsets,
+      @counters,
+      @killmails,
+      @system_killmails,
+      @system_kill_counts,
+      @system_fetch_timestamps
+    ]
 
-    # Initialize sequence counter if not exists
-    case :ets.lookup(@counters, :killmail_seq) do
-      [] -> :ets.insert(@counters, {:killmail_seq, 0})
-      _ -> :ok
+    case verify_tables_exist(required_tables) do
+      :ok ->
+        Logger.debug("All required ETS tables are available")
+
+      {:error, missing_tables} ->
+        Logger.error("Missing required ETS tables", missing_tables: missing_tables)
+        # Continue anyway, tables might be created asynchronously
     end
 
     # Schedule garbage collection
     schedule_garbage_collection()
 
-    {:ok, %{}}
+    {:ok,
+     %{
+       started_at: DateTime.utc_now(),
+       tables_verified: true
+     }}
   end
 
-  # Helper function to create table if it doesn't exist
-  defp create_table_if_not_exists(table_name, options) do
-    case :ets.whereis(table_name) do
-      :undefined ->
-        case :ets.new(table_name, options) do
-          ^table_name -> :ok
-          error -> {:error, error}
+  # Helper function to verify that required tables exist
+  @spec verify_tables_exist([atom()]) :: :ok | {:error, [atom()]}
+  defp verify_tables_exist(table_names) do
+    missing_tables =
+      Enum.filter(table_names, fn table_name ->
+        case :ets.whereis(table_name) do
+          :undefined -> true
+          _ -> false
         end
+      end)
 
-      _ ->
-        :ok
+    case missing_tables do
+      [] -> :ok
+      missing -> {:error, missing}
     end
   end
 
@@ -351,14 +364,19 @@ defmodule WandererKills.Data.Stores.KillmailStore do
   end
 
   def handle_call({:store_killmail, _invalid}, _from, state) do
-    {:reply, {:error, :invalid_killmail}, state}
+    {:reply, {:error, Error.validation_error("Invalid killmail format - must be a map")}, state}
   end
 
   @impl true
   def handle_call({:get_killmail, killmail_id}, _from, state) do
     case :ets.lookup(:killmails, killmail_id) do
-      [{^killmail_id, killmail}] -> {:reply, {:ok, killmail}, state}
-      [] -> {:reply, {:error, :not_found}, state}
+      [{^killmail_id, killmail}] ->
+        {:reply, {:ok, killmail}, state}
+
+      [] ->
+        {:reply,
+         {:error, Error.not_found_error("Killmail not found", %{killmail_id: killmail_id})},
+         state}
     end
   end
 
@@ -434,8 +452,14 @@ defmodule WandererKills.Data.Stores.KillmailStore do
   @impl true
   def handle_call({:get_system_fetch_timestamp, system_id}, _from, state) do
     case :ets.lookup(:system_fetch_timestamps, system_id) do
-      [{^system_id, timestamp}] -> {:reply, {:ok, timestamp}, state}
-      [] -> {:reply, {:error, :not_found}, state}
+      [{^system_id, timestamp}] ->
+        {:reply, {:ok, timestamp}, state}
+
+      [] ->
+        {:reply,
+         {:error,
+          Error.not_found_error("No fetch timestamp found for system", %{system_id: system_id})},
+         state}
     end
   end
 

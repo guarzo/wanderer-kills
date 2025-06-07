@@ -80,7 +80,7 @@ defmodule WandererKills.Killmails.Parser do
       Monitoring.increment_stored()
       {:ok, enriched}
     else
-      {:error, :kill_too_old} ->
+      {:error, %Error{type: :kill_too_old}} ->
         Monitoring.increment_skipped()
         {:ok, :kill_older}
 
@@ -182,7 +182,7 @@ defmodule WandererKills.Killmails.Parser do
 
       {:error, reason} ->
         {:error,
-         Error.killmail_error(:invalid_time_format, "Failed to parse ISO8601 timestamp", %{
+         Error.killmail_error(:invalid_time_format, "Failed to parse ISO8601 timestamp", false, %{
            underlying_error: reason
          })}
     end
@@ -222,16 +222,21 @@ defmodule WandererKills.Killmails.Parser do
       )
 
       {:error,
-       Error.killmail_error(:missing_required_fields, "Killmail missing required ESI fields", %{
-         missing_fields: missing_fields,
-         required_fields: required_fields
-       })}
+       Error.killmail_error(
+         :missing_required_fields,
+         "Killmail missing required ESI fields",
+         false,
+         %{
+           missing_fields: missing_fields,
+           required_fields: required_fields
+         }
+       )}
     end
   end
 
-  defp validate_killmail_structure(killmail) do
+  defp validate_killmail_structure(killmail) when is_map(killmail) do
     Logger.error("[Parser] Killmail missing killmail_id field",
-      available_keys: Map.keys(killmail || %{}),
+      available_keys: Map.keys(killmail),
       killmail_sample: killmail |> inspect(limit: 5, printable_limit: 200)
     )
 
@@ -239,15 +244,15 @@ defmodule WandererKills.Killmails.Parser do
   end
 
   @spec determine_failure_step(term()) :: String.t()
-  defp determine_failure_step({:missing_required_fields, _}), do: "structure_validation"
-  defp determine_failure_step(:missing_killmail_id), do: "structure_validation"
-  defp determine_failure_step({:invalid_time_format, _}), do: "time_validation"
-  defp determine_failure_step(:missing_kill_time), do: "time_validation"
-  defp determine_failure_step(:kill_too_old), do: "time_check"
-  defp determine_failure_step(:build_failed), do: "data_building"
+  defp determine_failure_step(%Error{type: :missing_required_fields}), do: "structure_validation"
+  defp determine_failure_step(%Error{type: :missing_killmail_id}), do: "structure_validation"
+  defp determine_failure_step(%Error{type: :invalid_time_format}), do: "time_validation"
+  defp determine_failure_step(%Error{type: :missing_kill_time}), do: "time_validation"
+  defp determine_failure_step(%Error{type: :kill_too_old}), do: "time_check"
+  defp determine_failure_step(%Error{type: :build_failed}), do: "data_building"
   defp determine_failure_step(_), do: "unknown"
 
-  @spec check_killmail_time(killmail(), DateTime.t()) :: {:ok, killmail()} | {:error, atom()}
+  @spec check_killmail_time(killmail(), DateTime.t()) :: {:ok, killmail()} | {:error, Error.t()}
   defp check_killmail_time(killmail, cutoff_time) do
     case validate_killmail_time(killmail) do
       {:ok, kill_time} ->
@@ -259,7 +264,7 @@ defmodule WandererKills.Killmails.Parser do
           )
 
           {:error,
-           Error.killmail_error(:kill_too_old, "Killmail is older than cutoff time", %{
+           Error.killmail_error(:kill_too_old, "Killmail is older than cutoff time", false, %{
              kill_time: DateTime.to_iso8601(kill_time),
              cutoff: DateTime.to_iso8601(cutoff_time)
            })}
@@ -293,7 +298,7 @@ defmodule WandererKills.Killmails.Parser do
         Logger.error("Failed to build killmail data", error: inspect(error))
 
         {:error,
-         Error.killmail_error(:build_failed, "Failed to build killmail data structure", %{
+         Error.killmail_error(:build_failed, "Failed to build killmail data structure", false, %{
            exception: inspect(error)
          })}
     end

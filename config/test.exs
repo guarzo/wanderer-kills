@@ -6,6 +6,9 @@ config :wanderer_kills,
   start_preloader: false,
   start_redisq: false,
 
+  # Disable ETS supervisor in tests (managed manually)
+  start_ets_supervisor: false,
+
   # Fast cache expiry for tests (flattened structure)
   cache_killmails_ttl: 1,
   cache_system_ttl: 1,

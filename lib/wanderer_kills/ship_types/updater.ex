@@ -72,25 +72,26 @@ defmodule WandererKills.ShipTypes.Updater do
         Logger.info("Ship type update completed successfully using CSV data")
         :ok
 
-      {:error, csv_reason} ->
-        Logger.warning("CSV update failed: #{inspect(csv_reason)}, falling back to ESI")
+      csv_result ->
+        Logger.warning("CSV update failed: #{inspect(csv_result)}, falling back to ESI")
 
         case update_with_esi() do
           :ok ->
             Logger.info("Ship type update completed successfully using ESI fallback")
             :ok
 
-          {:error, esi_reason} ->
+          esi_result ->
             Logger.error("Both CSV and ESI updates failed", %{
-              csv_error: csv_reason,
-              esi_error: esi_reason
+              csv_error: csv_result,
+              esi_error: esi_result
             })
 
             {:error,
              Error.ship_types_error(
                :all_update_methods_failed,
                "Both CSV and ESI update methods failed",
-               %{csv_error: csv_reason, esi_error: esi_reason}
+               false,
+               %{csv_error: csv_result, esi_error: esi_result}
              )}
         end
     end
@@ -130,7 +131,7 @@ defmodule WandererKills.ShipTypes.Updater do
         Logger.error("CSV ship type update failed: #{inspect(reason)}")
 
         {:error,
-         Error.ship_types_error(:csv_update_failed, "CSV ship type update failed", %{
+         Error.ship_types_error(:csv_update_failed, "CSV ship type update failed", false, %{
            underlying_error: reason
          })}
     end
@@ -169,7 +170,7 @@ defmodule WandererKills.ShipTypes.Updater do
         Logger.error("ESI ship type update failed: #{inspect(reason)}")
 
         {:error,
-         Error.ship_types_error(:esi_update_failed, "ESI ship type update failed", %{
+         Error.ship_types_error(:esi_update_failed, "ESI ship type update failed", false, %{
            underlying_error: reason
          })}
     end
@@ -236,7 +237,7 @@ defmodule WandererKills.ShipTypes.Updater do
         Logger.error("Failed to download CSV files: #{inspect(reason)}")
 
         {:error,
-         Error.ship_types_error(:csv_download_failed, "Failed to download CSV files", %{
+         Error.ship_types_error(:csv_download_failed, "Failed to download CSV files", false, %{
            underlying_error: reason
          })}
     end
