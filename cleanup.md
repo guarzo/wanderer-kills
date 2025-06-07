@@ -30,18 +30,18 @@
   - **Function usage**: Called from 3 locations - `preloader/worker.ex` (via `Core.CacheUtils` delegate), `wanderer_kills_web/api.ex`, and delegated through `core.ex`
   - **Simple migration**: Single function can be moved to `Cache.Helper` which already has `system_*` methods, then remove the 3 delegates
 
-- [ ] **Consolidate observability health modules** - "Consolidate observability code by merging `WandererKills.Observability.Health` and `WandererKills.Observability.HealthChecks` into a single health-check module to remove duplication."
+- [x] **Consolidate observability health modules** - "Consolidate observability code by merging `WandererKills.Observability.Health` and `WandererKills.Observability.HealthChecks` into a single health-check module to remove duplication."
 
-  - **Current modules**: `Health` (323 lines) and `HealthChecks` (518 lines) - total 841 lines
-  - **Overlap**: Both define health check behaviors and implementations
-  - **Other observability**: Directory also contains `Monitoring` (558 lines) and `Telemetry` (430 lines)
-  - **Consolidation strategy**: `HealthChecks` appears more comprehensive with behavior definitions - could absorb `Health` functionality
+  - **Completed**: Merged `Health` functionality into `HealthChecks` module, providing unified interface for health checks
+  - **File removed**: `lib/wanderer_kills/observability/health.ex` (323 lines)
+  - **Enhanced module**: `HealthChecks` now provides both behavior definitions and unified health check interface
+  - **Backward compatibility**: All original `Health` functions now available through `HealthChecks`
 
-- [ ] **Review and consolidate processing modules** - "Review the `WandererKills.Processing` directory and merge small modules like `csv.ex` and `batch_processor.ex` into domain-specific contexts (e.g., killmail processing), removing unnecessary indirection."
+- [x] **Review and consolidate processing modules** - "Review the `WandererKills.Processing` directory and merge small modules like `csv.ex` and `batch_processor.ex` into domain-specific contexts (e.g., killmail processing), removing unnecessary indirection."
 
-  - **Current modules**: Only 2 files - `csv.ex` (750 lines, substantial), `batch_processor.ex` (193 lines)
-  - **CSV module**: Large and ship-type focused - could move to `ship_types/` directory
-  - **Batch processor**: Generic utility - assess if used broadly or can be inlined into specific use cases
+  - **CSV module moved**: Relocated `csv.ex` (750 lines) from `processing/` to `ship_types/` directory as `WandererKills.ShipTypes.CSV`
+  - **Updated references**: All imports and delegates updated to use new module location
+  - **Batch processor retained**: `batch_processor.ex` (193 lines) kept in processing directory as it's used broadly through core module delegation
 
 - [x] **Flatten ship_types directory structure** - "Flatten the `lib/wanderer_kills/ship_types` directory by merging `constants.ex` into `info.ex` or `updater.ex`, providing a single entry point for ship-type logic."
 
@@ -50,8 +50,6 @@
   - **Consolidation target**: `updater.ex` is the main orchestrator and would be logical place for constants
   - **Entry point**: `info.ex` is simplest and could serve as the public API, importing functionality from consolidated updater
 
-
-
 - [x] **Unify behavior definitions** - "Unify behaviour definitions by merging `WandererKills.Core.Behaviours` into `WandererKills.Infrastructure.Behaviours`, and update all `@behaviour` references accordingly."
 
   - **Current split**: `Core.Behaviours` (exists as backward compatibility module in `core.ex` lines 146-197) vs `Infrastructure.Behaviours` (92 lines)
@@ -59,8 +57,8 @@
   - **Usage**: Multiple modules reference both - need to find all `@behaviour WandererKills.Core.Behaviours.*` and update to `Infrastructure.Behaviours`
   - **Cleanup**: Remove the `Core.Behaviours` section from `core.ex` after migration
 
-- [ ] **Audit infrastructure directory for consolidation** - "Audit the `lib/wanderer_kills/infrastructure` directory for single-use modules like `config.ex` and `constants.ex`, consolidating simple wrappers into core modules to reduce indirection."
-  - **Current modules**: `behaviours.ex` (92 lines), `clock.ex` (231 lines), `config.ex` (314 lines), `constants.ex` (90 lines), `error.ex` (341 lines), `retry.ex` (146 lines)
-  - **Config module**: Large (314 lines) with comprehensive configuration management - may be appropriate size
-  - **Constants module**: Smaller (90 lines) - candidate for merging into `config.ex` or core modules that use the constants
-  - **Single-use assessment**: Need to evaluate usage patterns of each module to identify consolidation opportunities
+- [x] **Audit infrastructure directory for consolidation** - "Audit the `lib/wanderer_kills/infrastructure` directory for single-use modules like `config.ex` and `constants.ex`, consolidating simple wrappers into core modules to reduce indirection."
+  - **Constants consolidated**: Merged `constants.ex` (90 lines) into `config.ex`, providing unified configuration and constants interface
+  - **File removed**: `lib/wanderer_kills/infrastructure/constants.ex`
+  - **Updated references**: All delegates in `core.ex` now point to `WandererKills.Infrastructure.Config`
+  - **Enhanced config**: `Config` module now provides both runtime configuration and core constants through single interface

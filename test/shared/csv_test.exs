@@ -1,7 +1,7 @@
-defmodule WandererKills.Processing.CSVTest do
+defmodule WandererKills.ShipTypes.CSVTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Processing.CSV
+  alias WandererKills.ShipTypes.CSV
 
   describe "read_file/3" do
     test "handles missing file" do

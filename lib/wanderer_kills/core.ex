@@ -17,7 +17,7 @@ defmodule WandererKills.Core do
 
   ### Processing Modules
   - `WandererKills.Core.BatchProcessor` → `WandererKills.Processing.BatchProcessor`
-  - `WandererKills.Core.CSV` → `WandererKills.Processing.CSV`
+  - `WandererKills.Core.CSV` → `WandererKills.ShipTypes.CSV`
 
   ### Cache Modules
   - `WandererKills.Core.CacheUtils` → `WandererKills.Cache.Utils`
@@ -26,7 +26,7 @@ defmodule WandererKills.Core do
   - `WandererKills.Core.Config` → `WandererKills.Infrastructure.Config`
   - `WandererKills.Core.Retry` → `WandererKills.Infrastructure.Retry`
   - `WandererKills.Core.Clock` → `WandererKills.Infrastructure.Clock`
-  - `WandererKills.Core.Constants` → `WandererKills.Infrastructure.Constants`
+  - `WandererKills.Core.Constants` → `WandererKills.Infrastructure.Config`
   - `WandererKills.Core.Behaviours` → `WandererKills.Infrastructure.Behaviours`
   - `WandererKills.Core.Error` → `WandererKills.Infrastructure.Error`
   """
@@ -101,15 +101,15 @@ defmodule WandererKills.Core do
 
   defmodule CSV do
     @moduledoc false
-    defdelegate parse_ship_type_csvs(file_paths), to: WandererKills.Processing.CSV
-    defdelegate download_csv_files(opts \\ []), to: WandererKills.Processing.CSV
-    defdelegate read_file(file_path, parser, opts \\ []), to: WandererKills.Processing.CSV
+    defdelegate parse_ship_type_csvs(file_paths), to: WandererKills.ShipTypes.CSV
+    defdelegate download_csv_files(opts \\ []), to: WandererKills.ShipTypes.CSV
+    defdelegate read_file(file_path, parser, opts \\ []), to: WandererKills.ShipTypes.CSV
 
     def parse_ship_types_csv(csv_content), do: parse_ship_type_csvs([csv_content])
     def download_ship_types_csv(), do: download_csv_files()
 
     def get_ship_types_from_csv(),
-      do: read_file("ship_types.csv", &WandererKills.Processing.CSV.parse_type_row/1)
+      do: read_file("ship_types.csv", &WandererKills.ShipTypes.CSV.parse_type_row/1)
 
     def update_ship_types(), do: parse_ship_type_csvs(["invTypes.csv", "invGroups.csv"])
   end
@@ -163,11 +163,11 @@ defmodule WandererKills.Core do
 
   defmodule Constants do
     @moduledoc false
-    defdelegate gen_server_call_timeout(), to: WandererKills.Infrastructure.Constants
-    defdelegate retry_base_delay(), to: WandererKills.Infrastructure.Constants
-    defdelegate retry_max_delay(), to: WandererKills.Infrastructure.Constants
-    defdelegate retry_backoff_factor(), to: WandererKills.Infrastructure.Constants
-    defdelegate validation(type), to: WandererKills.Infrastructure.Constants
+    defdelegate gen_server_call_timeout(), to: WandererKills.Infrastructure.Config
+    defdelegate retry_base_delay(), to: WandererKills.Infrastructure.Config
+    defdelegate retry_max_delay(), to: WandererKills.Infrastructure.Config
+    defdelegate retry_backoff_factor(), to: WandererKills.Infrastructure.Config
+    defdelegate validation(type), to: WandererKills.Infrastructure.Config
   end
 
   defmodule Error do

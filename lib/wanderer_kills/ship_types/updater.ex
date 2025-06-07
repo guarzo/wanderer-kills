@@ -29,12 +29,12 @@ defmodule WandererKills.ShipTypes.Updater do
 
   ## Dependencies
 
-  - `WandererKills.Processing.CSV` - CSV-based updates
+  - `WandererKills.ShipTypes.CSV` - CSV-based updates
   - `WandererKills.ESI.Client` - ESI-based updates
   """
 
   require Logger
-  alias WandererKills.Processing.CSV
+  alias WandererKills.ShipTypes.CSV
   alias WandererKills.ESI.Client, as: EsiSource
   alias WandererKills.Infrastructure.Error
 

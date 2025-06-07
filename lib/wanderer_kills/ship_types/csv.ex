@@ -1,4 +1,4 @@
-defmodule WandererKills.Processing.CSV do
+defmodule WandererKills.ShipTypes.CSV do
   @moduledoc """
   Unified CSV parsing utilities for WandererKills.
 

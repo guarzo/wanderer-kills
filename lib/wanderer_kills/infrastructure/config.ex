@@ -2,28 +2,58 @@ defmodule WandererKills.Infrastructure.Config do
   @moduledoc """
   Centralized configuration management for WandererKills.
 
-  This module provides a unified interface for accessing application configuration,
-  replacing scattered `Application.compile_env/3` calls throughout the codebase.
-  It provides proper defaults, validation, and type checking.
+  This module provides a unified interface for all application configuration,
+  including runtime settings, constants, and environment-specific values.
 
-  Configuration is organized into logical groups for easier maintenance and discovery.
+  ## Configuration Groups
+
+  - **Cache**: TTL settings and cache behavior
+  - **Retry**: Retry policies and backoff strategies
+  - **Batch**: Concurrency and batch processing settings
+  - **Timeouts**: Request timeout configurations
+  - **HTTP Status**: Status code handling rules
+  - **Services**: External service URLs
+  - **RedisQ**: Queue processing configuration
+  - **Parser**: Killmail parsing settings
+  - **Enricher**: Data enrichment configuration
+  - **Killmail Store**: Storage and GC settings
+  - **Telemetry**: Metrics and monitoring configuration
+  - **App**: Application-level settings
+  - **Constants**: Core application constants
 
   ## Usage
 
   ```elixir
-  # Cache configuration
-  config = Config.cache()
-  ttl = config.killmails_ttl
-
-  # Retry configuration
+  # Get specific configuration groups
+  cache_config = Config.cache()
   retry_config = Config.retry()
-  max_retries = retry_config.http_max_retries
 
-  # Service URLs
-  services = Config.services()
-  base_url = services.esi_base_url
+  # Get individual values
+  timeout = Config.timeouts().esi_request_ms
+  max_retries = Config.retry().http_max_retries
+
+  # Get constants
+  timeout = Config.gen_server_call_timeout()
+  max_id = Config.validation(:max_killmail_id)
   ```
   """
+
+  # ============================================================================
+  # Core Constants
+  # ============================================================================
+
+  # Timeout Configuration (Use Config module for runtime-configurable timeouts)
+  @gen_server_call_timeout 5_000
+
+  # Retry Configuration (Use Config module for runtime-configurable retry settings)
+  @default_base_delay 1_000
+  @max_backoff_delay 60_000
+  @backoff_factor 2
+
+  # Validation Limits
+  @max_killmail_id 999_999_999_999
+  @max_system_id 32_000_000
+  @max_character_id 999_999_999_999
 
   defstruct [
     # Cache settings
@@ -235,6 +265,55 @@ defmodule WandererKills.Infrastructure.Config do
   @doc "Gets application configuration"
   @spec app() :: map()
   def app, do: config().app
+
+  # ============================================================================
+  # Constants API
+  # ============================================================================
+
+  @doc """
+  Gets GenServer call timeout in milliseconds.
+
+  This is a true constant used for GenServer.call timeouts.
+  For HTTP request timeouts, use `Config.timeouts().default_request_ms`.
+  """
+  @spec gen_server_call_timeout() :: integer()
+  def gen_server_call_timeout, do: @gen_server_call_timeout
+
+  @doc """
+  Gets retry base delay in milliseconds.
+
+  This is an algorithmic constant for exponential backoff calculations.
+  """
+  @spec retry_base_delay() :: integer()
+  def retry_base_delay, do: @default_base_delay
+
+  @doc """
+  Gets maximum retry delay in milliseconds.
+
+  This is an algorithmic constant for exponential backoff calculations.
+  """
+  @spec retry_max_delay() :: integer()
+  def retry_max_delay, do: @max_backoff_delay
+
+  @doc """
+  Gets retry backoff factor.
+
+  This is an algorithmic constant for exponential backoff calculations.
+  """
+  @spec retry_backoff_factor() :: integer()
+  def retry_backoff_factor, do: @backoff_factor
+
+  @doc """
+  Gets validation limits.
+  """
+  @spec validation(atom()) :: integer()
+  def validation(type) do
+    case type do
+      :max_killmail_id -> @max_killmail_id
+      :max_system_id -> @max_system_id
+      :max_character_id -> @max_character_id
+    end
+  end
 
   # Legacy compatibility functions (deprecated)
   @doc false
