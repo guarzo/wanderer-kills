@@ -32,7 +32,6 @@ defmodule WandererKills.TestHelpers do
   ```
   """
 
-  import Mox
   import ExUnit.Assertions
 
   #
@@ -497,51 +496,5 @@ defmodule WandererKills.TestHelpers do
     end
 
     :ok
-  end
-
-  #
-  # Private HTTP Mock Helpers
-  #
-
-  # Default HTTP response mocking for common endpoints
-  defp mock_url_response(url, _opts) when is_binary(url) do
-    cond do
-      String.contains?(url, "characters/") ->
-        character_id = extract_id_from_url(url)
-        {:ok, %{status: 200, body: generate_esi_response(:character, character_id)}}
-
-      String.contains?(url, "corporations/") ->
-        corporation_id = extract_id_from_url(url)
-        {:ok, %{status: 200, body: generate_esi_response(:corporation, corporation_id)}}
-
-      String.contains?(url, "alliances/") ->
-        alliance_id = extract_id_from_url(url)
-        {:ok, %{status: 200, body: generate_esi_response(:alliance, alliance_id)}}
-
-      String.contains?(url, "types/") ->
-        type_id = extract_id_from_url(url)
-        {:ok, %{status: 200, body: generate_esi_response(:type, type_id)}}
-
-      String.contains?(url, "redisq.zkillboard.com") ->
-        {:ok, %{status: 200, body: %{"package" => nil}}}
-
-      true ->
-        {:ok, %{status: 200, body: %{}}}
-    end
-  end
-
-  defp mock_url_response(_url, _opts) do
-    {:ok, %{status: 200, body: %{}}}
-  end
-
-  # Extracts ID from ESI-style URLs
-  defp extract_id_from_url(url) do
-    url
-    |> String.split("/")
-    |> Enum.reverse()
-    |> hd()
-    |> String.to_integer()
-  rescue
-    _ -> 123_456
   end
 end

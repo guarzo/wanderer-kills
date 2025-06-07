@@ -1,0 +1,6 @@
+- [ ] “Delete the entire `lib/wanderer_kills/data/` directory and the façade `lib/wanderer_kills/data.ex`; remove related behaviours (`CsvSource`, `EsiSource`, etc.) and update any imports to use the new domain modules directly.”
+- [ ] “Remove `lib/wanderer_kills/shared/csv.ex` and `lib/wanderer_kills/shared/constants.ex` now that CSV parsing and constants live in `Core.CSV` and `Core.Constants`; update any references and delete the `shared/` folder.”
+- [ ] “Delete `lib/wanderer_kills/ship_types/csv_parser.ex`—all code should call `ShipTypes.CSVHelpers` directly—and remove its tests and imports.”
+- [ ] “Remove `lib/wanderer_kills/killmails/cache.ex`; merge any unique logic into `Core.Cache` (or drop if unused) and delete the file.”
+- [ ] “Pick one killmail store implementation (prefer `lib/wanderer_kills/killmails/store.ex`), update all callers, and delete `lib/wanderer_kills/data/stores/killmail_store.ex`.”
+- [ ] “Delete `lib/wanderer_kills/fetching/processor.ex` and `lib/wanderer_kills/fetching/zkb_service.ex`; fold necessary functionality into `Killmails.Coordinator` or `External.ZKB` modules and remove the `fetching/` folder if empty.”

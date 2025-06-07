@@ -1,7 +1,7 @@
 defmodule WandererKills.Http.UtilTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Core.Client
+  alias WandererKills.Core.Http.Client
 
   setup do
     WandererKills.TestHelpers.setup_mocks()

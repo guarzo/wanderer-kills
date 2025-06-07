@@ -269,21 +269,91 @@ defmodule WandererKills.Preloader.Worker do
 
   @spec fetch_system(integer(), pos_integer(), pos_integer()) :: fetch_result()
   defp fetch_system(system_id, since_hours, limit) do
-    case WandererKills.Fetching.Coordinator.fetch_killmails_for_system(system_id,
-           since_hours: since_hours,
-           limit: limit
-         ) do
-      {:ok, killmails} ->
-        Logger.debug("Successfully fetched killmails for system",
-          system_id: system_id,
-          killmail_count: length(killmails)
-        )
+    alias WandererKills.Fetching.{ZkbService, Processor}
 
-        :ok
+    # Check cache first
+    case Cache.system_recently_fetched?(system_id) do
+      {:ok, true} ->
+        # Cache is fresh, get cached data
+        case Cache.get_killmails_for_system(system_id) do
+          {:ok, killmail_ids} ->
+            Logger.debug("Using cached killmails for system",
+              system_id: system_id,
+              cached_count: length(killmail_ids)
+            )
 
+            :ok
+
+          {:error, _reason} ->
+            # Cache data missing, fetch from remote
+            fetch_remote_killmails(system_id, since_hours, limit)
+        end
+
+      {:ok, false} ->
+        # Cache is stale, fetch from remote
+        fetch_remote_killmails(system_id, since_hours, limit)
+
+      {:error, _reason} ->
+        # Cache check failed, fetch from remote
+        fetch_remote_killmails(system_id, since_hours, limit)
+    end
+  end
+
+  defp fetch_remote_killmails(system_id, since_hours, limit) do
+    alias WandererKills.Fetching.{ZkbService, Processor}
+
+    with {:ok, raw_killmails} <- ZkbService.fetch_system_killmails(system_id, limit, since_hours),
+         {:ok, processed_killmails} <-
+           Processor.process_killmails(raw_killmails, system_id, since_hours),
+         :ok <- cache_killmails_for_system(system_id, processed_killmails) do
+      Logger.debug("Successfully fetched killmails for system",
+        system_id: system_id,
+        killmail_count: length(processed_killmails)
+      )
+
+      :ok
+    else
       {:error, reason} ->
         Logger.debug("Fetch error for system #{system_id}: #{inspect(reason)}")
         {:error, reason}
+    end
+  end
+
+  defp cache_killmails_for_system(system_id, killmails) when is_list(killmails) do
+    try do
+      # Update fetch timestamp
+      case Cache.set_system_fetch_timestamp(system_id, DateTime.utc_now()) do
+        {:ok, :set} -> :ok
+        # Continue anyway
+        {:error, _reason} -> :ok
+      end
+
+      # Extract killmail IDs and cache individual killmails
+      killmail_ids =
+        Enum.map(killmails, fn killmail ->
+          killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, "killID")
+
+          if killmail_id do
+            # Cache the individual killmail
+            Cache.put(:killmails, killmail_id, killmail)
+            killmail_id
+          else
+            nil
+          end
+        end)
+        |> Enum.filter(&(&1 != nil))
+
+      # Add each killmail ID to system's killmail list
+      Enum.each(killmail_ids, fn killmail_id ->
+        Cache.add_system_killmail(system_id, killmail_id)
+      end)
+
+      # Add system to active list
+      Cache.add_active_system(system_id)
+
+      :ok
+    rescue
+      _error -> {:error, :cache_exception}
     end
   end
 end
