@@ -7,8 +7,9 @@ defmodule WandererKills.ESI.TypeFetcher do
   """
 
   require Logger
-  alias WandererKills.Core.{Config, Error, Cache}
+  alias WandererKills.Core.{Config, Error}
   alias WandererKills.Core.Behaviours.{ESIClient, DataFetcher}
+  alias WandererKills.Cache.{ESI, ShipTypes}
 
   @behaviour ESIClient
   @behaviour DataFetcher

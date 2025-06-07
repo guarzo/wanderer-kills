@@ -7,8 +7,9 @@ defmodule WandererKills.ESI.CharacterFetcher do
   """
 
   require Logger
-  alias WandererKills.Core.{Config, Error, Cache}
+  alias WandererKills.Core.{Config, Error}
   alias WandererKills.Core.Behaviours.{ESIClient, DataFetcher}
+  alias WandererKills.Cache.ESI
 
   @behaviour ESIClient
   @behaviour DataFetcher
@@ -18,13 +19,9 @@ defmodule WandererKills.ESI.CharacterFetcher do
   """
   @impl ESIClient
   def get_character(character_id) when is_integer(character_id) do
-    case Cache.get(:esi_cache, {:character, character_id}) do
-      {:ok, character_info} ->
-        {:ok, character_info}
-
-      {:error, _} ->
-        fetch_and_cache_character(character_id)
-    end
+    ESI.get_or_set_character(character_id, fn ->
+      fetch_character_from_api(character_id)
+    end)
   end
 
   @impl ESIClient
@@ -37,13 +34,9 @@ defmodule WandererKills.ESI.CharacterFetcher do
   """
   @impl ESIClient
   def get_corporation(corporation_id) when is_integer(corporation_id) do
-    case Cache.get(:esi_cache, {:corporation, corporation_id}) do
-      {:ok, corp_info} ->
-        {:ok, corp_info}
-
-      {:error, _} ->
-        fetch_and_cache_corporation(corporation_id)
-    end
+    ESI.get_or_set_corporation(corporation_id, fn ->
+      fetch_corporation_from_api(corporation_id)
+    end)
   end
 
   @impl ESIClient
@@ -56,13 +49,9 @@ defmodule WandererKills.ESI.CharacterFetcher do
   """
   @impl ESIClient
   def get_alliance(alliance_id) when is_integer(alliance_id) do
-    case Cache.get(:esi_cache, {:alliance, alliance_id}) do
-      {:ok, alliance_info} ->
-        {:ok, alliance_info}
-
-      {:error, _} ->
-        fetch_and_cache_alliance(alliance_id)
-    end
+    ESI.get_or_set_alliance(alliance_id, fn ->
+      fetch_alliance_from_api(alliance_id)
+    end)
   end
 
   @impl ESIClient
@@ -124,94 +113,54 @@ defmodule WandererKills.ESI.CharacterFetcher do
   # Private Functions
   # ============================================================================
 
-  defp fetch_and_cache_character(character_id) do
+  defp fetch_character_from_api(character_id) do
     url = "#{esi_base_url()}/characters/#{character_id}/"
 
     case http_client().get(url, default_headers(), []) do
       {:ok, response} ->
-        character_info = parse_character_response(character_id, response)
-
-        case Cache.put_with_ttl(
-               :esi_cache,
-               {:character, character_id},
-               character_info,
-               cache_ttl()
-             ) do
-          :ok ->
-            {:ok, character_info}
-
-          {:error, reason} ->
-            {:error,
-             Error.cache_error(:write_failed, "Failed to cache character", %{reason: reason})}
-        end
+        parse_character_response(character_id, response)
 
       {:error, reason} ->
         Logger.error("Failed to fetch character #{character_id}: #{inspect(reason)}")
 
-        {:error,
-         Error.esi_error(:api_error, "Failed to fetch character from ESI", false, %{
-           character_id: character_id,
-           reason: reason
-         })}
+        raise Error.esi_error(:api_error, "Failed to fetch character from ESI", false, %{
+                character_id: character_id,
+                reason: reason
+              })
     end
   end
 
-  defp fetch_and_cache_corporation(corporation_id) do
+  defp fetch_corporation_from_api(corporation_id) do
     url = "#{esi_base_url()}/corporations/#{corporation_id}/"
 
     case http_client().get(url, default_headers(), []) do
       {:ok, response} ->
-        corp_info = parse_corporation_response(corporation_id, response)
-
-        case Cache.put_with_ttl(
-               :esi_cache,
-               {:corporation, corporation_id},
-               corp_info,
-               cache_ttl()
-             ) do
-          :ok ->
-            {:ok, corp_info}
-
-          {:error, reason} ->
-            {:error,
-             Error.cache_error(:write_failed, "Failed to cache corporation", %{reason: reason})}
-        end
+        parse_corporation_response(corporation_id, response)
 
       {:error, reason} ->
         Logger.error("Failed to fetch corporation #{corporation_id}: #{inspect(reason)}")
 
-        {:error,
-         Error.esi_error(:api_error, "Failed to fetch corporation from ESI", false, %{
-           corporation_id: corporation_id,
-           reason: reason
-         })}
+        raise Error.esi_error(:api_error, "Failed to fetch corporation from ESI", false, %{
+                corporation_id: corporation_id,
+                reason: reason
+              })
     end
   end
 
-  defp fetch_and_cache_alliance(alliance_id) do
+  defp fetch_alliance_from_api(alliance_id) do
     url = "#{esi_base_url()}/alliances/#{alliance_id}/"
 
     case http_client().get(url, default_headers(), []) do
       {:ok, response} ->
-        alliance_info = parse_alliance_response(alliance_id, response)
-
-        case Cache.put_with_ttl(:esi_cache, {:alliance, alliance_id}, alliance_info, cache_ttl()) do
-          :ok ->
-            {:ok, alliance_info}
-
-          {:error, reason} ->
-            {:error,
-             Error.cache_error(:write_failed, "Failed to cache alliance", %{reason: reason})}
-        end
+        parse_alliance_response(alliance_id, response)
 
       {:error, reason} ->
         Logger.error("Failed to fetch alliance #{alliance_id}: #{inspect(reason)}")
 
-        {:error,
-         Error.esi_error(:api_error, "Failed to fetch alliance from ESI", false, %{
-           alliance_id: alliance_id,
-           reason: reason
-         })}
+        raise Error.esi_error(:api_error, "Failed to fetch alliance from ESI", false, %{
+                alliance_id: alliance_id,
+                reason: reason
+              })
     end
   end
 

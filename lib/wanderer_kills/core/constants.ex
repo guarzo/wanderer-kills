@@ -86,5 +86,4 @@ defmodule WandererKills.Core.Constants do
       :max_character_id -> @max_character_id
     end
   end
-
 end

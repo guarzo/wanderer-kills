@@ -6,7 +6,7 @@ defmodule WandererKills.Application do
 
   Supervises:
     1. A `Task.Supervisor` for background jobs
-    2. The cache supervisor tree
+    2. Cachex instances for different cache namespaces
     3. The preloader supervisor tree
     4. The HTTP endpoint (Plug.Cowboy)
     5. A GenServer or process that reports parser stats
@@ -26,7 +26,15 @@ defmodule WandererKills.Application do
     base_children = [
       {Task.Supervisor, name: WandererKills.TaskSupervisor},
       {Phoenix.PubSub, name: WandererKills.PubSub},
-      {WandererKills.Core.Cache, []},
+
+      # Cachex instances for different namespaces
+      {Cachex, name: :esi, ttl: Config.cache_ttl(:esi) * 1000},
+      {Cachex, name: :ship_types, ttl: Config.cache_ttl(:esi) * 1000},
+      {Cachex, name: :systems, ttl: Config.cache_ttl(:system) * 1000},
+      {Cachex, name: :killmails, ttl: Config.cache_ttl(:killmails) * 1000},
+      {Cachex, name: :characters, ttl: Config.cache_ttl(:esi) * 1000},
+      {Cachex, name: :corporations, ttl: Config.cache_ttl(:esi) * 1000},
+      {Cachex, name: :alliances, ttl: Config.cache_ttl(:esi) * 1000},
       WandererKills.Killmails.Store,
       WandererKills.Observability.Monitoring,
       {Plug.Cowboy, scheme: :http, plug: WandererKillsWeb.Api, options: [port: Config.port()]},
