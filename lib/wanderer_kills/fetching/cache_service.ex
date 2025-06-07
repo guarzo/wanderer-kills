@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.CacheService do
+defmodule WandererKills.Fetching.CacheService do
   @moduledoc """
   Cache management service for fetched data.
 
@@ -9,8 +9,8 @@ defmodule WandererKills.Fetcher.CacheService do
   """
 
   require Logger
-  alias WandererKills.Cache
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Cache
+  alias WandererKills.Core.Error
 
   @type system_id :: pos_integer()
   @type killmail_id :: pos_integer()
@@ -65,7 +65,8 @@ defmodule WandererKills.Fetcher.CacheService do
   end
 
   def get_cached_killmails(invalid_id) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """
@@ -106,7 +107,7 @@ defmodule WandererKills.Fetcher.CacheService do
 
           if killmail_id do
             # Cache the individual killmail
-            Cache.set_killmail(killmail_id, killmail)
+            Cache.put(:killmails, killmail_id, killmail)
             killmail_id
           else
             Logger.warning("Killmail missing ID during caching",
@@ -150,12 +151,16 @@ defmodule WandererKills.Fetcher.CacheService do
   end
 
   def cache_killmails(invalid_id, _killmails) when not is_integer(invalid_id) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   def cache_killmails(_system_id, invalid_killmails) when not is_list(invalid_killmails) do
     {:error,
-     Error.validation_error("Killmails must be a list, got: #{inspect(invalid_killmails)}")}
+     Error.validation_error(
+       :invalid_type,
+       "Killmails must be a list, got: #{inspect(invalid_killmails)}"
+     )}
   end
 
   @doc """
@@ -223,7 +228,8 @@ defmodule WandererKills.Fetcher.CacheService do
   end
 
   def should_refresh_cache?(invalid_id, _since_hours) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """
@@ -259,7 +265,7 @@ defmodule WandererKills.Fetcher.CacheService do
     )
 
     case Cache.set_system_fetch_timestamp(system_id, actual_timestamp) do
-      :ok ->
+      {:ok, :set} ->
         Logger.debug("Successfully set system fetch timestamp",
           system_id: system_id,
           timestamp: actual_timestamp,
@@ -283,7 +289,8 @@ defmodule WandererKills.Fetcher.CacheService do
   end
 
   def set_system_fetch_timestamp(invalid_id, _timestamp) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """
@@ -336,7 +343,8 @@ defmodule WandererKills.Fetcher.CacheService do
   end
 
   def get_system_fetch_timestamp(invalid_id) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """
@@ -382,6 +390,7 @@ defmodule WandererKills.Fetcher.CacheService do
   end
 
   def check_cache_or_fetch(invalid_id, _since_hours) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 end

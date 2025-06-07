@@ -4,7 +4,7 @@ defmodule WandererKills.Killmails.CacheHandler do
   """
 
   require Logger
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
 
   @type killmail :: map()
   @type result :: {:ok, killmail()} | {:error, term()}
@@ -17,7 +17,7 @@ defmodule WandererKills.Killmails.CacheHandler do
     id = get_killmail_id(killmail)
     sys_id = get_system_id(killmail)
 
-    case Cache.set_killmail(id, killmail) do
+    case Cache.put(:killmails, id, killmail) do
       :ok ->
         Logger.debug("Stored killmail in cache",
           killmail_id: id,

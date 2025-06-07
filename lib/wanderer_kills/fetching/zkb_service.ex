@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.ZkbService do
+defmodule WandererKills.Fetching.ZkbService do
   @moduledoc """
   Pure ZKB API interaction service.
 
@@ -9,7 +9,7 @@ defmodule WandererKills.Fetcher.ZkbService do
 
   require Logger
   alias WandererKills.Zkb.Client, as: ZkbClient
-  alias WandererKills.Infrastructure.{Error, Config}
+  alias WandererKills.Core.{Error, Config}
   alias WandererKills.Observability.Telemetry
 
   @type killmail_id :: pos_integer()
@@ -80,7 +80,8 @@ defmodule WandererKills.Fetcher.ZkbService do
   end
 
   def fetch_killmail(invalid_id, _client) do
-    {:error, Error.validation_error("Invalid killmail ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid killmail ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """
@@ -151,7 +152,8 @@ defmodule WandererKills.Fetcher.ZkbService do
   end
 
   def fetch_system_killmails(invalid_id, _limit, _since_hours, _client) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """
@@ -209,7 +211,8 @@ defmodule WandererKills.Fetcher.ZkbService do
   end
 
   def get_system_kill_count(invalid_id, _client) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """

@@ -31,7 +31,7 @@ defmodule WandererKills.Shared.CSV do
 
   require Logger
   alias NimbleCSV.RFC4180, as: CSV
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
 
   @type parse_result :: {:ok, term()} | {:error, atom()}
   @type parser_function :: (map() -> term() | nil)

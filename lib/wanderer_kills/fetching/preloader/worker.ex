@@ -13,7 +13,7 @@ defmodule WandererKills.Preloader.Worker do
   use GenServer
   require Logger
 
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
 
   @type pass_type :: :quick | :expanded
   @type fetch_result :: :ok | {:error, term()}
@@ -70,11 +70,20 @@ defmodule WandererKills.Preloader.Worker do
     )
 
     case Cache.add_active_system(system_id) do
-      :ok ->
+      {:ok, :added} ->
         Logger.info("Successfully added system to active list",
           system_id: system_id,
           operation: :add_system,
           status: :success
+        )
+
+        :ok
+
+      {:ok, :already_exists} ->
+        Logger.info("System already in active list",
+          system_id: system_id,
+          operation: :add_system,
+          status: :already_exists
         )
 
         :ok
@@ -108,13 +117,22 @@ defmodule WandererKills.Preloader.Worker do
 
     # Add the test system to active systems
     case Cache.add_active_system(test_system_id) do
-      :ok ->
+      {:ok, :added} ->
         Logger.info("Successfully added test system",
           system_id: test_system_id,
           status: :success
         )
 
         # Spawn a quick preload for the test system
+        spawn_test_preload_task(test_system_id)
+
+      {:ok, :already_exists} ->
+        Logger.info("Test system already in active list",
+          system_id: test_system_id,
+          status: :already_exists
+        )
+
+        # Still spawn a test task
         spawn_test_preload_task(test_system_id)
 
       {:error, reason} ->
@@ -251,7 +269,7 @@ defmodule WandererKills.Preloader.Worker do
 
   @spec fetch_system(integer(), pos_integer(), pos_integer()) :: fetch_result()
   defp fetch_system(system_id, since_hours, limit) do
-    case WandererKills.Fetcher.Coordinator.fetch_killmails_for_system(system_id,
+    case WandererKills.Fetching.Coordinator.fetch_killmails_for_system(system_id,
            since_hours: since_hours,
            limit: limit
          ) do

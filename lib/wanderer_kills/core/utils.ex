@@ -1,4 +1,4 @@
-defmodule WandererKills.Http.Utils do
+defmodule WandererKills.Core.Http.Utils do
   @moduledoc """
   Consolidated HTTP utilities for WandererKills.
 
@@ -27,8 +27,8 @@ defmodule WandererKills.Http.Utils do
   """
 
   require Logger
-  alias WandererKills.Http.Client
-  alias WandererKills.Http.ClientProvider
+  alias WandererKills.Core.Http.Client
+  alias WandererKills.Core.Http.ClientProvider
   alias WandererKills.Infrastructure.Error
   alias WandererKills.Observability.Telemetry
 

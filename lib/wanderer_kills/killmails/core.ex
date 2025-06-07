@@ -6,8 +6,8 @@ defmodule WandererKills.Parser.Core do
   require Logger
   alias WandererKills.Killmails.{CacheHandler, Flatten}
   alias WandererKills.Observability.Monitoring
-  alias WandererKills.Infrastructure.{Clock, Config, Error}
-  alias WandererKills.Cache
+  alias WandererKills.Core.{Clock, Config, Error}
+  alias WandererKills.Core.Cache
 
   @type raw_km :: map()
   @type merged_km :: map()
@@ -314,7 +314,7 @@ defmodule WandererKills.Parser.Core do
         # Ensure we preserve the original killmail_id
         parsed = Map.put(parsed, "killmail_id", raw["killmail_id"])
         # Cache the killmail after successful parsing
-        Cache.set_killmail(parsed["killmail_id"], parsed)
+        Cache.put(:killmails, parsed["killmail_id"], parsed)
         do_parse_until_older(rest, cutoff, caller, [parsed | acc])
     end
   end

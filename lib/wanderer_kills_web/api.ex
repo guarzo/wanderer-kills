@@ -8,7 +8,7 @@ defmodule WandererKillsWeb.Api do
   import Plug.Conn
 
   alias WandererKills.Observability.Monitoring
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
   alias WandererKillsWeb.Plugs.RequestId
 
   plug(Plug.Logger, log: :info)
@@ -51,7 +51,7 @@ defmodule WandererKillsWeb.Api do
   get "/killmail/:id" do
     case validate_killmail_id(id) do
       {:ok, killmail_id} ->
-        case WandererKills.Fetcher.Coordinator.fetch_and_cache_killmail(killmail_id) do
+        case WandererKills.Fetching.Coordinator.fetch_and_cache_killmail(killmail_id) do
           {:error, :not_found} ->
             handle_killmail_response({:error, :not_found}, killmail_id, conn)
 
@@ -71,7 +71,7 @@ defmodule WandererKillsWeb.Api do
   get "/system_killmails/:system_id" do
     case validate_system_id(system_id) do
       {:ok, id} ->
-        case WandererKills.Fetcher.Coordinator.fetch_killmails_for_system(id) do
+        case WandererKills.Fetching.Coordinator.fetch_killmails_for_system(id) do
           {:ok, killmails} ->
             handle_system_killmails_response({:ok, killmails}, id, conn)
 
@@ -117,7 +117,7 @@ defmodule WandererKillsWeb.Api do
   get "/system/:id/killmails" do
     case validate_system_id(id) do
       {:ok, system_id} ->
-        case WandererKills.Fetcher.Coordinator.fetch_killmails_for_system(system_id) do
+        case WandererKills.Fetching.Coordinator.fetch_killmails_for_system(system_id) do
           {:ok, killmails} ->
             Logger.info("Successfully fetched killmails for system", %{
               system_id: system_id,

@@ -38,7 +38,7 @@ defmodule WandererKills.Killmails.Parser do
 
   alias WandererKills.Killmails.{Enricher, Cache}
   alias WandererKills.Observability.Monitoring
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
 
   @type killmail :: map()
   @type raw_killmail :: map()

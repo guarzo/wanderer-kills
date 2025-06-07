@@ -22,8 +22,9 @@ defmodule WandererKills.Core do
   """
 
   # Core utilities
-  alias WandererKills.Infrastructure.{BatchProcessor, Clock, CircuitBreaker, Config}
+  alias WandererKills.Infrastructure.{BatchProcessor, CircuitBreaker}
   alias WandererKills.Infrastructure.Constants
+  alias WandererKills.{Clock, Config}
 
   #
   # Batch Processing API

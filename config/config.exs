@@ -243,7 +243,16 @@ config :logger, :console,
     :enrich,
     :total_systems,
     :successful_systems,
-    :missing_tables
+    :missing_tables,
+    :killmail_hash,
+    :error_count,
+    :success_count,
+    :group_ids,
+    :total_groups,
+    :table,
+    :expired_count,
+    :type_count,
+    :type
   ]
 
 # Import environment specific config

@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.Coordinator do
+defmodule WandererKills.Fetching.Coordinator do
   @moduledoc """
   Thin orchestration layer for fetching operations.
 
@@ -8,10 +8,10 @@ defmodule WandererKills.Fetcher.Coordinator do
   """
 
   require Logger
-  alias WandererKills.Fetcher.{ZkbService, CacheService, Processor}
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Fetching.{ZkbService, CacheService, Processor}
+  alias WandererKills.Core.Error
   alias WandererKills.Observability.Telemetry
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
 
   @type killmail_id :: pos_integer()
   @type system_id :: pos_integer()
@@ -64,7 +64,7 @@ defmodule WandererKills.Fetcher.Coordinator do
 
     with {:ok, raw_killmail} <- ZkbService.fetch_killmail(killmail_id, client),
          {:ok, processed_killmail} <- Processor.process_single_killmail(raw_killmail),
-         :ok <- Cache.set_killmail(killmail_id, processed_killmail) do
+         :ok <- Cache.put(:killmails, killmail_id, processed_killmail) do
       Telemetry.fetch_system_complete(killmail_id, :success)
 
       Logger.debug("Successfully fetched and cached killmail",
@@ -90,7 +90,8 @@ defmodule WandererKills.Fetcher.Coordinator do
   end
 
   def fetch_and_cache_killmail(invalid_id, _client) do
-    {:error, Error.validation_error("Invalid killmail ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid killmail ID format: #{inspect(invalid_id)}")}
   end
 
   # =============================================================================
@@ -130,7 +131,7 @@ defmodule WandererKills.Fetcher.Coordinator do
   def fetch_killmails_for_system(system_id, opts) when is_binary(system_id) do
     case Integer.parse(system_id) do
       {parsed_id, ""} -> fetch_killmails_for_system(parsed_id, opts)
-      _ -> {:error, Error.validation_error("Invalid system ID format")}
+      _ -> {:error, Error.validation_error(:invalid_format, "Invalid system ID format")}
     end
   end
 
@@ -180,7 +181,8 @@ defmodule WandererKills.Fetcher.Coordinator do
   end
 
   def fetch_killmails_for_system(invalid_id, _opts) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   # =============================================================================
@@ -269,7 +271,11 @@ defmodule WandererKills.Fetcher.Coordinator do
   end
 
   def fetch_killmails_for_systems(invalid_ids, _opts) do
-    {:error, Error.validation_error("System IDs must be a list, got: #{inspect(invalid_ids)}")}
+    {:error,
+     Error.validation_error(
+       :invalid_type,
+       "System IDs must be a list, got: #{inspect(invalid_ids)}"
+     )}
   end
 
   @doc """
@@ -297,7 +303,7 @@ defmodule WandererKills.Fetcher.Coordinator do
   def get_system_kill_count(system_id, client) when is_binary(system_id) do
     case Integer.parse(system_id) do
       {parsed_id, ""} -> get_system_kill_count(parsed_id, client)
-      _ -> {:error, Error.validation_error("Invalid system ID format")}
+      _ -> {:error, Error.validation_error(:invalid_format, "Invalid system ID format")}
     end
   end
 
@@ -306,7 +312,8 @@ defmodule WandererKills.Fetcher.Coordinator do
   end
 
   def get_system_kill_count(invalid_id, _client) do
-    {:error, Error.validation_error("Invalid system ID format: #{inspect(invalid_id)}")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   # =============================================================================

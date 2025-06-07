@@ -1,4 +1,4 @@
-defmodule WandererKills.Cache.Errors do
+defmodule WandererKills.Core.Cache.Errors do
   @moduledoc """
   Standardized error types for cache operations.
   """

@@ -1,4 +1,4 @@
-defmodule WandererKills.Http.ClientProvider do
+defmodule WandererKills.Core.Http.ClientProvider do
   @moduledoc """
   Centralized HTTP client configuration provider.
 
@@ -8,7 +8,7 @@ defmodule WandererKills.Http.ClientProvider do
   ## Usage
 
   ```elixir
-  alias WandererKills.Http.ClientProvider
+  alias WandererKills.Core.Http.ClientProvider
 
   client = ClientProvider.get()
   case client.get_with_rate_limit(url, opts) do
@@ -22,7 +22,7 @@ defmodule WandererKills.Http.ClientProvider do
   Gets the configured HTTP client module.
 
   Returns the HTTP client configured in the application environment,
-  defaulting to `WandererKills.Http.Client` if not specified.
+  defaulting to `WandererKills.Core.Http.Client` if not specified.
 
   ## Returns
   The HTTP client module that implements the client behaviour.
@@ -31,8 +31,8 @@ defmodule WandererKills.Http.ClientProvider do
 
   ```elixir
   client = ClientProvider.get()
-  # Returns WandererKills.Http.Client (default)
-  # or WandererKills.Http.Client.Mock (in tests)
+  # Returns WandererKills.Core.Http.Client (default)
+  # or WandererKills.Core.Http.Client.Mock (in tests)
   ```
   """
   @spec get() :: module()

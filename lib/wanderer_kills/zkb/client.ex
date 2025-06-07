@@ -6,8 +6,8 @@ defmodule WandererKills.Zkb.Client do
   @behaviour WandererKills.Zkb.ClientBehaviour
 
   require Logger
-  alias WandererKills.Http.Client, as: HttpClient
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Http.Client, as: HttpClient
+  alias WandererKills.Core.Error
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
   @base_url Application.compile_env(:wanderer_kills, :zkb_base_url)
@@ -202,7 +202,8 @@ defmodule WandererKills.Zkb.Client do
   end
 
   def get_system_kill_count(_system_id) do
-    {:error, Error.validation_error("Invalid system ID format for zKillboard API")}
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format for zKillboard API")}
   end
 
   @doc """

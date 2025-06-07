@@ -39,7 +39,7 @@ defmodule WandererKills.External.ESI.Client do
   alias WandererKills.Infrastructure.Config
   alias WandererKills.Infrastructure.BatchProcessor
   alias WandererKills.TaskSupervisor
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
   alias WandererKills.Infrastructure.Error
 
   # Default ship group IDs that contain ship types
@@ -59,7 +59,7 @@ defmodule WandererKills.External.ESI.Client do
   """
   @spec ensure_cached(atom(), integer()) :: :ok | {:error, term()}
   def ensure_cached(:group, group_id) do
-    case Cache.get_group_info(group_id) do
+    case Cache.get(:esi_cache, {:group, group_id}) do
       {:ok, _group_info} ->
         :ok
 
@@ -72,7 +72,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   def ensure_cached(:type, type_id) do
-    case Cache.get_type_info(type_id) do
+    case Cache.get(:esi_cache, {:type, type_id}) do
       {:ok, _type_info} ->
         :ok
 
@@ -85,7 +85,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   def ensure_cached(:character, character_id) do
-    case Cache.get_character_info(character_id) do
+    case Cache.get(:esi_cache, {:character, character_id}) do
       {:ok, _character_info} ->
         :ok
 
@@ -98,7 +98,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   def ensure_cached(:corporation, corporation_id) do
-    case Cache.get_corporation_info(corporation_id) do
+    case Cache.get(:esi_cache, {:corporation, corporation_id}) do
       {:ok, _corp_info} ->
         :ok
 
@@ -111,7 +111,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   def ensure_cached(:alliance, alliance_id) do
-    case Cache.get_alliance_info(alliance_id) do
+    case Cache.get(:esi_cache, {:alliance, alliance_id}) do
       {:ok, _alliance_info} ->
         :ok
 
@@ -136,7 +136,7 @@ defmodule WandererKills.External.ESI.Client do
           types: Map.get(body, "types", [])
         }
 
-        case Cache.set_group_info(group_id, group_info) do
+        case Cache.put(:esi_cache, {:group, group_id}, group_info) do
           :ok -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -166,7 +166,7 @@ defmodule WandererKills.External.ESI.Client do
           volume: Map.get(body, "volume")
         }
 
-        case Cache.set_type_info(type_id, type_info) do
+        case Cache.put(:esi_cache, {:type, type_id}, type_info) do
           :ok -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -195,7 +195,7 @@ defmodule WandererKills.External.ESI.Client do
           "security_status" => Map.get(body, "security_status")
         }
 
-        case Cache.set_character_info(character_id, character_info) do
+        case Cache.put(:esi_cache, {:character, character_id}, character_info) do
           :ok -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -229,7 +229,7 @@ defmodule WandererKills.External.ESI.Client do
           "war_eligible" => Map.get(body, "war_eligible")
         }
 
-        case Cache.set_corporation_info(corporation_id, corp_info) do
+        case Cache.put(:esi_cache, {:corporation, corporation_id}, corp_info) do
           :ok -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -256,7 +256,7 @@ defmodule WandererKills.External.ESI.Client do
           "faction_id" => Map.get(body, "faction_id")
         }
 
-        case Cache.set_alliance_info(alliance_id, alliance_info) do
+        case Cache.put(:esi_cache, {:alliance, alliance_id}, alliance_info) do
           :ok -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -429,7 +429,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   defp fetch_group_types(group_id) do
-    case Cache.get_group_info(group_id) do
+    case Cache.get(:esi_cache, {:group, group_id}) do
       {:ok, group_info} ->
         handle_group_info(group_id, group_info)
 
@@ -482,7 +482,7 @@ defmodule WandererKills.External.ESI.Client do
   defp collect_ship_types(type_ids) do
     type_ids
     |> Enum.map(fn type_id ->
-      case Cache.get_type_info(type_id) do
+      case Cache.get(:esi_cache, {:type, type_id}) do
         {:ok, type_info} -> type_info
         {:error, _reason} -> nil
       end
@@ -501,7 +501,7 @@ defmodule WandererKills.External.ESI.Client do
   end
 
   defp extract_types_from_group(group_id) do
-    case Cache.get_group_info(group_id) do
+    case Cache.get(:esi_cache, {:group, group_id}) do
       {:ok, %{types: types}} when is_list(types) -> types
       _ -> []
     end

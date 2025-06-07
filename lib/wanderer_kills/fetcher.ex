@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.API do
+defmodule WandererKills.Fetching.API do
   @moduledoc """
   Public API for the WandererKills Fetcher domain.
 
@@ -11,8 +11,8 @@ defmodule WandererKills.Fetcher.API do
   ## Usage
 
   ```elixir
-  # Instead of: alias WandererKills.Fetcher.KillmailFetcher
-  alias WandererKills.Fetcher.API, as: Fetcher
+  # Instead of: alias WandererKills.Fetching.KillmailFetcher
+  alias WandererKills.Fetching.API, as: Fetcher
 
   {:ok, killmail} = Fetcher.fetch_killmail(123456)
   ```
@@ -79,7 +79,7 @@ defmodule WandererKills.Fetcher.API do
   @spec fetch_systems_batch([integer()], keyword()) :: {:ok, map()} | {:error, term()}
   def fetch_systems_batch(system_ids, opts \\ []) do
     # Use the new Coordinator's batch function directly
-    results = WandererKills.Fetcher.Coordinator.fetch_killmails_for_systems(system_ids, opts)
+    results = WandererKills.Fetching.Coordinator.fetch_killmails_for_systems(system_ids, opts)
     {:ok, results}
   end
 
@@ -92,7 +92,7 @@ defmodule WandererKills.Fetcher.API do
   """
   @spec get_fresh_system_killmails(integer()) :: {:ok, [map()]} | {:error, term()}
   def get_fresh_system_killmails(system_id) do
-    WandererKills.Fetcher.Coordinator.fetch_killmails_for_system(system_id)
+    WandererKills.Fetching.Coordinator.fetch_killmails_for_system(system_id)
   end
 
   @doc """
@@ -100,7 +100,7 @@ defmodule WandererKills.Fetcher.API do
   """
   @spec get_system_kill_count(integer()) :: {:ok, integer()} | {:error, term()}
   def get_system_kill_count(system_id) do
-    WandererKills.Fetcher.Coordinator.get_system_kill_count(system_id)
+    WandererKills.Fetching.Coordinator.get_system_kill_count(system_id)
   end
 
   #

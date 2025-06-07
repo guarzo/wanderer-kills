@@ -1,4 +1,4 @@
-defmodule WandererKills.Http do
+defmodule WandererKills.Core.Http do
   @moduledoc """
   Public API for the WandererKills HTTP domain.
 
@@ -10,7 +10,7 @@ defmodule WandererKills.Http do
   ## Usage
 
   ```elixir
-  alias WandererKills.Http
+  alias WandererKills.Core.Http
 
   # Make a GET request with rate limiting
   {:ok, response} = Http.get_with_rate_limit(url)
@@ -24,7 +24,7 @@ defmodule WandererKills.Http do
   """
 
   # HTTP Client API
-  alias WandererKills.Http.ClientProvider
+  alias WandererKills.Core.Http.ClientProvider
 
   #
   # Client API

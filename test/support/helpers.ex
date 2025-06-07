@@ -167,7 +167,7 @@ defmodule WandererKills.TestHelpers do
   """
   @spec setup_http_mocks() :: :ok
   def setup_http_mocks do
-    WandererKills.Http.Client.Mock
+    WandererKills.Core.Http.Client.Mock
     |> stub(:get_with_rate_limit, &mock_url_response/2)
     |> stub(:handle_status_code, fn
       200, %{body: body} -> {:ok, body}
@@ -199,7 +199,7 @@ defmodule WandererKills.TestHelpers do
   """
   @spec expect_http_success(String.t(), map()) :: :ok
   def expect_http_success(url_pattern, response_body) do
-    WandererKills.Http.Client.Mock
+    WandererKills.Core.Http.Client.Mock
     |> expect(:get_with_rate_limit, fn url, _opts ->
       if String.contains?(url, url_pattern) do
         {:ok, %{status: 200, body: response_body}}
@@ -216,7 +216,7 @@ defmodule WandererKills.TestHelpers do
   """
   @spec expect_http_rate_limit(String.t(), non_neg_integer()) :: :ok
   def expect_http_rate_limit(url_pattern, retry_count \\ 3) do
-    WandererKills.Http.Client.Mock
+    WandererKills.Core.Http.Client.Mock
     |> expect(:get_with_rate_limit, retry_count, fn url, _opts ->
       if String.contains?(url, url_pattern) do
         {:error, :rate_limited}
@@ -233,7 +233,7 @@ defmodule WandererKills.TestHelpers do
   """
   @spec expect_http_error(String.t(), atom()) :: :ok
   def expect_http_error(url_pattern, error_type) do
-    WandererKills.Http.Client.Mock
+    WandererKills.Core.Http.Client.Mock
     |> expect(:get_with_rate_limit, fn url, _opts ->
       if String.contains?(url, url_pattern) do
         {:error, error_type}

@@ -358,13 +358,17 @@ defmodule WandererKills.Data.Stores.KillmailStore do
       :ets.insert(:killmails, {killmail_id, killmail})
       {:reply, :ok, state}
     else
-      {:reply, {:error, Error.validation_error("Killmail missing required killmail_id field")},
+      {:reply,
+       {:error,
+        Error.validation_error(:missing_field, "Killmail missing required killmail_id field")},
        state}
     end
   end
 
   def handle_call({:store_killmail, _invalid}, _from, state) do
-    {:reply, {:error, Error.validation_error("Invalid killmail format - must be a map")}, state}
+    {:reply,
+     {:error, Error.validation_error(:invalid_format, "Invalid killmail format - must be a map")},
+     state}
   end
 
   @impl true

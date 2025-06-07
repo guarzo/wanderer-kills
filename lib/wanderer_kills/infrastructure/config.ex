@@ -162,7 +162,7 @@ defmodule WandererKills.Infrastructure.Config do
 
   @doc "Gets HTTP client module"
   @spec http_client() :: module()
-  def http_client, do: get(:http_client, WandererKills.Http.Client)
+  def http_client, do: get(:http_client, WandererKills.Core.Http.Client)
 
   @doc "Gets zKillboard client module"
   @spec zkb_client() :: module()

@@ -26,8 +26,8 @@ defmodule WandererKills.External.ZKB.RedisQ do
   use GenServer
   require Logger
 
-  alias WandererKills.Infrastructure.Clock
-  alias WandererKills.Http.Client, as: HttpClient
+  alias WandererKills.Core.Clock
+  alias WandererKills.Core.Http.Client, as: HttpClient
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 
@@ -273,7 +273,7 @@ defmodule WandererKills.External.ZKB.RedisQ do
 
   # Fetch configuration using the new flattened structure
   defp get_config(key) do
-    WandererKills.Infrastructure.Config.redisq(key)
+    WandererKills.Core.Config.redisq(key)
   end
 
   # Track format usage for monitoring and analysis

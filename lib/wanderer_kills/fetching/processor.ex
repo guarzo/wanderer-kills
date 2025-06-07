@@ -1,4 +1,4 @@
-defmodule WandererKills.Fetcher.Processor do
+defmodule WandererKills.Fetching.Processor do
   @moduledoc """
   Killmail processing service.
 
@@ -8,7 +8,7 @@ defmodule WandererKills.Fetcher.Processor do
 
   require Logger
   alias WandererKills.Killmails.{Parser, Enricher}
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
 
   @type killmail :: map()
   @type system_id :: pos_integer()
@@ -77,7 +77,10 @@ defmodule WandererKills.Fetcher.Processor do
 
   def process_killmails(invalid_killmails, _system_id, _since_hours) do
     {:error,
-     Error.validation_error("Killmails must be a list, got: #{inspect(invalid_killmails)}")}
+     Error.validation_error(
+       :invalid_type,
+       "Killmails must be a list, got: #{inspect(invalid_killmails)}"
+     )}
   end
 
   @doc """
@@ -149,7 +152,10 @@ defmodule WandererKills.Fetcher.Processor do
 
   def parse_killmails(invalid_killmails, _since_hours) do
     {:error,
-     Error.validation_error("Killmails must be a list, got: #{inspect(invalid_killmails)}")}
+     Error.validation_error(
+       :invalid_type,
+       "Killmails must be a list, got: #{inspect(invalid_killmails)}"
+     )}
   end
 
   @doc """
@@ -226,7 +232,10 @@ defmodule WandererKills.Fetcher.Processor do
 
   def enrich_killmails(invalid_killmails, _system_id) do
     {:error,
-     Error.validation_error("Killmails must be a list, got: #{inspect(invalid_killmails)}")}
+     Error.validation_error(
+       :invalid_type,
+       "Killmails must be a list, got: #{inspect(invalid_killmails)}"
+     )}
   end
 
   @doc """
@@ -327,7 +336,11 @@ defmodule WandererKills.Fetcher.Processor do
   end
 
   def process_single_killmail(invalid_killmail, _enrich) do
-    {:error, Error.validation_error("Killmail must be a map, got: #{inspect(invalid_killmail)}")}
+    {:error,
+     Error.validation_error(
+       :invalid_type,
+       "Killmail must be a map, got: #{inspect(invalid_killmail)}"
+     )}
   end
 
   # Private helper functions

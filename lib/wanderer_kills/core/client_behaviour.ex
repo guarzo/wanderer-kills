@@ -1,10 +1,10 @@
-defmodule WandererKills.Http.ClientBehaviour do
+defmodule WandererKills.Core.Http.ClientBehaviour do
   @moduledoc """
   Behaviour for HTTP client.
 
   This behaviour defines the interface that HTTP client implementations
   must follow. It aligns with the actual functions implemented in
-  WandererKills.Http.Client.
+  WandererKills.Core.Http.Client.
   """
 
   @type url :: String.t()

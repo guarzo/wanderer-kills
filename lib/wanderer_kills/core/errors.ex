@@ -1,4 +1,4 @@
-defmodule WandererKills.Http.Errors do
+defmodule WandererKills.Core.Http.Errors do
   @moduledoc """
   Defines error types used in HTTP operations.
   """

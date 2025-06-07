@@ -9,8 +9,8 @@ defmodule WandererKills.Killmails.Enricher do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Config
-  alias WandererKills.Cache
+  alias WandererKills.Core.Config
+  alias WandererKills.Core.Cache
   alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
 
   @doc """
@@ -134,12 +134,12 @@ defmodule WandererKills.Killmails.Enricher do
     end
   end
 
-  defp get_character_info(id) when is_integer(id), do: Cache.get_character_info(id)
+  defp get_character_info(id) when is_integer(id), do: Cache.get(:esi_cache, {:character, id})
   defp get_character_info(_), do: {:ok, nil}
 
-  defp get_corporation_info(id) when is_integer(id), do: Cache.get_corporation_info(id)
+  defp get_corporation_info(id) when is_integer(id), do: Cache.get(:esi_cache, {:corporation, id})
   defp get_corporation_info(_), do: {:ok, nil}
 
-  defp get_alliance_info(id) when is_integer(id), do: Cache.get_alliance_info(id)
+  defp get_alliance_info(id) when is_integer(id), do: Cache.get(:esi_cache, {:alliance, id})
   defp get_alliance_info(_), do: {:ok, nil}
 end

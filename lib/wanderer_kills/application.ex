@@ -15,7 +15,7 @@ defmodule WandererKills.Application do
 
   use Application
   require Logger
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Core.Config
 
   @impl true
   def start(_type, _args) do
@@ -27,7 +27,7 @@ defmodule WandererKills.Application do
       {Task.Supervisor, name: WandererKills.TaskSupervisor},
       {Phoenix.PubSub, name: WandererKills.PubSub},
       # ETS tables supervisor (must start before processes that use them)
-      WandererKills.Infrastructure.ETSSupervisor,
+      WandererKills.Core.Cache,
       WandererKills.Killmails.Store,
       # Direct Cachex supervision instead of single-child supervisor
       {Cachex, name: :unified_cache, ttl: Config.cache_ttl(:killmails)},

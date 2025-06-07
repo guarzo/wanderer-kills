@@ -11,7 +11,7 @@ defmodule WandererKills.ShipTypes.CSVHelpers do
   require Logger
   alias NimbleCSV.RFC4180, as: CSV
   alias WandererKills.ShipTypes.Constants
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
 
   @type ship_type :: %{
           type_id: integer(),

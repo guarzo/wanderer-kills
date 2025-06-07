@@ -152,7 +152,7 @@ defmodule WandererKills.Data.Sources.CsvSource do
 
     Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
 
-    case WandererKills.Http.Utils.fetch_raw(url, raw: true) do
+    case WandererKills.Core.Http.Utils.fetch_raw(url, raw: true) do
       {:ok, body} ->
         case File.write(download_path, body) do
           :ok ->
@@ -229,7 +229,7 @@ defmodule WandererKills.Data.Sources.CsvSource do
           "capacity" => Map.get(ship_type, :capacity, 0.0)
         }
 
-        case WandererKills.Cache.set_type_info(ship_type.type_id, type_data) do
+        case WandererKills.Core.Cache.put(:ship_types, ship_type.type_id, type_data) do
           :ok ->
             1
 
