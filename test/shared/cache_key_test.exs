@@ -26,7 +26,7 @@ defmodule WandererKills.CacheKeyTest do
     test "system keys follow expected pattern" do
       # Test system-related cache operations
       assert {:ok, []} = Cache.get_active_systems()
-      assert :ok = Cache.add_active_system(456)
+      assert {:ok, :added} = Cache.add_active_system(456)
       assert {:ok, [456]} = Cache.get_active_systems()
 
       assert {:ok, []} = Cache.get_system_killmails(456)
@@ -78,7 +78,7 @@ defmodule WandererKills.CacheKeyTest do
       timestamp = DateTime.utc_now()
 
       assert {:ok, false} = Cache.system_recently_fetched?(system_id)
-      assert :ok = Cache.set_system_fetch_timestamp(system_id, timestamp)
+      assert {:ok, :set} = Cache.set_system_fetch_timestamp(system_id, timestamp)
       assert {:ok, true} = Cache.system_recently_fetched?(system_id)
     end
   end
@@ -93,7 +93,7 @@ defmodule WandererKills.CacheKeyTest do
         {:ok, stats} ->
           assert is_map(stats)
 
-        {:error, :stats_disabled} ->
+        {:error, :disabled} ->
           # Stats may be disabled in test environment, which is acceptable
           assert true
 

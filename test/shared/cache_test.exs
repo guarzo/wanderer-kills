@@ -49,18 +49,18 @@ defmodule WandererKills.CacheTest do
     test "can manage system killmails" do
       killmail = TestHelpers.create_test_killmail(123)
       assert :ok = Cache.set_killmail(123, killmail)
-      assert :ok = Cache.add_system_killmail(789, 123)
-      assert {:ok, [123]} = Cache.get_killmails_for_system(789)
+      assert :ok = Cache.add_system_killmail(888, 123)
+      assert {:ok, [123]} = Cache.get_killmails_for_system(888)
 
       # Test that we can get system killmails
-      assert {:ok, [123]} = Cache.get_system_killmails(789)
+      assert {:ok, [123]} = Cache.get_system_killmails(888)
     end
   end
 
   describe "kill count operations" do
     test "can increment and get system kill count" do
-      assert :ok = Cache.increment_system_kill_count(789)
-      assert :ok = Cache.increment_system_kill_count(789)
+      assert {:ok, 1} = Cache.increment_system_kill_count(789)
+      assert {:ok, 2} = Cache.increment_system_kill_count(789)
       assert {:ok, 2} = Cache.get_system_kill_count(789)
     end
 
@@ -72,7 +72,7 @@ defmodule WandererKills.CacheTest do
   describe "fetch timestamp operations" do
     test "can set and check system fetch timestamp" do
       timestamp = DateTime.utc_now()
-      assert :ok = Cache.set_system_fetch_timestamp(789, timestamp)
+      assert {:ok, :set} = Cache.set_system_fetch_timestamp(789, timestamp)
       assert {:ok, true} = Cache.system_recently_fetched?(789)
     end
 

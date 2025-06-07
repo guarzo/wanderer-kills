@@ -29,7 +29,7 @@ defmodule WandererKills.Core.Http.Utils do
   require Logger
   alias WandererKills.Core.Http.Client
   alias WandererKills.Core.Http.ClientProvider
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
   alias WandererKills.Observability.Telemetry
 
   @type url :: String.t()
@@ -105,7 +105,7 @@ defmodule WandererKills.Core.Http.Utils do
   - `url` - The URL that was being requested
 
   ## Returns
-  - Standardized error using WandererKills.Infrastructure.Error
+  - Standardized error using WandererKills.Core.Error
 
   ## Examples
 
@@ -114,36 +114,35 @@ defmodule WandererKills.Core.Http.Utils do
   ```
   """
   @spec standardize_error(term(), url()) :: Error.t()
-  def standardize_error(%{reason: :timeout}, url) do
+  # Timeout errors - both map and atom forms
+  def standardize_error(error, url) when error in [:timeout] or error == %{reason: :timeout} do
     Error.timeout_error("Request to #{url} timed out", %{url: url})
   end
 
-  def standardize_error(%{reason: :econnrefused}, url) do
-    Error.connection_error("Connection refused for #{url}", %{url: url})
-  end
-
-  def standardize_error(%{reason: :nxdomain}, url) do
-    Error.connection_error("Domain not found for #{url}", %{url: url})
-  end
-
-  def standardize_error(%{reason: :closed}, url) do
-    Error.connection_error("Connection closed for #{url}", %{url: url})
-  end
-
-  def standardize_error(:timeout, url) do
-    Error.timeout_error("Request to #{url} timed out", %{url: url})
+  # Connection errors - consolidated pattern matching
+  def standardize_error(%{reason: reason}, url)
+      when reason in [:econnrefused, :nxdomain, :closed] do
+    message = connection_error_message(reason, url)
+    Error.connection_error(message, %{url: url})
   end
 
   def standardize_error(:econnrefused, url) do
     Error.connection_error("Connection refused for #{url}", %{url: url})
   end
 
+  # Catch-all for unknown errors
   def standardize_error(error, url) do
     Error.http_error(:unknown, "HTTP error: #{inspect(error)}", false, %{
       url: url,
       original_error: error
     })
   end
+
+  # Helper function for connection error messages
+  @spec connection_error_message(atom(), url()) :: String.t()
+  defp connection_error_message(:econnrefused, url), do: "Connection refused for #{url}"
+  defp connection_error_message(:nxdomain, url), do: "Domain not found for #{url}"
+  defp connection_error_message(:closed, url), do: "Connection closed for #{url}"
 
   # Convenience methods
 

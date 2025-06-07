@@ -95,7 +95,8 @@ defmodule WandererKills.Core.Cache do
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
-    table_specs = Keyword.get(opts, :tables, @all_tables)
+    table_names = Keyword.get(opts, :tables, @all_tables)
+    table_specs = create_table_specs(table_names)
     GenServer.start_link(__MODULE__, table_specs, name: __MODULE__)
   end
 
@@ -296,6 +297,17 @@ defmodule WandererKills.Core.Cache do
   end
 
   # ============================================================================
+  # Helper Functions
+  # ============================================================================
+
+  @spec create_table_specs([table_name()]) :: [table_spec()]
+  defp create_table_specs(table_names) do
+    Enum.map(table_names, fn table_name ->
+      {table_name, [:named_table, :set, :public], "Cache table for #{table_name}"}
+    end)
+  end
+
+  # ============================================================================
   # GenServer Implementation
   # ============================================================================
 
@@ -377,20 +389,25 @@ defmodule WandererKills.Core.Cache do
 
   @spec create_table_if_not_exists(table_name(), [atom()]) :: :ok | {:error, term()}
   defp create_table_if_not_exists(table_name, options) do
-    case :ets.whereis(table_name) do
-      :undefined ->
-        try do
-          case :ets.new(table_name, options) do
-            ^table_name -> :ok
-            error -> {:error, {:creation_failed, error}}
-          end
-        rescue
-          error -> {:error, {:exception, error}}
-        end
+    with :undefined <- :ets.whereis(table_name),
+         ^table_name <- safe_create_table(table_name, options) do
+      :ok
+    else
+      # Table creation failed
+      {:error, reason} -> {:error, reason}
+      # Table already exists (not :undefined)
+      _existing_table -> :ok
+    end
+  end
 
-      _ ->
-        # Table already exists
-        :ok
+  @spec safe_create_table(table_name(), [atom()]) :: table_name() | {:error, term()}
+  defp safe_create_table(table_name, options) do
+    try do
+      :ets.new(table_name, options)
+    rescue
+      error -> {:error, {:exception, error}}
+    catch
+      error -> {:error, {:creation_failed, error}}
     end
   end
 

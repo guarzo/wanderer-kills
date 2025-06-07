@@ -32,8 +32,8 @@ defmodule WandererKills.Core.Error do
     retry_operation()
   end
 
-  # Converting from legacy error formats
-  Error.from_legacy({:error, :not_found})
+  # Creating standardized errors
+  Error.not_found_error("Resource not found")
   ```
   """
 
@@ -280,46 +280,6 @@ defmodule WandererKills.Core.Error do
   end
 
   # ============================================================================
-  # Legacy Error Conversion
-  # ============================================================================
-
-  @doc """
-  Converts legacy error formats to the standardized error structure.
-
-  This function helps migrate from old error patterns like `{:error, reason}`
-  to the new standardized format.
-  """
-  @spec from_legacy(term()) :: t()
-  def from_legacy({:error, reason}) when is_atom(reason) do
-    system_error(reason, "Legacy error: #{reason}")
-  end
-
-  def from_legacy({:error, {reason, details}}) when is_atom(reason) do
-    system_error(reason, "Legacy error: #{reason}", false, details)
-  end
-
-  def from_legacy({:error, reason}) when is_binary(reason) do
-    system_error(:unknown, reason)
-  end
-
-  def from_legacy(%__MODULE__{} = error), do: error
-
-  def from_legacy(other) do
-    system_error(:unknown, "Unknown error format: #{inspect(other)}")
-  end
-
-  @doc """
-  Wraps a function result with error conversion.
-
-  This function automatically converts legacy error formats to the new
-  standardized format while passing through success values unchanged.
-  """
-  @spec wrap_legacy(term()) :: {:ok, term()} | {:error, t()}
-  def wrap_legacy({:ok, value}), do: {:ok, value}
-  def wrap_legacy({:error, reason}), do: {:error, from_legacy({:error, reason})}
-  def wrap_legacy(value), do: {:ok, value}
-
-  # ============================================================================
   # Common Error Patterns
   # ============================================================================
 
@@ -345,5 +305,11 @@ defmodule WandererKills.Core.Error do
   @spec rate_limit_error(String.t(), details()) :: t()
   def rate_limit_error(message \\ "Rate limit exceeded", details \\ nil) do
     http_error(:rate_limited, message, true, details)
+  end
+
+  @doc "Standard connection error"
+  @spec connection_error(String.t(), details()) :: t()
+  def connection_error(message \\ "Connection failed", details \\ nil) do
+    http_error(:connection_failed, message, true, details)
   end
 end

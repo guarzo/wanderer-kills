@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.ETSSupervisor do
+defmodule WandererKills.Core.ETSSupervisor do
   @moduledoc """
   Supervisor for ETS table management.
 
@@ -23,7 +23,7 @@ defmodule WandererKills.Infrastructure.ETSSupervisor do
     Logger.info("Starting ETS supervisor and creating tables")
 
     children = [
-      {WandererKills.Infrastructure.ETSManager, table_specs()}
+      {WandererKills.Core.ETSManager, table_specs()}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

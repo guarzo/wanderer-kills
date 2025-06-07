@@ -291,25 +291,27 @@ defmodule WandererKills.Core.Clock do
   end
 
   @spec get_configured_time(clock_config(), System.time_unit()) :: integer()
+  # Module function tuple - call and convert
   defp get_configured_time({mod, fun}, unit) when is_atom(mod) and is_atom(fun) do
-    apply(mod, fun, [])
+    mod
+    |> apply(fun, [])
     |> convert_time_to_unit(unit)
   end
 
+  # Function reference - call and convert
   defp get_configured_time(fun, unit) when is_function(fun, 0) do
-    fun.() |> convert_time_to_unit(unit)
+    fun
+    |> apply([])
+    |> convert_time_to_unit(unit)
   end
 
-  defp get_configured_time(fixed_time, unit) when is_struct(fixed_time, DateTime) do
-    convert_time_to_unit(fixed_time, unit)
+  # Fixed values - convert directly
+  defp get_configured_time(value, unit) when is_struct(value, DateTime) or is_integer(value) do
+    convert_time_to_unit(value, unit)
   end
 
-  defp get_configured_time(fixed_ms, unit) when is_integer(fixed_ms) do
-    convert_time_to_unit(fixed_ms, unit)
-  end
-
-  # Catch-all: if the config is anything else, fall back to real System.system_time/1
-  defp get_configured_time(_anything_else, unit) do
+  # Catch-all: fallback to system time
+  defp get_configured_time(_config, unit) do
     System.system_time(unit)
   end
 

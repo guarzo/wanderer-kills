@@ -47,7 +47,7 @@ defmodule WandererKills.Core.Http.Client do
 
   require Logger
   alias WandererKills.Core.Http.Errors.{ConnectionError, TimeoutError, RateLimitError}
-  alias WandererKills.Retry
+  alias WandererKills.Core.Retry
   alias WandererKills.Observability.Telemetry
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
@@ -206,28 +206,37 @@ defmodule WandererKills.Core.Http.Client do
   ```
   """
   @spec handle_status_code(integer(), map()) :: {:ok, map()} | {:error, term()}
-  def handle_status_code(status, resp \\ %{}) do
-    config = WandererKills.Infrastructure.Config
+  def handle_status_code(status, resp \\ %{})
 
-    cond do
-      status in config.http_status(:success) ->
-        {:ok, resp}
+  # Success status codes (200-299)
+  def handle_status_code(status, resp) when status >= 200 and status < 300 do
+    {:ok, resp}
+  end
 
-      status == config.http_status(:not_found) ->
-        {:error, :not_found}
+  # Not found
+  def handle_status_code(404, _resp) do
+    {:error, :not_found}
+  end
 
-      status == config.http_status(:rate_limited) ->
-        {:error, :rate_limited}
+  # Rate limited
+  def handle_status_code(429, _resp) do
+    {:error, :rate_limited}
+  end
 
-      status in config.http_status(:retryable) ->
-        {:error, "HTTP #{status}"}
+  # Retryable client errors (400-499, excluding 404 and 429)
+  def handle_status_code(status, _resp)
+      when status >= 400 and status < 500 and status not in [404, 429] do
+    {:error, "HTTP #{status}"}
+  end
 
-      status in config.http_status(:fatal) ->
-        {:error, "HTTP #{status}"}
+  # Server errors (500-599) - typically retryable
+  def handle_status_code(status, _resp) when status >= 500 and status < 600 do
+    {:error, "HTTP #{status}"}
+  end
 
-      true ->
-        {:error, "HTTP #{status}"}
-    end
+  # Any other status code
+  def handle_status_code(status, _resp) do
+    {:error, "HTTP #{status}"}
   end
 
   @spec retriable_error?(term()) :: boolean()

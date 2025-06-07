@@ -10,7 +10,7 @@ defmodule WandererKills.Observability.HealthChecks.CacheHealth do
   @behaviour WandererKills.Observability.Behaviours.HealthCheck
 
   require Logger
-  alias WandererKills.Infrastructure.{Clock, Config}
+  alias WandererKills.Core.{Clock, Config}
 
   @impl true
   def check_health(opts \\ []) do

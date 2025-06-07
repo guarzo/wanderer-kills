@@ -1,10 +1,10 @@
-defmodule WandererKills.Fetcher.ZkbServiceTest do
+defmodule WandererKills.Fetching.ZkbServiceTest do
   use ExUnit.Case, async: true
   import Mox
 
   @moduletag :fetcher
 
-  alias WandererKills.Fetcher.ZkbService
+  alias WandererKills.Fetching.ZkbService
   alias WandererKills.TestHelpers
   alias WandererKills.Zkb.Client.Mock, as: ZkbClient
 

@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.ETSManager do
+defmodule WandererKills.Core.ETSManager do
   @moduledoc """
   GenServer that manages ETS table creation and lifecycle.
 

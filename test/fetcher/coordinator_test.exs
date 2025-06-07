@@ -1,11 +1,11 @@
-defmodule WandererKills.Fetcher.CoordinatorTest do
+defmodule WandererKills.Fetching.CoordinatorTest do
   # Disable async to avoid timing issues
   use ExUnit.Case, async: false
   import Mox
 
   @moduletag :fetcher
 
-  alias WandererKills.Fetcher.Coordinator
+  alias WandererKills.Fetching.Coordinator
   alias WandererKills.TestHelpers
   alias WandererKills.Zkb.Client.Mock, as: ZkbClient
 
@@ -35,7 +35,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
           assert is_map(processed_killmail)
           assert processed_killmail["killmail_id"] == killmail_id
 
-        {:error, %WandererKills.Infrastructure.Error{type: :no_results, domain: :parsing}} ->
+        {:error, %WandererKills.Core.Error{type: :no_results, domain: :parsing}} ->
           # This is acceptable if the parsing logic has become stricter
           :ok
 
@@ -80,7 +80,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       raw_killmails = [killmail1, killmail2]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn id when id == system_id -> {:ok, raw_killmails} end)
+      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, raw_killmails} end)
 
       assert {:ok, processed_killmails} =
                Coordinator.fetch_killmails_for_system(system_id, client: ZkbClient)
@@ -96,7 +96,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       raw_killmails = [TestHelpers.generate_test_data(:killmail, 123)]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_142 ->
+      |> expect(:fetch_system_killmails, fn 30_000_142 ->
         {:ok, raw_killmails}
       end)
 
@@ -114,7 +114,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       system_id = 30_000_142
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn id when id == system_id -> {:ok, []} end)
+      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, []} end)
 
       assert {:ok, []} = Coordinator.fetch_killmails_for_system(system_id, client: ZkbClient)
     end
@@ -124,7 +124,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       killmails = Enum.map(1..10, &TestHelpers.generate_test_data(:killmail, &1))
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn id when id == system_id -> {:ok, killmails} end)
+      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, killmails} end)
 
       opts = [limit: 5, client: ZkbClient]
       assert {:ok, result} = Coordinator.fetch_killmails_for_system(system_id, opts)
@@ -138,7 +138,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       killmails = [TestHelpers.generate_test_data(:killmail, 123)]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn id when id == system_id -> {:ok, killmails} end)
+      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, killmails} end)
 
       # Force should bypass cache and fetch directly
       opts = [force: true, client: ZkbClient]
@@ -153,10 +153,10 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       killmails2 = [TestHelpers.generate_test_data(:killmail, 456)]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_142 ->
+      |> expect(:fetch_system_killmails, fn 30_000_142 ->
         {:ok, killmails1}
       end)
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_143 ->
+      |> expect(:fetch_system_killmails, fn 30_000_143 ->
         {:ok, killmails2}
       end)
 
@@ -172,10 +172,10 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
 
       # Mock the ZkbClient functions with the correct arity (1 parameter)
       ZkbClient
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_142 ->
+      |> expect(:fetch_system_killmails, fn 30_000_142 ->
         {:ok, killmails}
       end)
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 99_999_999 ->
+      |> expect(:fetch_system_killmails, fn 99_999_999 ->
         {:error, :not_found}
       end)
 
@@ -193,7 +193,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
     end
 
     test "handles empty system list" do
-      assert {:error, %WandererKills.Infrastructure.Error{type: :no_results}} =
+      assert {:error, %WandererKills.Core.Error{type: :no_results}} =
                Coordinator.fetch_killmails_for_systems([], [])
     end
 
@@ -202,16 +202,16 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
 
       # Mock all systems individually to ensure exact call expectations
       ZkbClient
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_142 ->
+      |> expect(:fetch_system_killmails, fn 30_000_142 ->
         {:ok, []}
       end)
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_143 ->
+      |> expect(:fetch_system_killmails, fn 30_000_143 ->
         {:ok, []}
       end)
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_144 ->
+      |> expect(:fetch_system_killmails, fn 30_000_144 ->
         {:ok, []}
       end)
-      |> expect(:fetch_system_killmails, fn system_id when system_id == 30_000_145 ->
+      |> expect(:fetch_system_killmails, fn 30_000_145 ->
         {:ok, []}
       end)
 
@@ -229,7 +229,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       expected_count = 42
 
       ZkbClient
-      |> expect(:get_system_kill_count, fn id when id == system_id -> {:ok, expected_count} end)
+      |> expect(:get_system_kill_count, fn ^system_id -> {:ok, expected_count} end)
 
       assert {:ok, ^expected_count} = Coordinator.get_system_kill_count(system_id, ZkbClient)
     end
@@ -239,7 +239,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       expected_count = 42
 
       ZkbClient
-      |> expect(:get_system_kill_count, fn id when id == 30_000_142 -> {:ok, expected_count} end)
+      |> expect(:get_system_kill_count, fn 30_000_142 -> {:ok, expected_count} end)
 
       assert {:ok, ^expected_count} = Coordinator.get_system_kill_count(system_id, ZkbClient)
     end
@@ -254,7 +254,7 @@ defmodule WandererKills.Fetcher.CoordinatorTest do
       system_id = 30_000_142
 
       ZkbClient
-      |> expect(:get_system_kill_count, fn id when id == system_id -> {:error, :not_found} end)
+      |> expect(:get_system_kill_count, fn ^system_id -> {:error, :not_found} end)
 
       assert {:error, :not_found} = Coordinator.get_system_kill_count(system_id, ZkbClient)
     end

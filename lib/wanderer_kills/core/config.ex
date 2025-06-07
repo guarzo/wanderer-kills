@@ -94,6 +94,22 @@ defmodule WandererKills.Core.Config do
     end
   end
 
+  @doc "Gets ESI configuration"
+  @spec esi(atom()) :: term()
+  def esi(key) do
+    case key do
+      :base_url -> get_env(:esi_base_url, "https://esi.evetech.net/latest")
+    end
+  end
+
+  @doc "Gets zKillboard configuration"
+  @spec zkb(atom()) :: term()
+  def zkb(key) do
+    case key do
+      :base_url -> get_env(:zkb_base_url, "https://zkillboard.com/api")
+    end
+  end
+
   @doc "Gets RedisQ configuration"
   @spec redisq(atom()) :: term()
   def redisq(key) do

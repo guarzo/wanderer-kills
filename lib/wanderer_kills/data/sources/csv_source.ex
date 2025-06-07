@@ -46,9 +46,9 @@ defmodule WandererKills.Data.Sources.CsvSource do
   use WandererKills.Data.Behaviours.ShipTypeSource
 
   require Logger
-  alias WandererKills.Infrastructure.BatchProcessor
+  alias WandererKills.Core.BatchProcessor
   alias WandererKills.ShipTypes.CSVHelpers
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
   # Note: Cache.Base and Cache.Key removed since CSV source no longer caches to ESI
 
   @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"

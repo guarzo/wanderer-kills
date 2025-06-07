@@ -9,7 +9,7 @@ defmodule WandererKills.Observability.HealthChecks.ApplicationHealth do
   @behaviour WandererKills.Observability.Behaviours.HealthCheck
 
   require Logger
-  alias WandererKills.Infrastructure.Clock
+  alias WandererKills.Core.Clock
   alias WandererKills.Observability.HealthChecks.CacheHealth
 
   @impl true

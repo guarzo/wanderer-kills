@@ -1,10 +1,10 @@
-defmodule WandererKills.Fetcher.CacheServiceTest do
+defmodule WandererKills.Fetching.CacheServiceTest do
   # Disable async due to shared cache state
   use ExUnit.Case, async: false
 
   @moduletag :fetcher
 
-  alias WandererKills.Fetcher.CacheService
+  alias WandererKills.Fetching.CacheService
   alias WandererKills.TestHelpers
   alias WandererKills.Cache
 
@@ -143,7 +143,7 @@ defmodule WandererKills.Fetcher.CacheServiceTest do
       result = CacheService.get_system_fetch_timestamp(system_id)
 
       assert match?({:error, :not_found}, result) or
-               match?({:error, %WandererKills.Infrastructure.Error{type: :not_found}}, result)
+               match?({:error, %WandererKills.Core.Error{type: :not_found}}, result)
     end
 
     test "validates system ID format" do

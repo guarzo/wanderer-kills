@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.BatchProcessor do
+defmodule WandererKills.Core.BatchProcessor do
   @moduledoc """
   Unified batch processing module for handling parallel and sequential operations.
 
@@ -10,8 +10,6 @@ defmodule WandererKills.Infrastructure.BatchProcessor do
 
   All batch operations use the same configuration and error handling patterns,
   making it easier to reason about concurrency across the application.
-
-  Moved from WandererKills.Core.BatchProcessor to improve module organization.
 
   ## Configuration
 
@@ -46,7 +44,7 @@ defmodule WandererKills.Infrastructure.BatchProcessor do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Constants
+  alias WandererKills.Core.Constants
 
   @type task_result :: {:ok, term()} | {:error, term()}
   @type batch_result :: {:ok, [term()]} | {:partial, [term()], [term()]} | {:error, term()}
@@ -198,69 +196,60 @@ defmodule WandererKills.Infrastructure.BatchProcessor do
       duration = System.monotonic_time() - start_time
       duration_ms = System.convert_time_unit(duration, :native, :millisecond)
 
-      # Convert to the same format as async_stream results
-      stream_results = Enum.map(results, fn result -> {:ok, result} end)
-
-      process_batch_results(stream_results, length(tasks), description, duration_ms)
-    rescue
-      e ->
+      Logger.info("Completed #{length(tasks)} #{description} in #{duration_ms}ms")
+      {:ok, results}
+    catch
+      :exit, reason ->
         duration = System.monotonic_time() - start_time
         duration_ms = System.convert_time_unit(duration, :native, :millisecond)
 
-        Logger.error(
-          "Failed to await #{length(tasks)} #{description} after #{duration_ms}ms: #{inspect(e)}"
-        )
-
-        {:error, e}
+        Logger.error("Tasks failed after #{duration_ms}ms: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
   # Private helper functions
-
+  @spec process_batch_results(
+          [{:ok, task_result()} | {:exit, term()}],
+          integer(),
+          String.t(),
+          integer()
+        ) :: batch_result()
   defp process_batch_results(results, total_count, description, duration_ms) do
-    {successes, failures} = categorize_results(results)
+    {successful, failed} =
+      Enum.reduce(results, {[], []}, fn
+        {:ok, {:ok, result}}, {succ, fail} -> {[result | succ], fail}
+        {:ok, {:error, error}}, {succ, fail} -> {succ, [error | fail]}
+        {:exit, reason}, {succ, fail} -> {succ, [reason | fail]}
+      end)
 
-    success_count = length(successes)
-    failure_count = length(failures)
+    successful = Enum.reverse(successful)
+    failed = Enum.reverse(failed)
 
-    log_batch_completion(total_count, success_count, failure_count, description, duration_ms)
+    success_count = length(successful)
+    failure_count = length(failed)
 
-    case {success_count, failure_count} do
-      {^total_count, 0} ->
-        {:ok, successes}
+    cond do
+      failure_count == 0 ->
+        Logger.info(
+          "Successfully processed #{success_count}/#{total_count} #{description} in #{duration_ms}ms"
+        )
 
-      {0, ^total_count} ->
-        {:error, :all_failed}
+        {:ok, successful}
 
-      {_, _} ->
-        {:partial, successes, failures}
-    end
-  end
+      success_count == 0 ->
+        Logger.error(
+          "Failed to process any #{description} (#{failure_count} failures) in #{duration_ms}ms"
+        )
 
-  defp categorize_results(results) do
-    Enum.reduce(results, {[], []}, fn
-      {:ok, {:ok, result}}, {successes, failures} ->
-        {[result | successes], failures}
+        {:error, {:all_failed, failed}}
 
-      {:ok, {:error, reason}}, {successes, failures} ->
-        {successes, [reason | failures]}
+      true ->
+        Logger.warning(
+          "Partially processed #{description}: #{success_count} succeeded, #{failure_count} failed in #{duration_ms}ms"
+        )
 
-      {:error, reason}, {successes, failures} ->
-        {successes, [reason | failures]}
-
-      {:exit, reason}, {successes, failures} ->
-        {successes, [{:exit, reason} | failures]}
-    end)
-  end
-
-  defp log_batch_completion(total_count, success_count, failure_count, description, duration_ms) do
-    if failure_count > 0 do
-      Logger.warning(
-        "Processed #{total_count} #{description} in #{duration_ms}ms: " <>
-          "#{success_count} succeeded, #{failure_count} failed"
-      )
-    else
-      Logger.info("Successfully processed #{total_count} #{description} in #{duration_ms}ms")
+        {:partial, successful, failed}
     end
   end
 end

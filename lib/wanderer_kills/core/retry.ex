@@ -1,4 +1,4 @@
-defmodule WandererKills.Retry do
+defmodule WandererKills.Core.Retry do
   @moduledoc """
   Provides retry functionality with exponential backoff for any operation.
 

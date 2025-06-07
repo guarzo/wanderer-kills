@@ -35,17 +35,17 @@ defmodule WandererKills.External.ESI.Client do
   use WandererKills.Data.Behaviours.ShipTypeSource
 
   require Logger
-  alias WandererKills.Infrastructure.Constants
-  alias WandererKills.Infrastructure.Config
-  alias WandererKills.Infrastructure.BatchProcessor
+  alias WandererKills.Core.Constants
+  alias WandererKills.Core.Config
+  alias WandererKills.Core.BatchProcessor
   alias WandererKills.TaskSupervisor
   alias WandererKills.Core.Cache
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
 
   # Default ship group IDs that contain ship types
   @ship_group_ids [6, 7, 9, 11, 16, 17, 23]
 
-  defp http_client, do: WandererKills.Infrastructure.Config.http_client()
+  defp http_client, do: Config.http_client()
 
   @doc """
   Base URL for ESI API.

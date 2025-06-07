@@ -5,7 +5,7 @@ defmodule WandererKills.PreloaderSupervisor do
   """
 
   use Supervisor
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Core.Config
 
   # No @impl here, since Supervisor only defines init/1 as a callback.
   def start_link(opts) do

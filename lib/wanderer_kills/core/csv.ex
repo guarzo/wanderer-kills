@@ -321,6 +321,64 @@ defmodule WandererKills.Core.CSV do
   def parse_group_row(_), do: nil
 
   # ============================================================================
+  # Legacy Ship Type/Group Parsers (from Shared.CSV)
+  # ============================================================================
+
+  @doc """
+  Parses a CSV row into a ship type map for EVE Online data.
+  Legacy function from Shared.CSV - prefer parse_type_row/1.
+  """
+  @spec parse_ship_type(map()) :: ship_type() | nil
+  def parse_ship_type(row) when is_map(row) do
+    try do
+      with type_id when is_binary(type_id) <- Map.get(row, "typeID"),
+           group_id when is_binary(group_id) <- Map.get(row, "groupID"),
+           name when is_binary(name) <- Map.get(row, "typeName") do
+        %{
+          type_id: String.to_integer(type_id),
+          group_id: String.to_integer(group_id),
+          name: name,
+          group_name: nil,
+          mass: parse_number_with_default(Map.get(row, "mass", "0"), :float, 0.0),
+          capacity: parse_number_with_default(Map.get(row, "capacity", "0"), :float, 0.0),
+          volume: parse_number_with_default(Map.get(row, "volume", "0"), :float, 0.0)
+        }
+      else
+        _ -> nil
+      end
+    rescue
+      ArgumentError -> nil
+    end
+  end
+
+  def parse_ship_type(_), do: nil
+
+  @doc """
+  Parses a CSV row into a ship group map for EVE Online data.
+  Legacy function from Shared.CSV - prefer parse_group_row/1.
+  """
+  @spec parse_ship_group(map()) :: ship_group() | nil
+  def parse_ship_group(row) when is_map(row) do
+    try do
+      with group_id when is_binary(group_id) <- Map.get(row, "groupID"),
+           name when is_binary(name) <- Map.get(row, "groupName"),
+           category_id when is_binary(category_id) <- Map.get(row, "categoryID") do
+        %{
+          group_id: String.to_integer(group_id),
+          name: name,
+          category_id: String.to_integer(category_id)
+        }
+      else
+        _ -> nil
+      end
+    rescue
+      ArgumentError -> nil
+    end
+  end
+
+  def parse_ship_group(_), do: nil
+
+  # ============================================================================
   # Private Functions
   # ============================================================================
 

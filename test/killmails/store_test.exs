@@ -47,7 +47,7 @@ defmodule WandererKills.Killmails.StoreTest do
     end
 
     test "returns error for non-existent killmail" do
-      assert {:error, %WandererKills.Infrastructure.Error{type: :not_found}} =
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} =
                Store.get_killmail(999)
     end
 
@@ -56,7 +56,7 @@ defmodule WandererKills.Killmails.StoreTest do
       assert :ok = Store.store_killmail(killmail)
       assert :ok = Store.delete_killmail(123)
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :not_found}} =
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} =
                Store.get_killmail(123)
     end
   end
@@ -101,7 +101,7 @@ defmodule WandererKills.Killmails.StoreTest do
     end
 
     test "returns error for system with no fetch timestamp" do
-      assert {:error, %WandererKills.Infrastructure.Error{type: :not_found}} =
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} =
                Store.get_system_fetch_timestamp(30_000_142)
     end
   end

@@ -56,7 +56,7 @@ defmodule WandererKills.Killmails.Coordinator do
 
   require Logger
   alias WandererKills.Parser.Core
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
 
   @type killmail :: map()
   @type raw_killmail :: map()

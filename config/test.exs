@@ -31,7 +31,7 @@ config :wanderer_kills,
   killmail_store_gc_interval_ms: 100,
 
   # Mock clients for testing
-  http_client: WandererKills.MockHttpClient,
+  http_client: WandererKills.Core.Http.Client.Mock,
   zkb_client: WandererKills.Zkb.Client.Mock,
   esi_client: WandererKills.ESI.Client.Mock,
 
@@ -46,7 +46,7 @@ config :wanderer_kills,
 
 # Configure ESI cache to use mock HTTP client
 config :wanderer_kills, WandererKills.Cache.Specialized.EsiCache,
-  http_client: WandererKills.MockHttpClient
+  http_client: WandererKills.Core.Http.Client.Mock
 
 # Configure Cachex for tests
 config :cachex, :default_ttl, :timer.minutes(1)

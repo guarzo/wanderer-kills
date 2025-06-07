@@ -1,7 +1,7 @@
-defmodule WandererKills.Shared.CSVTest do
+defmodule WandererKills.Core.CSVTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Shared.CSV
+  alias WandererKills.Core.CSV
 
   describe "read_file/3" do
     test "handles missing file" do
@@ -17,7 +17,7 @@ defmodule WandererKills.Shared.CSVTest do
       File.write!(file_path, "")
 
       result = CSV.read_file(file_path, parser)
-      assert {:error, %WandererKills.Infrastructure.Error{type: :empty_file}} = result
+      assert {:ok, []} = result
 
       File.rm!(file_path)
     end
@@ -28,7 +28,7 @@ defmodule WandererKills.Shared.CSVTest do
       File.write!(file_path, "invalid\"csv,\"content\nunclosed\"quote")
 
       result = CSV.read_file(file_path, parser)
-      assert {:error, %WandererKills.Infrastructure.Error{type: :parse_error}} = result
+      assert {:error, %WandererKills.Core.Error{type: :parse_error}} = result
 
       File.rm!(file_path)
     end
@@ -65,16 +65,16 @@ defmodule WandererKills.Shared.CSVTest do
     end
 
     test "handles invalid integers" do
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Core.Error{type: :invalid_integer}} =
                CSV.parse_integer("abc")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Core.Error{type: :invalid_integer}} =
                CSV.parse_integer("12.5")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Core.Error{type: :missing_value}} =
                CSV.parse_integer("")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Core.Error{type: :missing_value}} =
                CSV.parse_integer(nil)
     end
   end
@@ -87,13 +87,13 @@ defmodule WandererKills.Shared.CSVTest do
     end
 
     test "handles invalid floats" do
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_float}} =
+      assert {:error, %WandererKills.Core.Error{type: :invalid_float}} =
                CSV.parse_float("abc")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_float}} =
+      assert {:error, %WandererKills.Core.Error{type: :missing_value}} =
                CSV.parse_float("")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_float}} =
+      assert {:error, %WandererKills.Core.Error{type: :missing_value}} =
                CSV.parse_float(nil)
     end
   end

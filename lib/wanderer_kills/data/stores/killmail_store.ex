@@ -12,8 +12,8 @@ defmodule WandererKills.Data.Stores.KillmailStore do
   use GenServer
   require Logger
 
-  alias WandererKills.Infrastructure.Config
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Config
+  alias WandererKills.Core.Error
 
   @type event_id :: integer()
   @type system_id :: integer()
@@ -81,7 +81,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
     GenServer.call(
       __MODULE__,
       {:insert, system_id, killmail_map},
-      WandererKills.Infrastructure.Constants.timeout(:gen_server_call)
+      WandererKills.Core.Constants.timeout(:gen_server_call)
     )
   end
 
@@ -101,7 +101,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
     GenServer.call(
       __MODULE__,
       {:fetch, client_id, system_ids},
-      WandererKills.Infrastructure.Constants.timeout(:gen_server_call)
+      WandererKills.Core.Constants.timeout(:gen_server_call)
     )
   end
 
@@ -126,7 +126,7 @@ defmodule WandererKills.Data.Stores.KillmailStore do
     GenServer.call(
       __MODULE__,
       {:fetch_one, client_id, system_ids},
-      WandererKills.Infrastructure.Constants.timeout(:gen_server_call)
+      WandererKills.Core.Constants.timeout(:gen_server_call)
     )
   end
 

@@ -29,7 +29,7 @@ defmodule WandererKills.Killmails.Cache do
 
   require Logger
   alias WandererKills.Core.Cache
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Core.Error
 
   @type killmail :: map()
   @type killmail_id :: integer()
