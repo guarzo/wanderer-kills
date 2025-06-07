@@ -39,7 +39,7 @@ defmodule WandererKills.Killmails.Parser do
   alias WandererKills.Killmails.Enricher
   alias WandererKills.Cache.ESI
   alias WandererKills.Observability.Monitoring
-  alias WandererKills.Core.Error
+  alias WandererKills.Infrastructure.Error
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -81,7 +81,7 @@ defmodule WandererKills.Killmails.Parser do
       Monitoring.increment_stored()
       {:ok, enriched}
     else
-      {:error, %Error{type: :kill_too_old}} ->
+      {:error, %WandererKills.Infrastructure.Error{type: :kill_too_old}} ->
         Monitoring.increment_skipped()
         {:ok, :kill_older}
 
@@ -334,7 +334,7 @@ defmodule WandererKills.Killmails.Parser do
       {:ok, full_data} ->
         {:ok, full_data}
 
-      {:error, %WandererKills.Core.Error{type: :not_found}} ->
+      {:error, %WandererKills.Infrastructure.Error{type: :not_found}} ->
         # Fetch full killmail data from ESI
         case WandererKills.ESI.Client.get_killmail_raw(killmail_id, hash) do
           {:ok, esi_data} when is_map(esi_data) ->

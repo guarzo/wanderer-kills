@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.CacheUtils do
+defmodule WandererKills.Cache.Utils do
   @moduledoc """
   Shared cache utility functions for killmail operations.
 

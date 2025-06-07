@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.Http.Client do
+defmodule WandererKills.Http.Client do
   @moduledoc """
   Core HTTP client that handles rate limiting, retries, and common HTTP functionality.
 
@@ -43,11 +43,11 @@ defmodule WandererKills.Core.Http.Client do
     - Metadata: `%{method: "GET", url: url, error: reason}` on failure
   """
 
-  @behaviour WandererKills.Core.Behaviours.HttpClient
+  @behaviour WandererKills.Infrastructure.Behaviours.HttpClient
 
   require Logger
-  alias WandererKills.Core.Error.{ConnectionError, TimeoutError, RateLimitError}
-  alias WandererKills.Core.Retry
+  alias WandererKills.Infrastructure.Error.{ConnectionError, TimeoutError, RateLimitError}
+  alias WandererKills.Infrastructure.Retry
   alias WandererKills.Observability.Telemetry
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"

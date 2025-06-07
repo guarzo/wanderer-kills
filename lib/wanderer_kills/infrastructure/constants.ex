@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.Constants do
+defmodule WandererKills.Infrastructure.Constants do
   @moduledoc """
   Core constants for WandererKills.
 

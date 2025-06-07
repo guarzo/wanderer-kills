@@ -200,7 +200,7 @@ defmodule WandererKillsWeb.Api do
   end
 
   defp handle_killmail_response(
-         {:error, %WandererKills.Core.Error{domain: :zkb, type: :not_found}},
+         {:error, %WandererKills.Infrastructure.Error{domain: :zkb, type: :not_found}},
          killmail_id,
          conn
        ) do
@@ -335,7 +335,7 @@ defmodule WandererKillsWeb.Api do
          {:ok, processed_killmails} <-
            Coordinator.process_killmails(raw_killmails, system_id, since_hours),
          :ok <-
-           WandererKills.Core.CacheUtils.cache_killmails_for_system(
+           WandererKills.Cache.Utils.cache_killmails_for_system(
              system_id,
              processed_killmails
            ) do

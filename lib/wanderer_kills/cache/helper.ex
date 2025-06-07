@@ -80,6 +80,40 @@ defmodule WandererKills.Cache.Helper do
   end
 
   @doc """
+  Get a value with error handling for domain-specific use.
+
+  Returns {:error, :not_found} if the key doesn't exist instead of {:ok, nil}.
+  """
+  def get_with_error(namespace, key) do
+    case get(namespace, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Get or set using a fallback function with proper error handling.
+
+  This wraps the fallback function to handle exceptions and provides
+  consistent return values.
+  """
+  def get_or_set(namespace, key, fallback_fn) do
+    case fetch(namespace, key, fn _key ->
+           try do
+             {:commit, fallback_fn.()}
+           rescue
+             error ->
+               {:ignore, error}
+           end
+         end) do
+      {:ok, value} -> {:ok, value}
+      {:commit, value} -> {:ok, value}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Get cache statistics for monitoring.
   """
   def stats do
@@ -121,6 +155,245 @@ defmodule WandererKills.Cache.Helper do
         raise "Failed to stream cache for clearing: #{inspect(reason)}"
     end
   end
+
+  # ============================================================================
+  # Domain-Specific Convenience Functions
+  # ============================================================================
+
+  @doc """
+  Character cache operations.
+  """
+  def character_get(id), do: get_with_error("characters", to_string(id))
+  def character_put(id, data), do: put("characters", to_string(id), data)
+
+  def character_get_or_set(id, fallback_fn),
+    do: get_or_set("characters", to_string(id), fallback_fn)
+
+  def character_delete(id), do: delete("characters", to_string(id))
+
+  @doc """
+  Corporation cache operations.
+  """
+  def corporation_get(id), do: get_with_error("corporations", to_string(id))
+  def corporation_put(id, data), do: put("corporations", to_string(id), data)
+
+  def corporation_get_or_set(id, fallback_fn),
+    do: get_or_set("corporations", to_string(id), fallback_fn)
+
+  def corporation_delete(id), do: delete("corporations", to_string(id))
+
+  @doc """
+  Alliance cache operations.
+  """
+  def alliance_get(id), do: get_with_error("alliances", to_string(id))
+  def alliance_put(id, data), do: put("alliances", to_string(id), data)
+
+  def alliance_get_or_set(id, fallback_fn),
+    do: get_or_set("alliances", to_string(id), fallback_fn)
+
+  def alliance_delete(id), do: delete("alliances", to_string(id))
+
+  @doc """
+  Ship type cache operations.
+  """
+  def ship_type_get(id), do: get_with_error("ship_types", to_string(id))
+  def ship_type_put(id, data), do: put("ship_types", to_string(id), data)
+
+  def ship_type_get_or_set(id, fallback_fn),
+    do: get_or_set("ship_types", to_string(id), fallback_fn)
+
+  def ship_type_delete(id), do: delete("ship_types", to_string(id))
+
+  @doc """
+  System cache operations.
+  """
+  def system_get(id), do: get_with_error("systems", to_string(id))
+  def system_put(id, data), do: put("systems", to_string(id), data)
+  def system_get_or_set(id, fallback_fn), do: get_or_set("systems", to_string(id), fallback_fn)
+  def system_delete(id), do: delete("systems", to_string(id))
+
+  @doc """
+  System-specific complex cache operations.
+  """
+  def system_get_killmails(system_id) do
+    case get("systems", "killmails:#{system_id}") do
+      {:ok, nil} ->
+        {:error, :not_found}
+
+      {:ok, killmail_ids} when is_list(killmail_ids) ->
+        {:ok, killmail_ids}
+
+      {:ok, _invalid_data} ->
+        # Clean up corrupted data
+        delete("systems", "killmails:#{system_id}")
+        {:error, :invalid_data}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def system_put_killmails(system_id, killmail_ids) when is_list(killmail_ids) do
+    put("systems", "killmails:#{system_id}", killmail_ids)
+  end
+
+  def system_add_killmail(system_id, killmail_id) do
+    case system_get_killmails(system_id) do
+      {:ok, existing_ids} ->
+        if killmail_id not in existing_ids do
+          new_ids = [killmail_id | existing_ids]
+          system_put_killmails(system_id, new_ids)
+        else
+          {:ok, true}
+        end
+
+      {:error, :not_found} ->
+        system_put_killmails(system_id, [killmail_id])
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def system_is_active?(system_id) do
+    case get("systems", "active:#{system_id}") do
+      {:ok, nil} -> {:ok, false}
+      {:ok, _timestamp} -> {:ok, true}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def system_add_active(system_id) do
+    case system_is_active?(system_id) do
+      {:ok, true} ->
+        {:ok, :already_exists}
+
+      {:ok, false} ->
+        timestamp = DateTime.utc_now()
+
+        case put("systems", "active:#{system_id}", timestamp) do
+          {:ok, true} -> {:ok, :added}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def system_get_fetch_timestamp(system_id) do
+    case get("systems", "fetch_timestamp:#{system_id}") do
+      {:ok, nil} ->
+        {:error, :not_found}
+
+      {:ok, timestamp} when is_struct(timestamp, DateTime) ->
+        {:ok, timestamp}
+
+      {:ok, _invalid_data} ->
+        # Clean up corrupted data
+        delete("systems", "fetch_timestamp:#{system_id}")
+        {:error, :invalid_data}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def system_set_fetch_timestamp(system_id, timestamp \\ nil) do
+    timestamp = timestamp || DateTime.utc_now()
+
+    case put("systems", "fetch_timestamp:#{system_id}", timestamp) do
+      {:ok, true} -> {:ok, :set}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def system_get_kill_count(system_id) do
+    case get("systems", "kill_count:#{system_id}") do
+      {:ok, nil} ->
+        {:ok, 0}
+
+      {:ok, count} when is_integer(count) ->
+        {:ok, count}
+
+      {:ok, _invalid_data} ->
+        # Clean up corrupted data and return 0
+        delete("systems", "kill_count:#{system_id}")
+        {:ok, 0}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def system_increment_kill_count(system_id) do
+    case system_get_kill_count(system_id) do
+      {:ok, current_count} ->
+        new_count = current_count + 1
+
+        case put("systems", "kill_count:#{system_id}", new_count) do
+          {:ok, true} -> {:ok, new_count}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def system_get_active_systems do
+    case stream("systems", "active:*") do
+      {:ok, stream} ->
+        system_ids =
+          stream
+          |> Enum.map(fn {key, _value} ->
+            # Extract system_id from "systems:active:12345" format
+            case String.split(key, ":") do
+              ["systems", "active", system_id_str] ->
+                case Integer.parse(system_id_str) do
+                  {system_id, ""} -> system_id
+                  _ -> nil
+                end
+
+              _ ->
+                nil
+            end
+          end)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.sort()
+
+        {:ok, system_ids}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def system_recently_fetched?(system_id, threshold_hours \\ 1) do
+    case system_get_fetch_timestamp(system_id) do
+      {:ok, timestamp} ->
+        cutoff_time = DateTime.utc_now() |> DateTime.add(-threshold_hours * 3600, :second)
+        is_recent = DateTime.compare(timestamp, cutoff_time) == :gt
+        {:ok, is_recent}
+
+      {:error, :not_found} ->
+        {:ok, false}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Killmail cache operations.
+  """
+  def killmail_get(id), do: get_with_error("killmails", to_string(id))
+  def killmail_put(id, data), do: put("killmails", to_string(id), data)
+
+  def killmail_get_or_set(id, fallback_fn),
+    do: get_or_set("killmails", to_string(id), fallback_fn)
+
+  def killmail_delete(id), do: delete("killmails", to_string(id))
 
   # Private functions
 

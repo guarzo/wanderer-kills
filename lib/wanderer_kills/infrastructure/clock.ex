@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.Clock do
+defmodule WandererKills.Infrastructure.Clock do
   @moduledoc """
   Unified time and clock utilities for WandererKills.
 
@@ -38,7 +38,7 @@ defmodule WandererKills.Core.Clock do
   """
 
   require Logger
-  alias WandererKills.Core.Config
+  alias WandererKills.Infrastructure.Config
 
   @type clock_config ::
           nil

@@ -31,19 +31,15 @@ defmodule WandererKills.Zkb.Client do
   @behaviour WandererKills.Zkb.ClientBehaviour
 
   require Logger
-  alias WandererKills.Core.Config
-  alias WandererKills.Core.Error
+  alias WandererKills.Infrastructure.{Config, Error}
+  alias WandererKills.Http.Util
   alias WandererKills.Observability.Telemetry
 
-  @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
   @base_url Application.compile_env(:wanderer_kills, :zkb_base_url)
 
   @type killmail_id :: pos_integer()
   @type system_id :: pos_integer()
   @type killmail :: map()
-
-  # Get the HTTP client from configuration
-  defp http_client, do: Config.app().http_client
 
   @doc """
   Fetches a killmail from zKillboard with telemetry.
@@ -60,24 +56,21 @@ defmodule WandererKills.Zkb.Client do
     Telemetry.fetch_system_start(killmail_id, 1, :zkb)
 
     url = "#{base_url()}/killID/#{killmail_id}/"
-    params = build_query_params(no_items: true)
+    params = Util.build_query_params(no_items: true)
 
-    case http_client().get_with_rate_limit(url,
-           params: params,
-           headers: [{"user-agent", @user_agent}]
-         ) do
+    request_opts = [
+      params: params,
+      headers: Util.eve_api_headers(),
+      operation: :fetch_killmail,
+      timeout: Config.timeouts().zkb_request_ms
+    ]
+
+    case Util.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case parse_response(response) do
+        case Util.parse_json_response(response) do
           # ZKB API returns array with single killmail
           {:ok, [killmail]} ->
             Telemetry.fetch_system_complete(killmail_id, :success)
-
-            Logger.debug("Successfully fetched killmail from ZKB",
-              killmail_id: killmail_id,
-              operation: :fetch_killmail,
-              step: :success
-            )
-
             {:ok, killmail}
 
           {:ok, []} ->
@@ -87,38 +80,15 @@ defmodule WandererKills.Zkb.Client do
           # Take first if multiple
           {:ok, killmails} when is_list(killmails) ->
             Telemetry.fetch_system_complete(killmail_id, :success)
-
-            Logger.debug("Successfully fetched killmail from ZKB",
-              killmail_id: killmail_id,
-              operation: :fetch_killmail,
-              step: :success
-            )
-
             {:ok, List.first(killmails)}
 
-          other ->
-            Telemetry.fetch_system_error(killmail_id, other, :zkb)
-
-            Logger.error("Failed to fetch killmail from ZKB",
-              killmail_id: killmail_id,
-              operation: :fetch_killmail,
-              error: other,
-              step: :error
-            )
-
-            other
+          {:error, reason} ->
+            Telemetry.fetch_system_error(killmail_id, reason, :zkb)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Telemetry.fetch_system_error(killmail_id, reason, :zkb)
-
-        Logger.error("Failed to fetch killmail from ZKB",
-          killmail_id: killmail_id,
-          operation: :fetch_killmail,
-          error: reason,
-          step: :error
-        )
-
         {:error, reason}
     end
   end
@@ -143,7 +113,7 @@ defmodule WandererKills.Zkb.Client do
     Telemetry.fetch_system_start(system_id, 0, :zkb)
 
     url = "#{base_url()}/systemID/#{system_id}/"
-    params = build_query_params(no_items: true)
+    params = Util.build_query_params(no_items: true)
 
     Logger.info("[ZKB] Fetching system killmails",
       system_id: system_id,
@@ -151,15 +121,16 @@ defmodule WandererKills.Zkb.Client do
       request_type: "historical_data"
     )
 
-    case http_client().get_with_rate_limit(url,
-           params: params,
-           headers: [{"user-agent", @user_agent}],
-           # Increase to 60 seconds
-           timeout: 60_000,
-           receive_timeout: 60_000
-         ) do
+    request_opts = [
+      params: params,
+      headers: Util.eve_api_headers(),
+      operation: :fetch_system_killmails,
+      timeout: 60_000
+    ]
+
+    case Util.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case parse_response(response) do
+        case Util.parse_json_response(response) do
           {:ok, killmails} when is_list(killmails) ->
             Telemetry.fetch_system_success(system_id, length(killmails), :zkb)
 
@@ -235,46 +206,37 @@ defmodule WandererKills.Zkb.Client do
   Gets killmails for a corporation from zKillboard.
   """
   def get_corporation_killmails(corporation_id) do
-    url = "#{base_url()}/corporationID/#{corporation_id}/"
-    params = build_query_params(no_items: true)
-
-    case http_client().get_with_rate_limit(url,
-           params: params,
-           headers: [{"user-agent", @user_agent}]
-         ) do
-      {:ok, response} -> parse_response(response)
-      {:error, reason} -> {:error, reason}
-    end
+    fetch_entity_killmails("corporationID", corporation_id)
   end
 
   @doc """
   Gets killmails for an alliance from zKillboard.
   """
   def get_alliance_killmails(alliance_id) do
-    url = "#{base_url()}/allianceID/#{alliance_id}/"
-    params = build_query_params(no_items: true)
-
-    case http_client().get_with_rate_limit(url,
-           params: params,
-           headers: [{"user-agent", @user_agent}]
-         ) do
-      {:ok, response} -> parse_response(response)
-      {:error, reason} -> {:error, reason}
-    end
+    fetch_entity_killmails("allianceID", alliance_id)
   end
 
   @doc """
   Gets killmails for a character from zKillboard.
   """
   def get_character_killmails(character_id) do
-    url = "#{base_url()}/characterID/#{character_id}/"
-    params = build_query_params(no_items: true)
+    fetch_entity_killmails("characterID", character_id)
+  end
 
-    case http_client().get_with_rate_limit(url,
-           params: params,
-           headers: [{"user-agent", @user_agent}]
-         ) do
-      {:ok, response} -> parse_response(response)
+  # Shared function for fetching killmails by entity type
+  defp fetch_entity_killmails(entity_type, entity_id) do
+    url = "#{base_url()}/#{entity_type}/#{entity_id}/"
+    params = Util.build_query_params(no_items: true)
+
+    request_opts = [
+      params: params,
+      headers: Util.eve_api_headers(),
+      operation: :"fetch_#{entity_type}_killmails",
+      timeout: Config.timeouts().zkb_request_ms
+    ]
+
+    case Util.request_with_telemetry(url, :zkb, request_opts) do
+      {:ok, response} -> Util.parse_json_response(response)
       {:error, reason} -> {:error, reason}
     end
   end
@@ -286,8 +248,14 @@ defmodule WandererKills.Zkb.Client do
   def fetch_system_killmails_esi(system_id) do
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    case http_client().get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
-      {:ok, response} -> parse_response(response)
+    request_opts = [
+      headers: Util.eve_api_headers(),
+      operation: :fetch_system_killmails_esi,
+      timeout: Config.timeouts().zkb_request_ms
+    ]
+
+    case Util.request_with_telemetry(url, :zkb, request_opts) do
+      {:ok, response} -> Util.parse_json_response(response)
       {:error, reason} -> {:error, reason}
     end
   end
@@ -325,9 +293,15 @@ defmodule WandererKills.Zkb.Client do
 
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    case http_client().get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
+    request_opts = [
+      headers: Util.eve_api_headers(),
+      operation: :get_system_kill_count,
+      timeout: Config.timeouts().zkb_request_ms
+    ]
+
+    case Util.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case parse_response(response) do
+        case Util.parse_json_response(response) do
           {:ok, data} when is_list(data) ->
             count = length(data)
 
@@ -423,9 +397,15 @@ defmodule WandererKills.Zkb.Client do
   defp do_fetch_active_systems do
     url = "#{base_url()}/systems/"
 
-    case http_client().get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
+    request_opts = [
+      headers: Util.eve_api_headers(),
+      operation: :fetch_active_systems,
+      timeout: Config.timeouts().zkb_request_ms
+    ]
+
+    case Util.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case parse_response(response) do
+        case Util.parse_json_response(response) do
           {:ok, systems} when is_list(systems) ->
             {:ok, systems}
 
@@ -446,26 +426,7 @@ defmodule WandererKills.Zkb.Client do
     end
   end
 
-  @doc """
-  Builds query parameters for zKillboard API requests.
-  Available options:
-  - no_items: boolean() - Whether to exclude items from the response
-  - startTime: DateTime.t() - Filter kills after this time
-  - endTime: DateTime.t() - Filter kills before this time
-  - limit: pos_integer() - Maximum number of kills to return
-  """
-  @spec build_query_params(keyword()) :: keyword()
-  def build_query_params(opts \\ []) do
-    opts
-    |> Enum.map(fn
-      {:no_items, true} -> {:no_items, "true"}
-      {:startTime, %DateTime{} = time} -> {:startTime, DateTime.to_iso8601(time)}
-      {:endTime, %DateTime{} = time} -> {:endTime, DateTime.to_iso8601(time)}
-      {:limit, limit} when is_integer(limit) and limit > 0 -> {:limit, limit}
-      _ -> nil
-    end)
-    |> Enum.reject(&is_nil/1)
-  end
+  # Note: Query parameter building now handled by WandererKills.Core.Http.Util
 
   # Helper functions for enriching killmails
   defp get_victim_info(killmail) do
@@ -490,20 +451,7 @@ defmodule WandererKills.Zkb.Client do
     @base_url
   end
 
-  defp parse_response(%{status: 200, body: body}) when is_binary(body) do
-    case Jason.decode(body) do
-      {:ok, data} -> {:ok, data}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp parse_response(%{status: 200, body: body}) do
-    {:ok, body}
-  end
-
-  defp parse_response(%{status: status}) do
-    {:error, "Unexpected status code: #{status}"}
-  end
+  # Note: Response parsing now handled by WandererKills.Core.Http.Util
 
   # Converts ZKB reference format to partial killmail format expected by parser.
   # ZKB format: %{"killmail_id" => id, "zkb" => metadata}

@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.Http.ClientProvider do
+defmodule WandererKills.Http.ClientProvider do
   @moduledoc """
   Centralized HTTP client configuration provider.
 
@@ -37,6 +37,6 @@ defmodule WandererKills.Core.Http.ClientProvider do
   """
   @spec get() :: module()
   def get do
-    WandererKills.Core.Config.app().http_client
+    WandererKills.Infrastructure.Config.app().http_client
   end
 end

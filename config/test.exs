@@ -31,7 +31,7 @@ config :wanderer_kills,
   killmail_store_gc_interval_ms: 100,
 
   # Mock clients for testing
-  http_client: WandererKills.Core.Http.Client.Mock,
+  http_client: WandererKills.Http.Client.Mock,
   zkb_client: WandererKills.Zkb.Client.Mock,
   esi_client: WandererKills.ESI.Client.Mock,
 

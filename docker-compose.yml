@@ -6,7 +6,9 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - PORT=4004
+      PORT: 4004
+      MIX_ENV: prod
     ports:
       - "4004:4004"
-    command: ["bin/wanderer_kills", "start"] 
+    command: ["bin/wanderer_kills", "start"]
+    restart: unless-stopped

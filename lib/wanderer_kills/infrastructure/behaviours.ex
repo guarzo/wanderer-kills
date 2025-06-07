@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.Behaviours do
+defmodule WandererKills.Infrastructure.Behaviours do
   @moduledoc """
   Shared behaviours for WandererKills application patterns.
 

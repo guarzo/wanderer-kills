@@ -7,9 +7,9 @@ defmodule WandererKills.ESI.Client do
   """
 
   require Logger
-  alias WandererKills.Core.{Config, Error}
+  alias WandererKills.Infrastructure.{Config, Error}
   alias WandererKills.ESI.{CharacterFetcher, TypeFetcher, KillmailFetcher}
-  alias WandererKills.Core.Behaviours.ESIClient
+  alias WandererKills.Infrastructure.Behaviours.ESIClient
 
   @behaviour ESIClient
 
@@ -86,7 +86,7 @@ defmodule WandererKills.ESI.Client do
   def get_killmail_raw(killmail_id, killmail_hash) do
     url = "#{base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
 
-    case WandererKills.Core.Http.ClientProvider.get().get(url, []) do
+    case WandererKills.Http.Client.get_with_rate_limit(url) do
       {:ok, %{body: body}} -> {:ok, body}
       {:error, reason} -> {:error, reason}
     end

@@ -1,0 +1,35 @@
+# Git and version control
+.git/
+.gitignore
+
+# Build artifacts
+_build/
+deps/
+.elixir_ls/
+
+# Documentation
+doc/
+*.md
+!README.md
+
+# Development files
+.devcontainer/
+.vscode/
+.github/
+
+# Test and coverage
+cover/
+.coveralls.exs
+
+# Logs and temporary files
+*.log
+tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+*.swp
+*.swo
+*~ 

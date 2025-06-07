@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.Config do
+defmodule WandererKills.Infrastructure.Config do
   @moduledoc """
   Centralized configuration management for WandererKills.
 
@@ -181,7 +181,7 @@ defmodule WandererKills.Core.Config do
       },
       app: %{
         port: get_env(:port, 4004),
-        http_client: get_env(:http_client, "WandererKills.Core.Http.Client"),
+        http_client: get_env(:http_client, "WandererKills.Http.Client"),
         zkb_client: get_env(:zkb_client, WandererKills.Zkb.Client)
       }
     }

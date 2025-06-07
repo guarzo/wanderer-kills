@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.CSV do
+defmodule WandererKills.Processing.CSV do
   @moduledoc """
   Unified CSV parsing utilities for WandererKills.
 
@@ -31,7 +31,7 @@ defmodule WandererKills.Core.CSV do
 
   require Logger
   alias NimbleCSV.RFC4180, as: CSVParser
-  alias WandererKills.Core.Error
+  alias WandererKills.Infrastructure.Error
 
   @type parse_result :: {:ok, term()} | {:error, Error.t()}
   @type parser_function :: (map() -> term() | nil)
@@ -321,18 +321,14 @@ defmodule WandererKills.Core.CSV do
   def parse_group_row(_), do: nil
 
   # ============================================================================
-  # Legacy Ship Type/Group Parsers (from Shared.CSV)
-  # ============================================================================
-
-  # ============================================================================
-  # Download and Update API (from CSVHelpers)
+  # Ship Type Update Pipeline
   # ============================================================================
 
   @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"
   @required_files ["invGroups.csv", "invTypes.csv"]
 
   @doc """
-  Complete update pipeline: download -> parse.
+  Complete ship type update pipeline: download -> parse -> process.
 
   ## Parameters
   - `opts` - Options passed to the download step

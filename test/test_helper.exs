@@ -4,7 +4,10 @@
 :ets.new(:esi_cache_test, [:named_table, :public, :set])
 
 # Define mocks
-Mox.defmock(WandererKills.Core.Http.Client.Mock, for: WandererKills.Core.Behaviours.HttpClient)
+Mox.defmock(WandererKills.Http.Client.Mock,
+  for: WandererKills.Infrastructure.Behaviours.HttpClient
+)
+
 Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Zkb.ClientBehaviour)
 
 # Start ExUnit
@@ -25,7 +28,7 @@ defmodule WandererKills.TestCase do
 end
 
 # Set up global mocks
-Mox.stub_with(WandererKills.Core.Http.Client.Mock, WandererKills.Core.Http.Client)
+Mox.stub_with(WandererKills.Http.Client.Mock, WandererKills.Http.Client)
 Mox.stub_with(WandererKills.Zkb.Client.Mock, WandererKills.Zkb.Client)
 
 # Configure ExUnit to run tests sequentially

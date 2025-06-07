@@ -1,4 +1,4 @@
-defmodule WandererKills.Core.BatchProcessor do
+defmodule WandererKills.Processing.BatchProcessor do
   @moduledoc """
   Unified batch processing module for handling parallel operations.
 
@@ -42,7 +42,7 @@ defmodule WandererKills.Core.BatchProcessor do
   """
 
   require Logger
-  alias WandererKills.Core.Config
+  alias WandererKills.Infrastructure.Config
 
   @type task_result :: {:ok, term()} | {:error, term()}
   @type batch_result :: {:ok, [term()]} | {:partial, [term()], [term()]} | {:error, term()}

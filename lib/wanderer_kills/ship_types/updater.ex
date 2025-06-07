@@ -4,11 +4,8 @@ defmodule WandererKills.ShipTypes.Updater do
   Coordinates ship type updates from multiple sources.
 
   This module provides a unified interface for updating ship type data by
-  delegating to source implementations that follow the ShipTypeSource behaviour:
-  - CSV-based updates via `CsvSource`
-  - ESI-based updates via `EsiSource`
-
-  The module tries CSV first for efficiency, then falls back to ESI if needed.
+  delegating to source implementations. It tries CSV first for efficiency,
+  then falls back to ESI if needed.
 
   ## Usage
 
@@ -32,7 +29,7 @@ defmodule WandererKills.ShipTypes.Updater do
 
   ## Dependencies
 
-  - `WandererKills.ShipTypes.CSVHelpers` - CSV-based updates
+  - `WandererKills.Core.CSV` - CSV-based updates
   - `WandererKills.ESI.Client` - ESI-based updates
   """
 
