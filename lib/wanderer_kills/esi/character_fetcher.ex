@@ -213,7 +213,6 @@ defmodule WandererKills.ESI.CharacterFetcher do
   end
 
   defp esi_base_url, do: Config.service_url(:esi)
-  defp cache_ttl, do: Config.cache_ttl(:esi)
   defp http_client, do: Config.http_client()
 
   defp default_headers do

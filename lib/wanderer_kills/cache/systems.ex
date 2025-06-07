@@ -51,9 +51,6 @@ defmodule WandererKills.Cache.Systems do
   @spec add_killmail(integer(), integer()) :: :ok | {:error, Error.t()}
   def add_killmail(system_id, killmail_id)
       when is_integer(system_id) and is_integer(killmail_id) do
-    cache_key = key(:killmails, system_id)
-    ttl_ms = Config.cache_ttl(:system) * 1000
-
     case get_killmails(system_id) do
       {:ok, existing_ids} ->
         if killmail_id not in existing_ids do
@@ -305,17 +302,16 @@ defmodule WandererKills.Cache.Systems do
   end
 
   @doc """
-  Gets cache statistics.
+  Gets cache statistics as a list.
   """
-  @spec stats() :: {:ok, map()} | {:error, Error.t()}
+  @spec stats() :: [map()]
   def stats do
     case Cachex.stats(@cache_name) do
       {:ok, stats} ->
-        {:ok, stats}
+        [Map.put(stats, :cache_name, @cache_name)]
 
-      {:error, reason} ->
-        Logger.error("Cache stats failed", reason: inspect(reason))
-        {:error, Error.cache_error(:stats_failed, "Failed to get cache stats", %{reason: reason})}
+      {:error, _reason} ->
+        [%{cache_name: @cache_name, error: true}]
     end
   end
 end

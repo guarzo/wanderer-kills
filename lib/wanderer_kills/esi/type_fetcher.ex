@@ -9,7 +9,7 @@ defmodule WandererKills.ESI.TypeFetcher do
   require Logger
   alias WandererKills.Core.{Config, Error}
   alias WandererKills.Core.Behaviours.{ESIClient, DataFetcher}
-  alias WandererKills.Cache.{ESI, ShipTypes}
+  alias WandererKills.Cache.ESI
 
   @behaviour ESIClient
   @behaviour DataFetcher
@@ -22,13 +22,9 @@ defmodule WandererKills.ESI.TypeFetcher do
   """
   @impl ESIClient
   def get_type(type_id) when is_integer(type_id) do
-    case Cache.get(:esi_cache, {:type, type_id}) do
-      {:ok, type_info} ->
-        {:ok, type_info}
-
-      {:error, _} ->
-        fetch_and_cache_type(type_id)
-    end
+    ESI.get_or_set_type(type_id, fn ->
+      fetch_type_from_api(type_id)
+    end)
   end
 
   @impl ESIClient
@@ -41,13 +37,9 @@ defmodule WandererKills.ESI.TypeFetcher do
   """
   @impl ESIClient
   def get_group(group_id) when is_integer(group_id) do
-    case Cache.get(:esi_cache, {:group, group_id}) do
-      {:ok, group_info} ->
-        {:ok, group_info}
-
-      {:error, _} ->
-        fetch_and_cache_group(group_id)
-    end
+    ESI.get_or_set_group(group_id, fn ->
+      fetch_group_from_api(group_id)
+    end)
   end
 
   @impl ESIClient
@@ -68,7 +60,7 @@ defmodule WandererKills.ESI.TypeFetcher do
 
     results =
       group_ids
-      |> Enum.map(&fetch_and_cache_group/1)
+      |> Enum.map(&get_group/1)
       |> Enum.map(fn
         {:ok, _} -> :ok
         {:error, reason} -> {:error, reason}
@@ -170,55 +162,37 @@ defmodule WandererKills.ESI.TypeFetcher do
   # Private Functions
   # ============================================================================
 
-  defp fetch_and_cache_type(type_id) do
+  defp fetch_type_from_api(type_id) do
     url = "#{esi_base_url()}/universe/types/#{type_id}/"
 
     case http_client().get(url, default_headers(), []) do
       {:ok, response} ->
-        type_info = parse_type_response(type_id, response)
-
-        case Cache.put_with_ttl(:esi_cache, {:type, type_id}, type_info, cache_ttl()) do
-          :ok ->
-            {:ok, type_info}
-
-          {:error, reason} ->
-            {:error, Error.cache_error(:write_failed, "Failed to cache type", %{reason: reason})}
-        end
+        parse_type_response(type_id, response)
 
       {:error, reason} ->
         Logger.error("Failed to fetch type #{type_id}: #{inspect(reason)}")
 
-        {:error,
-         Error.esi_error(:api_error, "Failed to fetch type from ESI", false, %{
-           type_id: type_id,
-           reason: reason
-         })}
+        raise Error.esi_error(:api_error, "Failed to fetch type from ESI", false, %{
+                type_id: type_id,
+                reason: reason
+              })
     end
   end
 
-  defp fetch_and_cache_group(group_id) do
+  defp fetch_group_from_api(group_id) do
     url = "#{esi_base_url()}/universe/groups/#{group_id}/"
 
     case http_client().get(url, default_headers(), []) do
       {:ok, response} ->
-        group_info = parse_group_response(group_id, response)
-
-        case Cache.put_with_ttl(:esi_cache, {:group, group_id}, group_info, cache_ttl()) do
-          :ok ->
-            {:ok, group_info}
-
-          {:error, reason} ->
-            {:error, Error.cache_error(:write_failed, "Failed to cache group", %{reason: reason})}
-        end
+        parse_group_response(group_id, response)
 
       {:error, reason} ->
         Logger.error("Failed to fetch group #{group_id}: #{inspect(reason)}")
 
-        {:error,
-         Error.esi_error(:api_error, "Failed to fetch group from ESI", false, %{
-           group_id: group_id,
-           reason: reason
-         })}
+        raise Error.esi_error(:api_error, "Failed to fetch group from ESI", false, %{
+                group_id: group_id,
+                reason: reason
+              })
     end
   end
 
@@ -298,7 +272,6 @@ defmodule WandererKills.ESI.TypeFetcher do
   end
 
   defp esi_base_url, do: Config.service_url(:esi)
-  defp cache_ttl, do: Config.cache_ttl(:esi)
   defp http_client, do: Config.http_client()
 
   defp default_headers do

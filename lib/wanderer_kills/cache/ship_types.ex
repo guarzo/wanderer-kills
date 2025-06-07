@@ -46,7 +46,6 @@ defmodule WandererKills.Cache.ShipTypes do
   @spec get_or_set(integer(), (-> map())) :: {:ok, map()} | {:error, Error.t()}
   def get_or_set(type_id, fallback_fn) when is_integer(type_id) and is_function(fallback_fn, 0) do
     cache_key = key(type_id)
-    ttl_ms = Config.cache_ttl(:esi) * 1000
 
     case Cachex.fetch(@cache_name, cache_key, fn _key ->
            try do
