@@ -272,14 +272,12 @@ defmodule WandererKills.Observability.HealthChecks do
   """
   @spec check_application_health(health_opts()) :: {:ok, health_status()} | {:error, term()}
   def check_application_health(opts \\ []) do
-    try do
-      health_status = __MODULE__.ApplicationHealth.check_health(opts)
-      {:ok, health_status}
-    rescue
-      error ->
-        Logger.error("Application health check failed: #{inspect(error)}")
-        {:error, error}
-    end
+    health_status = __MODULE__.ApplicationHealth.check_health(opts)
+    {:ok, health_status}
+  rescue
+    error ->
+      Logger.error("Application health check failed: #{inspect(error)}")
+      {:error, error}
   end
 
   @doc """
@@ -296,14 +294,12 @@ defmodule WandererKills.Observability.HealthChecks do
   """
   @spec check_cache_health(health_opts()) :: {:ok, health_status()} | {:error, term()}
   def check_cache_health(opts \\ []) do
-    try do
-      health_status = __MODULE__.CacheHealth.check_health(opts)
-      {:ok, health_status}
-    rescue
-      error ->
-        Logger.error("Cache health check failed: #{inspect(error)}")
-        {:error, error}
-    end
+    health_status = __MODULE__.CacheHealth.check_health(opts)
+    {:ok, health_status}
+  rescue
+    error ->
+      Logger.error("Cache health check failed: #{inspect(error)}")
+      {:error, error}
   end
 
   @doc """
@@ -319,14 +315,12 @@ defmodule WandererKills.Observability.HealthChecks do
   """
   @spec get_application_metrics(health_opts()) :: {:ok, metrics()} | {:error, term()}
   def get_application_metrics(opts \\ []) do
-    try do
-      metrics = __MODULE__.ApplicationHealth.get_metrics(opts)
-      {:ok, metrics}
-    rescue
-      error ->
-        Logger.error("Application metrics collection failed: #{inspect(error)}")
-        {:error, error}
-    end
+    metrics = __MODULE__.ApplicationHealth.get_metrics(opts)
+    {:ok, metrics}
+  rescue
+    error ->
+      Logger.error("Application metrics collection failed: #{inspect(error)}")
+      {:error, error}
   end
 
   @doc """
@@ -342,14 +336,12 @@ defmodule WandererKills.Observability.HealthChecks do
   """
   @spec get_cache_metrics(health_opts()) :: {:ok, metrics()} | {:error, term()}
   def get_cache_metrics(opts \\ []) do
-    try do
-      metrics = __MODULE__.CacheHealth.get_metrics(opts)
-      {:ok, metrics}
-    rescue
-      error ->
-        Logger.error("Cache metrics collection failed: #{inspect(error)}")
-        {:error, error}
-    end
+    metrics = __MODULE__.CacheHealth.get_metrics(opts)
+    {:ok, metrics}
+  rescue
+    error ->
+      Logger.error("Cache metrics collection failed: #{inspect(error)}")
+      {:error, error}
   end
 
   # ============================================================================
@@ -424,44 +416,38 @@ defmodule WandererKills.Observability.HealthChecks do
 
     @spec run_component_health_check(module()) :: map()
     defp run_component_health_check(health_module) do
-      try do
-        health_module.check_health()
-      rescue
-        error ->
-          Logger.error("Health check failed for #{inspect(health_module)}: #{inspect(error)}")
+      health_module.check_health()
+    rescue
+      error ->
+        Logger.error("Health check failed for #{inspect(health_module)}: #{inspect(error)}")
 
-          %{
-            healthy: false,
-            status: "error",
-            details: %{
-              component: inspect(health_module),
-              error: "Health check failed",
-              reason: inspect(error)
-            },
-            timestamp: Clock.now_iso8601()
-          }
-      end
+        %{
+          healthy: false,
+          status: "error",
+          details: %{
+            component: inspect(health_module),
+            error: "Health check failed",
+            reason: inspect(error)
+          },
+          timestamp: Clock.now_iso8601()
+        }
     end
 
     @spec run_component_metrics(module()) :: map()
     defp run_component_metrics(health_module) do
-      try do
-        health_module.get_metrics()
-      rescue
-        error ->
-          Logger.error(
-            "Metrics collection failed for #{inspect(health_module)}: #{inspect(error)}"
-          )
+      health_module.get_metrics()
+    rescue
+      error ->
+        Logger.error("Metrics collection failed for #{inspect(health_module)}: #{inspect(error)}")
 
-          %{
-            component: inspect(health_module),
-            timestamp: Clock.now_iso8601(),
-            metrics: %{
-              error: "Metrics collection failed",
-              reason: inspect(error)
-            }
+        %{
+          component: inspect(health_module),
+          timestamp: Clock.now_iso8601(),
+          metrics: %{
+            error: "Metrics collection failed",
+            reason: inspect(error)
           }
-      end
+        }
     end
 
     @spec determine_overall_status([map()]) :: String.t()
@@ -494,20 +480,18 @@ defmodule WandererKills.Observability.HealthChecks do
 
     @spec get_system_metrics() :: map()
     defp get_system_metrics do
-      try do
-        %{
-          memory_usage: :erlang.memory(),
-          process_count: :erlang.system_info(:process_count),
-          port_count: :erlang.system_info(:port_count),
-          ets_tables: length(:ets.all()),
-          schedulers: :erlang.system_info(:schedulers),
-          run_queue: :erlang.statistics(:run_queue)
-        }
-      rescue
-        error ->
-          Logger.warning("Failed to collect system metrics: #{inspect(error)}")
-          %{error: "System metrics collection failed"}
-      end
+      %{
+        memory_usage: :erlang.memory(),
+        process_count: :erlang.system_info(:process_count),
+        port_count: :erlang.system_info(:port_count),
+        ets_tables: length(:ets.all()),
+        schedulers: :erlang.system_info(:schedulers),
+        run_queue: :erlang.statistics(:run_queue)
+      }
+    rescue
+      error ->
+        Logger.warning("Failed to collect system metrics: #{inspect(error)}")
+        %{error: "System metrics collection failed"}
     end
   end
 
@@ -583,35 +567,33 @@ defmodule WandererKills.Observability.HealthChecks do
 
     @spec check_cache_health(atom()) :: %{healthy: boolean(), name: atom(), status: String.t()}
     defp check_cache_health(cache_name) do
-      try do
-        case Cachex.size(cache_name) do
-          {:ok, size} ->
-            %{
-              healthy: true,
-              name: cache_name,
-              status: "ok",
-              size: size
-            }
+      case Cachex.size(cache_name) do
+        {:ok, size} ->
+          %{
+            healthy: true,
+            name: cache_name,
+            status: "ok",
+            size: size
+          }
 
-          {:error, reason} ->
-            %{
-              healthy: false,
-              name: cache_name,
-              status: "error",
-              error: inspect(reason)
-            }
-        end
-      rescue
-        error ->
-          Logger.warning("Cache health check failed for #{cache_name}: #{inspect(error)}")
-
+        {:error, reason} ->
           %{
             healthy: false,
             name: cache_name,
-            status: "unavailable",
-            error: inspect(error)
+            status: "error",
+            error: inspect(reason)
           }
       end
+    rescue
+      error ->
+        Logger.warning("Cache health check failed for #{cache_name}: #{inspect(error)}")
+
+        %{
+          healthy: false,
+          name: cache_name,
+          status: "unavailable",
+          error: inspect(error)
+        }
     end
 
     @spec get_cache_metrics(atom()) :: map()

@@ -36,10 +36,10 @@ defmodule WandererKills.Killmails.Parser do
 
   require Logger
 
-  alias WandererKills.Killmails.Enricher
   alias WandererKills.Cache.Helper
-  alias WandererKills.Observability.Monitoring
   alias WandererKills.Infrastructure.Error
+  alias WandererKills.Killmails.Enricher
+  alias WandererKills.Observability.Monitoring
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -281,28 +281,26 @@ defmodule WandererKills.Killmails.Parser do
   @spec build_killmail_data(killmail()) :: {:ok, killmail()} | {:error, term()}
   defp build_killmail_data(killmail) do
     # Extract and structure the core killmail data
-    try do
-      structured = %{
-        "killmail_id" => killmail["killmail_id"],
-        "kill_time" => killmail["parsed_kill_time"],
-        "solar_system_id" => killmail["solar_system_id"],
-        "victim" => normalize_victim_data(killmail["victim"]),
-        "attackers" => normalize_attackers_data(killmail["attackers"]),
-        "zkb" => killmail["zkb"] || %{},
-        "total_value" => get_in(killmail, ["zkb", "totalValue"]) || 0,
-        "npc" => get_in(killmail, ["zkb", "npc"]) || false
-      }
+    structured = %{
+      "killmail_id" => killmail["killmail_id"],
+      "kill_time" => killmail["parsed_kill_time"],
+      "solar_system_id" => killmail["solar_system_id"],
+      "victim" => normalize_victim_data(killmail["victim"]),
+      "attackers" => normalize_attackers_data(killmail["attackers"]),
+      "zkb" => killmail["zkb"] || %{},
+      "total_value" => get_in(killmail, ["zkb", "totalValue"]) || 0,
+      "npc" => get_in(killmail, ["zkb", "npc"]) || false
+    }
 
-      {:ok, structured}
-    rescue
-      error ->
-        Logger.error("Failed to build killmail data", error: inspect(error))
+    {:ok, structured}
+  rescue
+    error ->
+      Logger.error("Failed to build killmail data", error: inspect(error))
 
-        {:error,
-         Error.killmail_error(:build_failed, "Failed to build killmail data structure", false, %{
-           exception: inspect(error)
-         })}
-    end
+      {:error,
+       Error.killmail_error(:build_failed, "Failed to build killmail data structure", false, %{
+         exception: inspect(error)
+       })}
   end
 
   @spec enrich_killmail_data(killmail()) :: {:ok, killmail()} | {:error, term()}

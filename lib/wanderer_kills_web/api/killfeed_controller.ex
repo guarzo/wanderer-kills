@@ -9,8 +9,8 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   import Plug.Conn
   import WandererKillsWeb.Api.Helpers, only: [send_json_resp: 3]
 
-  alias WandererKills.Killmails.Store
   alias WandererKills.Infrastructure.Config
+  alias WandererKills.Killmails.Store
 
   # System ID validation
   defp validate_system_ids(system_ids) when is_list(system_ids) do

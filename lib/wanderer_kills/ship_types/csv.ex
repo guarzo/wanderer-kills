@@ -31,8 +31,8 @@ defmodule WandererKills.ShipTypes.CSV do
 
   require Logger
   alias NimbleCSV.RFC4180, as: CSVParser
-  alias WandererKills.Infrastructure.Error
   alias WandererKills.Infrastructure.BatchProcessor
+  alias WandererKills.Infrastructure.Error
 
   @type parse_result :: {:ok, term()} | {:error, Error.t()}
   @type parser_function :: (map() -> term() | nil)
@@ -266,28 +266,26 @@ defmodule WandererKills.ShipTypes.CSV do
   """
   @spec parse_type_row(map()) :: ship_type() | nil
   def parse_type_row(row) when is_map(row) do
-    try do
-      %{
-        type_id: parse_number_with_default(row["typeID"], :integer, 0),
-        name: Map.get(row, "typeName", ""),
-        group_id: parse_number_with_default(row["groupID"], :integer, 0),
-        mass: parse_number_with_default(row["mass"], :float, 0.0),
-        volume: parse_number_with_default(row["volume"], :float, 0.0),
-        capacity: parse_number_with_default(row["capacity"], :float, 0.0),
-        portion_size: parse_number_with_default(row["portionSize"], :integer, 1),
-        race_id: parse_number_with_default(row["raceID"], :integer, 0),
-        base_price: parse_number_with_default(row["basePrice"], :float, 0.0),
-        published: parse_boolean(row["published"], false),
-        market_group_id: parse_number_with_default(row["marketGroupID"], :integer, 0),
-        icon_id: parse_number_with_default(row["iconID"], :integer, 0),
-        sound_id: parse_number_with_default(row["soundID"], :integer, 0),
-        graphic_id: parse_number_with_default(row["graphicID"], :integer, 0)
-      }
-    rescue
-      error ->
-        Logger.warning("Failed to parse ship type row: #{inspect(error)}, row: #{inspect(row)}")
-        nil
-    end
+    %{
+      type_id: parse_number_with_default(row["typeID"], :integer, 0),
+      name: Map.get(row, "typeName", ""),
+      group_id: parse_number_with_default(row["groupID"], :integer, 0),
+      mass: parse_number_with_default(row["mass"], :float, 0.0),
+      volume: parse_number_with_default(row["volume"], :float, 0.0),
+      capacity: parse_number_with_default(row["capacity"], :float, 0.0),
+      portion_size: parse_number_with_default(row["portionSize"], :integer, 1),
+      race_id: parse_number_with_default(row["raceID"], :integer, 0),
+      base_price: parse_number_with_default(row["basePrice"], :float, 0.0),
+      published: parse_boolean(row["published"], false),
+      market_group_id: parse_number_with_default(row["marketGroupID"], :integer, 0),
+      icon_id: parse_number_with_default(row["iconID"], :integer, 0),
+      sound_id: parse_number_with_default(row["soundID"], :integer, 0),
+      graphic_id: parse_number_with_default(row["graphicID"], :integer, 0)
+    }
+  rescue
+    error ->
+      Logger.warning("Failed to parse ship type row: #{inspect(error)}, row: #{inspect(row)}")
+      nil
   end
 
   def parse_type_row(_), do: nil
@@ -300,23 +298,21 @@ defmodule WandererKills.ShipTypes.CSV do
   """
   @spec parse_group_row(map()) :: ship_group() | nil
   def parse_group_row(row) when is_map(row) do
-    try do
-      %{
-        group_id: parse_number_with_default(row["groupID"], :integer, 0),
-        category_id: parse_number_with_default(row["categoryID"], :integer, 0),
-        name: Map.get(row, "groupName", ""),
-        icon_id: parse_number_with_default(row["iconID"], :integer, 0),
-        use_base_price: parse_boolean(row["useBasePrice"], false),
-        anchored: parse_boolean(row["anchored"], false),
-        anchorable: parse_boolean(row["anchorable"], false),
-        fittable_non_singleton: parse_boolean(row["fittableNonSingleton"], false),
-        published: parse_boolean(row["published"], false)
-      }
-    rescue
-      error ->
-        Logger.warning("Failed to parse ship group row: #{inspect(error)}, row: #{inspect(row)}")
-        nil
-    end
+    %{
+      group_id: parse_number_with_default(row["groupID"], :integer, 0),
+      category_id: parse_number_with_default(row["categoryID"], :integer, 0),
+      name: Map.get(row, "groupName", ""),
+      icon_id: parse_number_with_default(row["iconID"], :integer, 0),
+      use_base_price: parse_boolean(row["useBasePrice"], false),
+      anchored: parse_boolean(row["anchored"], false),
+      anchorable: parse_boolean(row["anchorable"], false),
+      fittable_non_singleton: parse_boolean(row["fittableNonSingleton"], false),
+      published: parse_boolean(row["published"], false)
+    }
+  rescue
+    error ->
+      Logger.warning("Failed to parse ship group row: #{inspect(error)}, row: #{inspect(row)}")
+      nil
   end
 
   def parse_group_row(_), do: nil
@@ -422,28 +418,26 @@ defmodule WandererKills.ShipTypes.CSV do
   @spec parse_csv_content(String.t(), parser_function(), boolean(), pos_integer()) ::
           {:ok, [term()]} | {:error, Error.t()}
   defp parse_csv_content(content, parser, skip_invalid, max_errors) do
-    try do
-      rows =
-        content
-        |> CSVParser.parse_string(skip_headers: false)
-        |> Enum.to_list()
+    rows =
+      content
+      |> CSVParser.parse_string(skip_headers: false)
+      |> Enum.to_list()
 
-      case rows do
-        [] ->
-          {:ok, []}
+    case rows do
+      [] ->
+        {:ok, []}
 
-        [headers | data_rows] ->
-          process_rows(data_rows, headers, parser, skip_invalid, max_errors)
-      end
-    rescue
-      error ->
-        Logger.error("CSV parsing failed: #{inspect(error)}")
-
-        {:error,
-         Error.csv_error(:parse_error, "Failed to parse CSV content", %{
-           error: inspect(error)
-         })}
+      [headers | data_rows] ->
+        process_rows(data_rows, headers, parser, skip_invalid, max_errors)
     end
+  rescue
+    error ->
+      Logger.error("CSV parsing failed: #{inspect(error)}")
+
+      {:error,
+       Error.csv_error(:parse_error, "Failed to parse CSV content", %{
+         error: inspect(error)
+       })}
   end
 
   @spec process_rows([list()], list(), parser_function(), boolean(), pos_integer()) ::
@@ -611,9 +605,9 @@ defmodule WandererKills.ShipTypes.CSV do
   end
 
   defp parse_csv_file_simple(file_path) do
-    case File.read(file_path) do
-      {:ok, content} ->
-        try do
+    try do
+      case File.read(file_path) do
+        {:ok, content} ->
           # Parse CSV content using simple string splitting
           rows =
             content
@@ -636,20 +630,20 @@ defmodule WandererKills.ShipTypes.CSV do
             [] ->
               {:ok, []}
           end
-        rescue
-          error ->
-            {:error,
-             Error.csv_error(:parse_error, "Failed to parse CSV file", %{
-               file: file_path,
-               error: inspect(error)
-             })}
-        end
 
-      {:error, reason} ->
+        {:error, reason} ->
+          {:error,
+           Error.csv_error(:file_read_error, "Failed to read CSV file", %{
+             file: file_path,
+             reason: reason
+           })}
+      end
+    rescue
+      error ->
         {:error,
-         Error.csv_error(:file_read_error, "Failed to read CSV file", %{
+         Error.csv_error(:parse_error, "Failed to parse CSV file", %{
            file: file_path,
-           reason: reason
+           error: inspect(error)
          })}
     end
   end

@@ -3,8 +3,8 @@ defmodule WandererKills.ApiTest do
   import Plug.Test
   import Mox
 
-  alias WandererKillsWeb.Api
   alias WandererKills.TestHelpers
+  alias WandererKillsWeb.Api
 
   @opts Api.init([])
 

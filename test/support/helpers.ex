@@ -116,18 +116,16 @@ defmodule WandererKills.TestHelpers do
   # Private helper function that safely clears a cache, ignoring errors
   @spec safe_clear_cache(atom()) :: :ok
   defp safe_clear_cache(cache_name) do
-    try do
-      case Cachex.clear(cache_name) do
-        {:ok, _} -> :ok
-        # Ignore errors (cache might not exist)
-        {:error, _} -> :ok
-      end
-    catch
-      # Ignore process exit errors
-      :exit, _ -> :ok
-      # Ignore any other errors
-      _, _ -> :ok
+    case Cachex.clear(cache_name) do
+      {:ok, _} -> :ok
+      # Ignore errors (cache might not exist)
+      {:error, _} -> :ok
     end
+  catch
+    # Ignore process exit errors
+    :exit, _ -> :ok
+    # Ignore any other errors
+    _, _ -> :ok
   end
 
   @doc """

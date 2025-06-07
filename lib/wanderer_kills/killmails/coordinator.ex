@@ -55,8 +55,9 @@ defmodule WandererKills.Killmails.Coordinator do
   """
 
   require Logger
-  alias WandererKills.Killmails.Parser
   alias WandererKills.Infrastructure.Error
+  alias WandererKills.Killmails.Parser
+  alias WandererKills.Killmails.Store
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -201,7 +202,7 @@ defmodule WandererKills.Killmails.Coordinator do
     Task.start(fn ->
       try do
         killmail_id = enriched["killmail_id"]
-        :ok = WandererKills.Killmails.Store.put(killmail_id, system_id, enriched)
+        :ok = Store.put(killmail_id, system_id, enriched)
 
         Logger.info("Successfully enriched and stored killmail", %{
           killmail_id: killmail_id,
@@ -378,41 +379,39 @@ defmodule WandererKills.Killmails.Coordinator do
   """
   @spec process_single_killmail(map(), boolean()) :: {:ok, killmail()} | {:error, term()}
   def process_single_killmail(raw_killmail, enrich \\ true) do
-    try do
-      cutoff_time = DateTime.utc_now() |> DateTime.add(-24 * 60 * 60, :second)
+    cutoff_time = DateTime.utc_now() |> DateTime.add(-24 * 60 * 60, :second)
 
-      case Parser.parse_partial_killmail(raw_killmail, cutoff_time) do
-        {:ok, parsed} when enrich ->
-          case WandererKills.Killmails.Enricher.enrich_killmail(parsed) do
-            {:ok, enriched} -> {:ok, enriched}
-            # Fall back to basic data
-            {:error, _reason} -> {:ok, parsed}
-          end
+    case Parser.parse_partial_killmail(raw_killmail, cutoff_time) do
+      {:ok, parsed} when enrich ->
+        case WandererKills.Killmails.Enricher.enrich_killmail(parsed) do
+          {:ok, enriched} -> {:ok, enriched}
+          # Fall back to basic data
+          {:error, _reason} -> {:ok, parsed}
+        end
 
-        {:ok, parsed} ->
-          {:ok, parsed}
+      {:ok, parsed} ->
+        {:ok, parsed}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      # Only rescue specific known exception types
-      error in [ArgumentError] ->
-        Logger.error("Invalid arguments during killmail processing",
-          error: Exception.message(error),
-          operation: :process_single_killmail
-        )
-
-        {:error, Error.validation_error(:invalid_arguments, Exception.message(error))}
-
-      error in [BadMapError] ->
-        Logger.error("Invalid killmail data structure",
-          error: Exception.message(error),
-          operation: :process_single_killmail
-        )
-
-        {:error, Error.killmail_error(:invalid_format, Exception.message(error))}
+      {:error, reason} ->
+        {:error, reason}
     end
+  rescue
+    # Only rescue specific known exception types
+    error in [ArgumentError] ->
+      Logger.error("Invalid arguments during killmail processing",
+        error: Exception.message(error),
+        operation: :process_single_killmail
+      )
+
+      {:error, Error.validation_error(:invalid_arguments, Exception.message(error))}
+
+    error in [BadMapError] ->
+      Logger.error("Invalid killmail data structure",
+        error: Exception.message(error),
+        operation: :process_single_killmail
+      )
+
+      {:error, Error.killmail_error(:invalid_format, Exception.message(error))}
   end
 
   @doc """
@@ -421,51 +420,49 @@ defmodule WandererKills.Killmails.Coordinator do
   @spec parse_killmails([map()], pos_integer()) :: {:ok, [killmail()]} | {:error, term()}
   def parse_killmails(raw_killmails, since_hours)
       when is_list(raw_killmails) and is_integer(since_hours) do
-    try do
-      # Calculate cutoff time
-      cutoff_time = DateTime.utc_now() |> DateTime.add(-since_hours * 60 * 60, :second)
+    # Calculate cutoff time
+    cutoff_time = DateTime.utc_now() |> DateTime.add(-since_hours * 60 * 60, :second)
 
-      Logger.debug("Parsing killmails with time filter",
+    Logger.debug("Parsing killmails with time filter",
+      raw_count: length(raw_killmails),
+      since_hours: since_hours,
+      cutoff_time: cutoff_time,
+      operation: :parse_killmails,
+      step: :start
+    )
+
+    parsed =
+      raw_killmails
+      |> Enum.map(&Parser.parse_partial_killmail(&1, cutoff_time))
+      |> Enum.filter(fn
+        {:ok, _} -> true
+        _ -> false
+      end)
+      |> Enum.flat_map(fn
+        {:ok, killmail} when is_map(killmail) -> [killmail]
+        {:ok, killmails} when is_list(killmails) -> killmails
+      end)
+
+    Logger.debug("Successfully parsed killmails",
+      raw_count: length(raw_killmails),
+      parsed_count: length(parsed),
+      parser_type: "partial_killmail",
+      cutoff_time: cutoff_time,
+      operation: :parse_killmails,
+      step: :success
+    )
+
+    {:ok, parsed}
+  rescue
+    error ->
+      Logger.error("Exception during killmail parsing",
         raw_count: length(raw_killmails),
-        since_hours: since_hours,
-        cutoff_time: cutoff_time,
+        error: inspect(error),
         operation: :parse_killmails,
-        step: :start
+        step: :exception
       )
 
-      parsed =
-        raw_killmails
-        |> Enum.map(&Parser.parse_partial_killmail(&1, cutoff_time))
-        |> Enum.filter(fn
-          {:ok, _} -> true
-          _ -> false
-        end)
-        |> Enum.flat_map(fn
-          {:ok, killmail} when is_map(killmail) -> [killmail]
-          {:ok, killmails} when is_list(killmails) -> killmails
-        end)
-
-      Logger.debug("Successfully parsed killmails",
-        raw_count: length(raw_killmails),
-        parsed_count: length(parsed),
-        parser_type: "partial_killmail",
-        cutoff_time: cutoff_time,
-        operation: :parse_killmails,
-        step: :success
-      )
-
-      {:ok, parsed}
-    rescue
-      error ->
-        Logger.error("Exception during killmail parsing",
-          raw_count: length(raw_killmails),
-          error: inspect(error),
-          operation: :parse_killmails,
-          step: :exception
-        )
-
-        {:error, Error.parsing_error(:exception, "Exception during killmail parsing")}
-    end
+      {:error, Error.parsing_error(:exception, "Exception during killmail parsing")}
   end
 
   def parse_killmails(invalid_killmails, _since_hours) do
@@ -482,56 +479,54 @@ defmodule WandererKills.Killmails.Coordinator do
   @spec enrich_killmails([killmail()], pos_integer()) :: {:ok, [killmail()]} | {:error, term()}
   def enrich_killmails(parsed_killmails, system_id)
       when is_list(parsed_killmails) and is_integer(system_id) do
-    try do
-      Logger.debug("Enriching killmails",
+    Logger.debug("Enriching killmails",
+      system_id: system_id,
+      parsed_count: length(parsed_killmails),
+      operation: :enrich_killmails,
+      step: :start
+    )
+
+    enriched =
+      parsed_killmails
+      |> Enum.map(fn killmail ->
+        case WandererKills.Killmails.Enricher.enrich_killmail(killmail) do
+          {:ok, enriched} ->
+            enriched
+
+          # Fall back to original if enrichment fails
+          {:error, reason} ->
+            Logger.debug("Enrichment failed for killmail, using basic data",
+              killmail_id: Map.get(killmail, "killmail_id"),
+              system_id: system_id,
+              error: reason,
+              operation: :enrich_killmails,
+              step: :fallback
+            )
+
+            killmail
+        end
+      end)
+
+    Logger.debug("Successfully enriched killmails",
+      system_id: system_id,
+      parsed_count: length(parsed_killmails),
+      enriched_count: length(enriched),
+      operation: :enrich_killmails,
+      step: :success
+    )
+
+    {:ok, enriched}
+  rescue
+    error ->
+      Logger.error("Exception during killmail enrichment",
         system_id: system_id,
         parsed_count: length(parsed_killmails),
+        error: inspect(error),
         operation: :enrich_killmails,
-        step: :start
+        step: :exception
       )
 
-      enriched =
-        parsed_killmails
-        |> Enum.map(fn killmail ->
-          case WandererKills.Killmails.Enricher.enrich_killmail(killmail) do
-            {:ok, enriched} ->
-              enriched
-
-            # Fall back to original if enrichment fails
-            {:error, reason} ->
-              Logger.debug("Enrichment failed for killmail, using basic data",
-                killmail_id: Map.get(killmail, "killmail_id"),
-                system_id: system_id,
-                error: reason,
-                operation: :enrich_killmails,
-                step: :fallback
-              )
-
-              killmail
-          end
-        end)
-
-      Logger.debug("Successfully enriched killmails",
-        system_id: system_id,
-        parsed_count: length(parsed_killmails),
-        enriched_count: length(enriched),
-        operation: :enrich_killmails,
-        step: :success
-      )
-
-      {:ok, enriched}
-    rescue
-      error ->
-        Logger.error("Exception during killmail enrichment",
-          system_id: system_id,
-          parsed_count: length(parsed_killmails),
-          error: inspect(error),
-          operation: :enrich_killmails,
-          step: :exception
-        )
-
-        {:error, Error.enrichment_error(:exception, "Exception during killmail enrichment")}
-    end
+      {:error, Error.enrichment_error(:exception, "Exception during killmail enrichment")}
   end
 
   def enrich_killmails(invalid_killmails, _system_id) do

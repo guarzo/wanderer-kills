@@ -21,7 +21,7 @@ defmodule WandererKills.Application do
   @impl true
   def start(_type, _args) do
     # 1) Initialize ETS for our KillStore
-    WandererKills.Killmails.Store.init_tables!()
+    WandererKills.KillStore.init_tables!()
 
     # 2) Attach telemetry handlers
     WandererKills.Observability.Telemetry.attach_handlers()

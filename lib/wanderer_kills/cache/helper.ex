@@ -343,9 +343,9 @@ defmodule WandererKills.Cache.Helper do
   end
 
   def system_get_active_systems do
-    case stream("systems", "active:*") do
-      {:ok, stream} ->
-        try do
+    try do
+      case stream("systems", "active:*") do
+        {:ok, stream} ->
           # Convert stream to list and process entries
           entries = Enum.to_list(stream)
           Logger.debug("Stream entries count: #{length(entries)}")
@@ -373,20 +373,20 @@ defmodule WandererKills.Cache.Helper do
 
           Logger.debug("Found #{length(system_ids)} active systems")
           {:ok, system_ids}
-        rescue
-          error ->
-            Logger.error("Error processing active systems stream: #{inspect(error)}")
-            {:error, error}
-        end
 
-      {:error, :invalid_match} ->
-        # This happens when there are no keys matching the pattern
-        Logger.debug("No active systems found (no matching keys)")
-        {:ok, []}
+        {:error, :invalid_match} ->
+          # This happens when there are no keys matching the pattern
+          Logger.debug("No active systems found (no matching keys)")
+          {:ok, []}
 
-      {:error, reason} ->
-        Logger.error("Failed to create systems stream: #{inspect(reason)}")
-        {:error, reason}
+        {:error, reason} ->
+          Logger.error("Failed to create systems stream: #{inspect(reason)}")
+          {:error, reason}
+      end
+    rescue
+      error ->
+        Logger.error("Error processing active systems stream: #{inspect(error)}")
+        {:error, error}
     end
   end
 
@@ -435,42 +435,40 @@ defmodule WandererKills.Cache.Helper do
   """
   @spec cache_killmails_for_system(integer(), [map()]) :: :ok | {:error, term()}
   def cache_killmails_for_system(system_id, killmails) when is_list(killmails) do
-    try do
-      # Update fetch timestamp
-      case system_set_fetch_timestamp(system_id, DateTime.utc_now()) do
-        {:ok, _} -> :ok
-        # Continue anyway
-        {:error, _reason} -> :ok
-      end
-
-      # Extract killmail IDs and cache individual killmails
-      killmail_ids =
-        killmails
-        |> Enum.map(fn killmail ->
-          killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, "killID")
-
-          if killmail_id do
-            # Cache the individual killmail
-            killmail_put(killmail_id, killmail)
-            killmail_id
-          else
-            nil
-          end
-        end)
-        |> Enum.filter(&(&1 != nil))
-
-      # Add each killmail ID to system's killmail list
-      Enum.each(killmail_ids, fn killmail_id ->
-        system_add_killmail(system_id, killmail_id)
-      end)
-
-      # Add system to active list
-      system_add_active(system_id)
-
-      :ok
-    rescue
-      _error -> {:error, :cache_exception}
+    # Update fetch timestamp
+    case system_set_fetch_timestamp(system_id, DateTime.utc_now()) do
+      {:ok, _} -> :ok
+      # Continue anyway
+      {:error, _reason} -> :ok
     end
+
+    # Extract killmail IDs and cache individual killmails
+    killmail_ids =
+      killmails
+      |> Enum.map(fn killmail ->
+        killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, "killID")
+
+        if killmail_id do
+          # Cache the individual killmail
+          killmail_put(killmail_id, killmail)
+          killmail_id
+        else
+          nil
+        end
+      end)
+      |> Enum.filter(&(&1 != nil))
+
+    # Add each killmail ID to system's killmail list
+    Enum.each(killmail_ids, fn killmail_id ->
+      system_add_killmail(system_id, killmail_id)
+    end)
+
+    # Add system to active list
+    system_add_active(system_id)
+
+    :ok
+  rescue
+    _error -> {:error, :cache_exception}
   end
 
   # Private functions

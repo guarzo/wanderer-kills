@@ -8,8 +8,10 @@ defmodule WandererKillsWeb.Api do
   import Plug.Conn
   import WandererKillsWeb.Api.Helpers, only: [send_json_resp: 3]
 
-  alias WandererKills.Observability.Monitoring
   alias WandererKills.Cache.Helper
+  alias WandererKills.Killmails.Coordinator
+  alias WandererKills.Killmails.ZkbClient
+  alias WandererKills.Observability.Monitoring
 
   # Moved from WandererKillsWeb.Plugs.RequestId to eliminate single-file directory
   defp request_id_plug(conn, _opts) do
@@ -352,11 +354,7 @@ defmodule WandererKillsWeb.Api do
 
   @spec fetch_and_cache_killmail(integer()) :: {:ok, map()} | {:error, term()}
   defp fetch_and_cache_killmail(killmail_id) do
-    alias WandererKills.Killmails.ZkbClient, as: ZKB
-    alias WandererKills.Killmails.Coordinator
-    alias WandererKills.Cache.Helper
-
-    with {:ok, raw_killmail} <- ZKB.fetch_killmail(killmail_id),
+    with {:ok, raw_killmail} <- ZkbClient.fetch_killmail(killmail_id),
          {:ok, processed_killmail} <- Coordinator.process_single_killmail(raw_killmail),
          {:ok, _} <- Helper.killmail_put(killmail_id, processed_killmail) do
       {:ok, processed_killmail}
@@ -367,10 +365,6 @@ defmodule WandererKillsWeb.Api do
 
   @spec fetch_killmails_for_system(integer()) :: {:ok, list()} | {:error, term()}
   defp fetch_killmails_for_system(system_id) do
-    alias WandererKills.Killmails.ZkbClient, as: ZKB
-    alias WandererKills.Killmails.Coordinator
-    alias WandererKills.Cache.Helper
-
     # Check cache first
     case Helper.system_recently_fetched?(system_id) do
       {:ok, true} ->
@@ -392,19 +386,16 @@ defmodule WandererKillsWeb.Api do
 
   @spec fetch_remote_killmails(integer()) :: {:ok, list()} | {:error, term()}
   defp fetch_remote_killmails(system_id) do
-    alias WandererKills.Killmails.ZkbClient, as: ZKB
-    alias WandererKills.Killmails.Coordinator
-
     # Default limit
     limit = 5
     # Default since hours
     since_hours = 24
 
-    with {:ok, raw_killmails} <- ZKB.fetch_system_killmails(system_id, limit, since_hours),
+    with {:ok, raw_killmails} <- ZkbClient.fetch_system_killmails(system_id, limit, since_hours),
          {:ok, processed_killmails} <-
            Coordinator.process_killmails(raw_killmails, system_id, since_hours),
          :ok <-
-           WandererKills.Cache.Helper.cache_killmails_for_system(
+           Helper.cache_killmails_for_system(
              system_id,
              processed_killmails
            ) do

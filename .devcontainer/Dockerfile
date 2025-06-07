@@ -1,4 +1,4 @@
-FROM hexpm/elixir:1.18.3-erlang-25.3-debian-slim
+FROM elixir:1.18.3-otp-27-slim
 
 # Install development and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -7,9 +7,9 @@ defmodule WandererKills.ESI.DataFetcher do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.{Config, Error}
-  alias WandererKills.Behaviours.{ESIClient, DataFetcher}
+  alias WandererKills.Behaviours.{DataFetcher, ESIClient}
   alias WandererKills.Cache.Helper
+  alias WandererKills.Infrastructure.{Config, Error}
 
   @behaviour ESIClient
   @behaviour DataFetcher
@@ -83,13 +83,11 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_system(system_id) when is_integer(system_id) do
-    try do
-      result = fetch_from_api(:system, system_id)
-      {:ok, result}
-    rescue
-      error ->
-        {:error, error}
-    end
+    result = fetch_from_api(:system, system_id)
+    {:ok, result}
+  rescue
+    error ->
+      {:error, error}
   end
 
   @impl ESIClient

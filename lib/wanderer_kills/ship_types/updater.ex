@@ -34,9 +34,9 @@ defmodule WandererKills.ShipTypes.Updater do
   """
 
   require Logger
-  alias WandererKills.ShipTypes.CSV
   alias WandererKills.ESI.Client, as: EsiSource
   alias WandererKills.Infrastructure.Error
+  alias WandererKills.ShipTypes.CSV
 
   # ============================================================================
   # Constants

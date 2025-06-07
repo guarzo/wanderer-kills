@@ -444,26 +444,24 @@ defmodule WandererKills.Observability.Monitoring do
 
   @spec build_cache_health_check(atom()) :: map()
   defp build_cache_health_check(cache_name) do
-    try do
-      case Cachex.size(cache_name) do
-        {:ok, _size} ->
-          %{name: cache_name, healthy: true, status: "ok"}
+    case Cachex.size(cache_name) do
+      {:ok, _size} ->
+        %{name: cache_name, healthy: true, status: "ok"}
 
-        {:error, reason} ->
-          Logger.error(
-            "[Monitoring] Cache health check failed for #{cache_name}: #{inspect(reason)}"
-          )
-
-          %{name: cache_name, healthy: false, status: "error", reason: inspect(reason)}
-      end
-    rescue
-      error ->
+      {:error, reason} ->
         Logger.error(
-          "[Monitoring] Cache health check exception for #{cache_name}: #{inspect(error)}"
+          "[Monitoring] Cache health check failed for #{cache_name}: #{inspect(reason)}"
         )
 
-        %{name: cache_name, healthy: false, status: "unavailable"}
+        %{name: cache_name, healthy: false, status: "error", reason: inspect(reason)}
     end
+  rescue
+    error ->
+      Logger.error(
+        "[Monitoring] Cache health check exception for #{cache_name}: #{inspect(error)}"
+      )
+
+      %{name: cache_name, healthy: false, status: "unavailable"}
   end
 
   @spec build_cache_metrics(atom()) :: map()
@@ -499,33 +497,31 @@ defmodule WandererKills.Observability.Monitoring do
 
   @spec get_system_info() :: map()
   defp get_system_info do
-    try do
-      memory_info = :erlang.memory()
+    memory_info = :erlang.memory()
 
-      %{
-        memory: %{
-          total: memory_info[:total],
-          processes: memory_info[:processes],
-          atom: memory_info[:atom],
-          binary: memory_info[:binary]
-        },
-        processes: %{
-          count: :erlang.system_info(:process_count),
-          limit: :erlang.system_info(:process_limit)
-        },
-        ports: %{
-          count: :erlang.system_info(:port_count),
-          limit: :erlang.system_info(:port_limit)
-        },
-        schedulers: :erlang.system_info(:schedulers),
-        run_queue: :erlang.statistics(:run_queue),
-        ets_tables: length(:ets.all())
-      }
-    rescue
-      error ->
-        Logger.warning("Failed to collect system info: #{inspect(error)}")
-        %{error: "System info collection failed"}
-    end
+    %{
+      memory: %{
+        total: memory_info[:total],
+        processes: memory_info[:processes],
+        atom: memory_info[:atom],
+        binary: memory_info[:binary]
+      },
+      processes: %{
+        count: :erlang.system_info(:process_count),
+        limit: :erlang.system_info(:process_limit)
+      },
+      ports: %{
+        count: :erlang.system_info(:port_count),
+        limit: :erlang.system_info(:port_limit)
+      },
+      schedulers: :erlang.system_info(:schedulers),
+      run_queue: :erlang.statistics(:run_queue),
+      ets_tables: length(:ets.all())
+    }
+  rescue
+    error ->
+      Logger.warning("Failed to collect system info: #{inspect(error)}")
+      %{error: "System info collection failed"}
   end
 
   @spec calculate_average_hit_rate([map()]) :: float()

@@ -70,28 +70,26 @@ defmodule WandererKills.Infrastructure.Retry do
   end
 
   defp do_retry(fun, retries_left, backoff_state, rescue_only, operation_name) do
-    try do
-      result = fun.()
-      {:ok, result}
-    rescue
-      error ->
-        if error.__struct__ in rescue_only do
-          # Each time we fail, we call :backoff.fail/1 → {delay_ms, next_backoff}
-          {delay_ms, next_backoff} = :backoff.fail(backoff_state)
+    result = fun.()
+    {:ok, result}
+  rescue
+    error ->
+      if error.__struct__ in rescue_only do
+        # Each time we fail, we call :backoff.fail/1 → {delay_ms, next_backoff}
+        {delay_ms, next_backoff} = :backoff.fail(backoff_state)
 
-          Logger.warning(
-            "#{operation_name} failed with retryable error: #{inspect(error)}. " <>
-              "Retrying in #{delay_ms}ms (#{retries_left - 1} attempts left)."
-          )
+        Logger.warning(
+          "#{operation_name} failed with retryable error: #{inspect(error)}. " <>
+            "Retrying in #{delay_ms}ms (#{retries_left - 1} attempts left)."
+        )
 
-          Process.sleep(delay_ms)
-          do_retry(fun, retries_left - 1, next_backoff, rescue_only, operation_name)
-        else
-          # Not one of our listed retriable errors: bubble up immediately
-          Logger.error("#{operation_name} failed with non-retryable error: #{inspect(error)}")
-          reraise(error, __STACKTRACE__)
-        end
-    end
+        Process.sleep(delay_ms)
+        do_retry(fun, retries_left - 1, next_backoff, rescue_only, operation_name)
+      else
+        # Not one of our listed retriable errors: bubble up immediately
+        Logger.error("#{operation_name} failed with non-retryable error: #{inspect(error)}")
+        reraise(error, __STACKTRACE__)
+      end
   end
 
   @doc """

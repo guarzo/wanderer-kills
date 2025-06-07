@@ -69,7 +69,7 @@ defmodule WandererKills.Core do
       defdelegate build_request_opts(opts \\ []), to: WandererKills.Http.ClientProvider
 
       # Legacy compatibility
-      def get(), do: get_client()
+      def get, do: get_client()
     end
   end
 
@@ -106,7 +106,7 @@ defmodule WandererKills.Core do
     defdelegate telemetry(), to: WandererKills.Infrastructure.Config
     defdelegate app(), to: WandererKills.Infrastructure.Config
 
-    def start_preloader?(), do: WandererKills.Infrastructure.Config.start_preloader?()
+    def start_preloader?, do: WandererKills.Infrastructure.Config.start_preloader?()
   end
 
   defmodule Retry do

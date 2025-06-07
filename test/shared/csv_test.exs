@@ -14,6 +14,7 @@ defmodule WandererKills.ShipTypes.CSVTest do
     test "handles empty file" do
       parser = fn _row -> %{id: 1, name: "test"} end
       file_path = "test/fixtures/empty.csv"
+      File.mkdir_p!(Path.dirname(file_path))
       File.write!(file_path, "")
 
       result = CSV.read_file(file_path, parser)
@@ -25,6 +26,7 @@ defmodule WandererKills.ShipTypes.CSVTest do
     test "handles invalid CSV" do
       parser = fn _row -> %{id: 1, name: "test"} end
       file_path = "test/fixtures/invalid.csv"
+      File.mkdir_p!(Path.dirname(file_path))
       File.write!(file_path, "invalid\"csv,\"content\nunclosed\"quote")
 
       result = CSV.read_file(file_path, parser)
@@ -36,6 +38,7 @@ defmodule WandererKills.ShipTypes.CSVTest do
     test "parses valid CSV" do
       parser = fn row -> %{id: String.to_integer(row["id"]), name: row["name"]} end
       file_path = "test/fixtures/valid.csv"
+      File.mkdir_p!(Path.dirname(file_path))
       File.write!(file_path, "id,name\n1,test1\n2,test2")
 
       result = CSV.read_file(file_path, parser)

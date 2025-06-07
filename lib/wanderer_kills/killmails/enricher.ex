@@ -9,8 +9,8 @@ defmodule WandererKills.Killmails.Enricher do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Config
   alias WandererKills.ESI.Client, as: EsiClient
+  alias WandererKills.Infrastructure.Config
   alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
 
   @doc """
