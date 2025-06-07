@@ -345,17 +345,24 @@ defmodule WandererKills.Preloader do
         pass_type: pass_type
       )
 
-      # For now, just ensure the system is cached
-      case Helper.system_get_or_set(system_id, fn ->
-             # This would normally fetch from ESI
-             %{
-               "system_id" => system_id,
-               "name" => "System #{system_id}",
-               "preloaded_at" => DateTime.utc_now() |> DateTime.to_iso8601()
-             }
-           end) do
-        {:ok, _system_data} ->
-          Logger.debug("System preload successful", system_id: system_id)
+      # Fetch kills for this system during preload
+      case fetch_and_cache_system_kills(system_id, pass_type) do
+        {:ok, kills_count} ->
+          Logger.debug("System preload successful",
+            system_id: system_id,
+            kills_count: kills_count
+          )
+
+          # Broadcast kill count update after successful preload
+          if kills_count > 0 do
+            WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, kills_count)
+
+            Logger.debug("Broadcasted kill count update from preloader",
+              system_id: system_id,
+              count: kills_count
+            )
+          end
+
           {:ok, system_id}
 
         {:error, reason} ->
@@ -365,6 +372,49 @@ defmodule WandererKills.Preloader do
           )
 
           {:error, {system_id, reason}}
+      end
+    end
+
+    # Fetch and cache kills for a system during preload
+    defp fetch_and_cache_system_kills(system_id, pass_type) do
+      %{hours: hours, limit: limit} = Map.get(@passes, pass_type)
+
+      case WandererKills.Killmails.ZkbClient.fetch_system_killmails(system_id, limit, hours) do
+        {:ok, kills} when is_list(kills) ->
+          # Cache the kills (extract killmail IDs first)
+          killmail_ids =
+            Enum.map(kills, fn kill -> Map.get(kill, "killID") || Map.get(kill, "killmail_id") end)
+            |> Enum.filter(&(&1 != nil))
+
+          case Helper.system_put_killmails(system_id, killmail_ids) do
+            {:ok, _} ->
+              Logger.debug("Cached #{length(kills)} kills for system",
+                system_id: system_id,
+                count: length(kills)
+              )
+
+              {:ok, length(kills)}
+
+            {:error, reason} ->
+              Logger.warning("Failed to cache kills for system",
+                system_id: system_id,
+                error: reason
+              )
+
+              {:error, reason}
+          end
+
+        {:ok, []} ->
+          Logger.debug("No kills found for system", system_id: system_id)
+          {:ok, 0}
+
+        {:error, reason} ->
+          Logger.warning("Failed to fetch kills for system",
+            system_id: system_id,
+            error: reason
+          )
+
+          {:error, reason}
       end
     end
   end

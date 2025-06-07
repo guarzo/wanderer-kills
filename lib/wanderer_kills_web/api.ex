@@ -37,11 +37,39 @@ defmodule WandererKillsWeb.Api do
     case Monitoring.check_health() do
       {:ok, health_status} ->
         status_code = if health_status.healthy, do: 200, else: 503
-        send_json_resp(conn, status_code, health_status)
+        response = Map.put(health_status, :timestamp, DateTime.utc_now() |> DateTime.to_iso8601())
+        send_json_resp(conn, status_code, response)
 
       {:error, reason} ->
-        send_json_resp(conn, 503, %{error: "Health check failed", reason: inspect(reason)})
+        response = %{
+          error: "Health check failed",
+          reason: inspect(reason),
+          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+        }
+
+        send_json_resp(conn, 503, response)
     end
+  end
+
+  # Status endpoint with detailed service information
+  get "/status" do
+    subscriptions = WandererKills.Client.list_subscriptions()
+
+    response = %{
+      cache_stats: %{
+        # This would be populated by your monitoring system
+        # For now, we'll return basic info
+        status: "operational"
+      },
+      active_subscriptions: length(subscriptions),
+      # This would be from your WebSocket manager
+      websocket_connected: false,
+      # This would be from your kill tracking system
+      last_kill_received: nil,
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    send_json_resp(conn, 200, response)
   end
 
   # Metrics endpoint
@@ -164,6 +192,40 @@ defmodule WandererKillsWeb.Api do
       {:error, :invalid_format} ->
         send_json_resp(conn, 400, %{error: "Invalid system ID"})
     end
+  end
+
+  # New API v1 endpoints - Kill management
+  get "/api/v1/kills/system/:system_id" do
+    WandererKillsWeb.KillsController.list(conn, Map.merge(conn.params, conn.query_params))
+  end
+
+  post "/api/v1/kills/systems" do
+    WandererKillsWeb.KillsController.bulk(conn, conn.params)
+  end
+
+  get "/api/v1/kills/cached/:system_id" do
+    WandererKillsWeb.KillsController.cached(conn, conn.params)
+  end
+
+  get "/api/v1/killmail/:killmail_id" do
+    WandererKillsWeb.KillsController.show(conn, conn.params)
+  end
+
+  get "/api/v1/kills/count/:system_id" do
+    WandererKillsWeb.KillsController.count(conn, conn.params)
+  end
+
+  # New API v1 endpoints - Subscription management
+  post "/api/v1/subscriptions" do
+    WandererKillsWeb.SubscriptionsController.create(conn, conn.params)
+  end
+
+  delete "/api/v1/subscriptions/:subscriber_id" do
+    WandererKillsWeb.SubscriptionsController.delete(conn, conn.params)
+  end
+
+  get "/api/v1/subscriptions" do
+    WandererKillsWeb.SubscriptionsController.index(conn, conn.params)
   end
 
   # Killfeed endpoints

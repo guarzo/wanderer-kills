@@ -30,7 +30,8 @@ defmodule WandererKills.Application do
     children =
       ([
          {Task.Supervisor, name: WandererKills.TaskSupervisor},
-         {Phoenix.PubSub, name: WandererKills.PubSub}
+         {Phoenix.PubSub, name: WandererKills.PubSub},
+         {WandererKills.SubscriptionManager, [pubsub_name: WandererKills.PubSub]}
        ] ++
          cache_children() ++
          [

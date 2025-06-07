@@ -186,6 +186,10 @@ defmodule WandererKills.RedisQ do
 
       {:ok, _any_other} ->
         Logger.debug("[RedisQ] Successfully parsed & stored new killmail.")
+
+        # Broadcast kill update via PubSub
+        broadcast_kill_update(killmail, zkb)
+
         {:ok, :kill_received}
 
       {:error, reason} ->
@@ -315,5 +319,57 @@ defmodule WandererKills.RedisQ do
   defp handle_response(_) do
     # No package in response, continue listening
     start_listening()
+  end
+
+  # Broadcast kill update to PubSub subscribers
+  defp broadcast_kill_update(killmail, zkb) do
+    system_id = Map.get(killmail, "solar_system_id")
+    killmail_id = Map.get(killmail, "killmail_id")
+
+    if system_id do
+      # Create a formatted kill for broadcasting
+      formatted_kill = %{
+        killmail_id: killmail_id,
+        kill_time: parse_kill_time(killmail),
+        solar_system_id: system_id,
+        victim: Map.get(killmail, "victim", %{}),
+        attackers: Map.get(killmail, "attackers", []),
+        zkb: zkb
+      }
+
+      # Broadcast detailed kill update
+      WandererKills.SubscriptionManager.broadcast_kill_update(system_id, [formatted_kill])
+
+      # Also broadcast kill count update (increment by 1)
+      # Note: This is a simplified approach - in a real system you might want to
+      # fetch the current count and increment it
+      WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, 1)
+
+      Logger.debug("[RedisQ] Broadcasted kill update",
+        system_id: system_id,
+        killmail_id: killmail_id
+      )
+    else
+      Logger.warning("[RedisQ] Cannot broadcast kill update - missing solar_system_id",
+        killmail_id: killmail_id
+      )
+    end
+  end
+
+  # Parse kill time from killmail
+  defp parse_kill_time(killmail) do
+    case Map.get(killmail, "killmail_time") do
+      nil ->
+        DateTime.utc_now()
+
+      time_str when is_binary(time_str) ->
+        case DateTime.from_iso8601(time_str) do
+          {:ok, datetime, _offset} -> datetime
+          {:error, _reason} -> DateTime.utc_now()
+        end
+
+      _ ->
+        DateTime.utc_now()
+    end
   end
 end
