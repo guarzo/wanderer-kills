@@ -13,7 +13,7 @@ defmodule WandererKills.Preloader.Worker do
   use GenServer
   require Logger
 
-  alias WandererKills.Core.Cache
+  alias WandererKills.Cache.Systems
 
   @type pass_type :: :quick | :expanded
   @type fetch_result :: :ok | {:error, term()}
@@ -69,7 +69,7 @@ defmodule WandererKills.Preloader.Worker do
       step: :start
     )
 
-    case Cache.add_active_system(system_id) do
+    case Systems.add_active(system_id) do
       {:ok, :added} ->
         Logger.info("Successfully added system to active list",
           system_id: system_id,
@@ -116,7 +116,7 @@ defmodule WandererKills.Preloader.Worker do
     )
 
     # Add the test system to active systems
-    case Cache.add_active_system(test_system_id) do
+    case Systems.add_active(test_system_id) do
       {:ok, :added} ->
         Logger.info("Successfully added test system",
           system_id: test_system_id,
@@ -143,7 +143,7 @@ defmodule WandererKills.Preloader.Worker do
     end
 
     # Check for any existing active systems
-    case Cache.get_active_systems() do
+    case Systems.get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         Logger.info("Preloader initialized with #{length(systems)} active systems")
         {:ok, %{max_concurrency: max_concurrency}}
@@ -156,7 +156,7 @@ defmodule WandererKills.Preloader.Worker do
 
   @impl true
   def handle_cast(:run_expanded_pass, %{max_concurrency: _max} = state) do
-    case Cache.get_active_systems() do
+    case Systems.get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         Logger.info("Starting preload pass for #{length(systems)} systems")
 
@@ -207,7 +207,7 @@ defmodule WandererKills.Preloader.Worker do
     %{hours: hours, limit: limit} = @passes[pass_type]
     start_time = System.monotonic_time(:millisecond)
 
-    case Cache.get_active_systems() do
+    case Systems.get_active_systems() do
       {:ok, systems} when is_list(systems) and length(systems) > 0 ->
         Logger.info("Processing #{length(systems)} active systems")
 
@@ -273,10 +273,10 @@ defmodule WandererKills.Preloader.Worker do
     alias WandererKills.Killmails.Coordinator
 
     # Check cache first
-    case Cache.system_recently_fetched?(system_id) do
+    case Systems.recently_fetched?(system_id) do
       {:ok, true} ->
         # Cache is fresh, get cached data
-        case Cache.get_killmails_for_system(system_id) do
+        case Systems.get_killmails(system_id) do
           {:ok, killmail_ids} ->
             Logger.debug("Using cached killmails for system",
               system_id: system_id,

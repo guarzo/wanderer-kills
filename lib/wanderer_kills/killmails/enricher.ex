@@ -10,7 +10,7 @@ defmodule WandererKills.Killmails.Enricher do
 
   require Logger
   alias WandererKills.Core.Config
-  alias WandererKills.Core.Cache
+  alias WandererKills.Cache.ESI
   alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
 
   @doc """
@@ -60,9 +60,9 @@ defmodule WandererKills.Killmails.Enricher do
     attackers = Map.get(killmail, "attackers", [])
 
     enricher_config = %{
-      min_attackers_for_parallel: Config.enricher(:min_attackers_for_parallel),
-      max_concurrency: Config.enricher(:max_concurrency),
-      task_timeout_ms: Config.enricher(:task_timeout_ms)
+      min_attackers_for_parallel: Config.enricher().min_attackers_for_parallel,
+      max_concurrency: Config.enricher().max_concurrency,
+      task_timeout_ms: Config.enricher().task_timeout_ms
     }
 
     enriched_attackers =
@@ -134,12 +134,12 @@ defmodule WandererKills.Killmails.Enricher do
     end
   end
 
-  defp get_character_info(id) when is_integer(id), do: Cache.get(:esi_cache, {:character, id})
+  defp get_character_info(id) when is_integer(id), do: ESI.get_character(id)
   defp get_character_info(_), do: {:ok, nil}
 
-  defp get_corporation_info(id) when is_integer(id), do: Cache.get(:esi_cache, {:corporation, id})
+  defp get_corporation_info(id) when is_integer(id), do: ESI.get_corporation(id)
   defp get_corporation_info(_), do: {:ok, nil}
 
-  defp get_alliance_info(id) when is_integer(id), do: Cache.get(:esi_cache, {:alliance, id})
+  defp get_alliance_info(id) when is_integer(id), do: ESI.get_alliance(id)
   defp get_alliance_info(_), do: {:ok, nil}
 end

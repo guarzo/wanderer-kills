@@ -42,12 +42,8 @@ defmodule WandererKills.TestHelpers do
   Cleans up any existing processes before tests.
   """
   def cleanup_processes do
-    # Stop KillmailStore if it's running
-    if pid = Process.whereis(WandererKills.Killmails.Store) do
-      Process.exit(pid, :normal)
-      # Give it a moment to shut down
-      Process.sleep(10)
-    end
+    # Clear KillStore ETS tables
+    WandererKills.KillStore.cleanup_tables()
 
     # Clear test caches
     Cachex.clear(:killmails_cache_test)
@@ -444,15 +440,11 @@ defmodule WandererKills.TestHelpers do
   #
 
   @doc """
-  Stops the KillmailStore process if running.
+  Cleans up KillStore data for testing.
   """
   @spec stop_killmail_store() :: :ok
   def stop_killmail_store do
-    case Process.whereis(WandererKills.Killmails.Store) do
-      nil -> :ok
-      pid -> Process.exit(pid, :normal)
-    end
-
+    WandererKills.KillStore.cleanup_tables()
     :ok
   end
 end

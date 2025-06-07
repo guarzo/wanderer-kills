@@ -13,17 +13,13 @@ defmodule WandererKills.KillStore do
   require Logger
 
   # ETS tables for killmail storage
-  @killmail_events_table :killmail_events
-  @client_offsets_table :client_offsets
-  @counters_table :counters
-  @killmails_table :killmails
+  @killmail_table :killmails
+  @system_killmails_table :system_killmails
+  @system_fetch_timestamps_table :system_fetch_timestamps
 
   @type kill_id :: integer()
   @type system_id :: integer()
-  @type client_id :: term()
-  @type event_id :: integer()
   @type kill_data :: map()
-  @type client_offsets :: %{system_id() => event_id()}
 
   @doc """
   Initializes all required ETS tables at application start.
@@ -33,49 +29,61 @@ defmodule WandererKills.KillStore do
   @spec init_tables!() :: :ok
   def init_tables! do
     # Main killmail storage table
-    :ets.new(@killmails_table, [:set, :named_table, :public, {:read_concurrency, true}])
+    :ets.new(@killmail_table, [:set, :named_table, :public, {:read_concurrency, true}])
 
-    # Event storage for streaming killmails
-    :ets.new(@killmail_events_table, [
-      :ordered_set,
+    # System-specific killmail lists
+    :ets.new(@system_killmails_table, [:set, :named_table, :public, {:read_concurrency, true}])
+
+    # System fetch timestamps
+    :ets.new(@system_fetch_timestamps_table, [
+      :set,
       :named_table,
       :public,
       {:read_concurrency, true}
     ])
 
-    # Client offset tracking for event streaming
-    :ets.new(@client_offsets_table, [:set, :named_table, :public, {:read_concurrency, true}])
-
-    # Counters for event IDs and statistics
-    :ets.new(@counters_table, [:set, :named_table, :public, {:read_concurrency, true}])
-
-    # Initialize event counter
-    :ets.insert(@counters_table, {:event_counter, 0})
-
     Logger.info(
-      "Initialized KillStore ETS tables: #{inspect([@killmails_table, @killmail_events_table, @client_offsets_table, @counters_table])}"
+      "Initialized KillStore ETS tables: #{inspect([@killmail_table, @system_killmails_table, @system_fetch_timestamps_table])}"
     )
 
     :ok
   end
 
+  # ============================================================================
+  # Core Killmail Storage API
+  # ============================================================================
+
   @doc """
   Stores a killmail in the store.
   """
-  @spec put(kill_id(), kill_data()) :: :ok
-  def put(kill_id, kill_data) when is_integer(kill_id) and is_map(kill_data) do
-    :ets.insert(@killmails_table, {kill_id, kill_data})
+  @spec put(kill_id(), system_id(), kill_data()) :: :ok
+  def put(kill_id, system_id, kill_data)
+      when is_integer(kill_id) and is_integer(system_id) and is_map(kill_data) do
+    :ets.insert(@killmail_table, {kill_id, kill_data})
+
+    # Associate with system
+    case :ets.lookup(@system_killmails_table, system_id) do
+      [] ->
+        :ets.insert(@system_killmails_table, {system_id, [kill_id]})
+
+      [{^system_id, existing_ids}] ->
+        # Ensure we don't add duplicates
+        if kill_id not in existing_ids do
+          :ets.insert(@system_killmails_table, {system_id, [kill_id | existing_ids]})
+        end
+    end
+
     :ok
   end
 
   @doc """
   Retrieves a killmail by ID.
   """
-  @spec get(kill_id()) :: {:ok, kill_data()} | {:error, :not_found}
+  @spec get(kill_id()) :: {:ok, kill_data()} | :error
   def get(kill_id) when is_integer(kill_id) do
-    case :ets.lookup(@killmails_table, kill_id) do
+    case :ets.lookup(@killmail_table, kill_id) do
       [{^kill_id, data}] -> {:ok, data}
-      [] -> {:error, :not_found}
+      [] -> :error
     end
   end
 
@@ -84,14 +92,19 @@ defmodule WandererKills.KillStore do
   """
   @spec list_by_system(system_id()) :: [kill_data()]
   def list_by_system(system_id) when is_integer(system_id) do
-    # Use match spec to find all killmails for the system
-    # Match pattern: {kill_id, %{"solar_system_id" => system_id, ...}}
-    ms = [
-      {{:"$1", %{"solar_system_id" => system_id}}, [], [:"$2"]},
-      {{:"$1", %{solar_system_id: system_id}}, [], [:"$2"]}
-    ]
+    case :ets.lookup(@system_killmails_table, system_id) do
+      [{^system_id, killmail_ids}] ->
+        # Retrieve the actual killmail data for each ID
+        Enum.flat_map(killmail_ids, fn killmail_id ->
+          case :ets.lookup(@killmail_table, killmail_id) do
+            [{^killmail_id, killmail_data}] -> [killmail_data]
+            [] -> []
+          end
+        end)
 
-    :ets.select(@killmails_table, ms)
+      [] ->
+        []
+    end
   end
 
   @doc """
@@ -99,83 +112,68 @@ defmodule WandererKills.KillStore do
   """
   @spec delete(kill_id()) :: :ok
   def delete(kill_id) when is_integer(kill_id) do
-    :ets.delete(@killmails_table, kill_id)
+    :ets.delete(@killmail_table, kill_id)
+
+    # Remove from system associations
+    # We need to search through all systems to find and remove this killmail_id
+    :ets.foldl(
+      fn {system_id, killmail_ids}, _acc ->
+        if kill_id in killmail_ids do
+          updated_ids = List.delete(killmail_ids, kill_id)
+          :ets.insert(@system_killmails_table, {system_id, updated_ids})
+        end
+
+        :ok
+      end,
+      :ok,
+      @system_killmails_table
+    )
+
+    :ok
+  end
+
+  # ============================================================================
+  # System Fetch Timestamp Management
+  # ============================================================================
+
+  @doc """
+  Sets the fetch timestamp for a system.
+  """
+  @spec fetch_timestamp(system_id(), DateTime.t()) :: :ok
+  def fetch_timestamp(system_id, timestamp) when is_integer(system_id) do
+    :ets.insert(@system_fetch_timestamps_table, {system_id, timestamp})
     :ok
   end
 
   @doc """
-  Inserts an event for streaming functionality.
+  Gets the fetch timestamp for a system.
   """
-  @spec insert_event(system_id(), kill_data()) :: :ok
-  def insert_event(system_id, kill_data) when is_integer(system_id) and is_map(kill_data) do
-    event_id = get_next_event_id()
-    :ets.insert(@killmail_events_table, {event_id, system_id, kill_data})
-    :ok
-  end
-
-  @doc """
-  Gets client offsets for event streaming.
-  """
-  @spec get_client_offsets(client_id()) :: client_offsets()
-  def get_client_offsets(client_id) do
-    case :ets.lookup(@client_offsets_table, client_id) do
-      [{^client_id, offsets}] when is_map(offsets) -> offsets
-      [] -> %{}
+  @spec fetch_timestamp(system_id()) :: {:ok, DateTime.t()} | :error
+  def fetch_timestamp(system_id) when is_integer(system_id) do
+    case :ets.lookup(@system_fetch_timestamps_table, system_id) do
+      [{^system_id, timestamp}] -> {:ok, timestamp}
+      [] -> :error
     end
   end
 
-  @doc """
-  Updates client offsets for event streaming.
-  """
-  @spec put_client_offsets(client_id(), client_offsets()) :: :ok
-  def put_client_offsets(client_id, offsets) when is_map(offsets) do
-    :ets.insert(@client_offsets_table, {client_id, offsets})
-    :ok
-  end
-
-  @doc """
-  Fetches events for a client from specific systems since their last offset.
-  """
-  @spec fetch_events(client_id(), [system_id()], non_neg_integer()) :: [kill_data()]
-  def fetch_events(client_id, system_ids, limit \\ 100)
-      when is_list(system_ids) and is_integer(limit) do
-    client_offsets = get_client_offsets(client_id)
-
-    # Build match specs for each system to get events after the client's offset
-    match_specs =
-      Enum.flat_map(system_ids, fn sys_id ->
-        offset = Map.get(client_offsets, sys_id, 0)
-        [{{:"$1", sys_id, :"$2"}, [{:>, :"$1", offset}], [:"$2"]}]
-      end)
-
-    events = :ets.select(@killmail_events_table, match_specs)
-
-    # Take only the requested limit and sort by event ID
-    events
-    |> Enum.take(limit)
-    |> Enum.sort()
-  end
+  # ============================================================================
+  # Testing Support
+  # ============================================================================
 
   @doc """
   Clears all data from all tables (for testing).
   """
-  @spec clear_all() :: :ok
-  def clear_all do
-    :ets.delete_all_objects(@killmails_table)
-    :ets.delete_all_objects(@killmail_events_table)
-    :ets.delete_all_objects(@client_offsets_table)
-    :ets.delete_all_objects(@counters_table)
-    # Reinitialize event counter
-    :ets.insert(@counters_table, {:event_counter, 0})
+  @spec cleanup_tables() :: :ok
+  def cleanup_tables do
+    :ets.delete_all_objects(@killmail_table)
+    :ets.delete_all_objects(@system_killmails_table)
+    :ets.delete_all_objects(@system_fetch_timestamps_table)
     :ok
   end
 
-  # ============================================================================
-  # Private Functions
-  # ============================================================================
-
-  @spec get_next_event_id() :: event_id()
-  defp get_next_event_id do
-    :ets.update_counter(@counters_table, :event_counter, 1)
-  end
+  @doc """
+  Clears all data from all tables (alias for cleanup_tables).
+  """
+  @spec clear() :: :ok
+  def clear, do: cleanup_tables()
 end

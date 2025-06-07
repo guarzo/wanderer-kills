@@ -7,7 +7,7 @@ defmodule WandererKills.Core.CacheUtils do
   """
 
   require Logger
-  alias WandererKills.Core.Cache
+  alias WandererKills.Cache.{ESI, Systems}
 
   @doc """
   Caches killmails for a specific system.
@@ -30,8 +30,8 @@ defmodule WandererKills.Core.CacheUtils do
   def cache_killmails_for_system(system_id, killmails) when is_list(killmails) do
     try do
       # Update fetch timestamp
-      case Cache.set_system_fetch_timestamp(system_id, DateTime.utc_now()) do
-        {:ok, :set} -> :ok
+      case Systems.set_fetch_timestamp(system_id, DateTime.utc_now()) do
+        {:ok, _} -> :ok
         # Continue anyway
         {:error, _reason} -> :ok
       end
@@ -44,7 +44,7 @@ defmodule WandererKills.Core.CacheUtils do
 
           if killmail_id do
             # Cache the individual killmail
-            Cache.put(:killmails, killmail_id, killmail)
+            ESI.put_killmail(killmail_id, killmail)
             killmail_id
           else
             nil
@@ -54,11 +54,11 @@ defmodule WandererKills.Core.CacheUtils do
 
       # Add each killmail ID to system's killmail list
       Enum.each(killmail_ids, fn killmail_id ->
-        Cache.add_system_killmail(system_id, killmail_id)
+        Systems.add_killmail(system_id, killmail_id)
       end)
 
       # Add system to active list
-      Cache.add_active_system(system_id)
+      Systems.add_active(system_id)
 
       :ok
     rescue

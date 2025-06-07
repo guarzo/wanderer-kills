@@ -7,7 +7,7 @@ defmodule WandererKills.ShipTypes.Info do
   """
 
   require Logger
-  alias WandererKills.Core.Cache
+  alias WandererKills.Cache.ShipTypes
   alias WandererKills.Core.Error
 
   @doc """
@@ -18,7 +18,7 @@ defmodule WandererKills.ShipTypes.Info do
   """
   @spec get_ship_type(integer()) :: {:ok, map()} | {:error, term()}
   def get_ship_type(type_id) when is_integer(type_id) and type_id > 0 do
-    Cache.get(:ship_types, type_id)
+    ShipTypes.get(type_id)
   end
 
   def get_ship_type(_type_id) do

@@ -7,7 +7,8 @@ defmodule WandererKills.ESI.KillmailFetcher do
   """
 
   require Logger
-  alias WandererKills.Core.{Config, Error, Cache}
+  alias WandererKills.Core.{Config, Error}
+  alias WandererKills.Cache.Helper
   alias WandererKills.Core.Behaviours.{DataFetcher}
 
   @behaviour DataFetcher
@@ -17,9 +18,9 @@ defmodule WandererKills.ESI.KillmailFetcher do
   """
   def get_killmail(killmail_id, killmail_hash)
       when is_integer(killmail_id) and is_binary(killmail_hash) do
-    cache_key = {:killmail, killmail_id, killmail_hash}
+    cache_key = "killmail:#{killmail_id}:#{killmail_hash}"
 
-    case Cache.get(:esi_cache, cache_key) do
+    case Helper.get("esi", cache_key) do
       {:ok, killmail} ->
         {:ok, killmail}
 
@@ -37,8 +38,8 @@ defmodule WandererKills.ESI.KillmailFetcher do
       fn {killmail_id, killmail_hash} ->
         get_killmail(killmail_id, killmail_hash)
       end,
-      max_concurrency: Config.batch_concurrency(:esi),
-      timeout: Config.request_timeout(:esi)
+      max_concurrency: Config.batch().concurrency_esi,
+      timeout: Config.timeouts().esi_request_ms
     )
     |> Enum.to_list()
     |> Enum.map(fn
@@ -80,7 +81,7 @@ defmodule WandererKills.ESI.KillmailFetcher do
       {:ok, response} ->
         killmail = parse_killmail_response(killmail_id, killmail_hash, response)
 
-        case Cache.put_with_ttl(:esi_cache, cache_key, killmail, cache_ttl()) do
+        case Helper.put("esi", cache_key, killmail) do
           :ok ->
             Logger.debug("Successfully cached killmail", killmail_id: killmail_id)
             {:ok, killmail}
@@ -145,9 +146,8 @@ defmodule WandererKills.ESI.KillmailFetcher do
     Map.put(killmail, "killmail_hash", killmail_hash)
   end
 
-  defp esi_base_url, do: Config.service_url(:esi)
-  defp cache_ttl, do: Config.cache_ttl(:esi_killmail)
-  defp http_client, do: Config.http_client()
+  defp esi_base_url, do: Config.services().esi_base_url
+  defp http_client, do: Config.app().http_client
 
   defp default_headers do
     [
@@ -158,8 +158,8 @@ defmodule WandererKills.ESI.KillmailFetcher do
 
   defp request_options do
     [
-      timeout: Config.request_timeout(:esi),
-      recv_timeout: Config.request_timeout(:esi)
+      timeout: Config.timeouts().esi_request_ms,
+      recv_timeout: Config.timeouts().esi_request_ms
     ]
   end
 end

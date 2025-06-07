@@ -16,7 +16,7 @@ defmodule WandererKills.ESI.Client do
   @doc """
   Gets ESI base URL from configuration.
   """
-  def base_url, do: Config.service_url(:esi)
+  def base_url, do: Config.services().esi_base_url
 
   # ============================================================================
   # ESIClient Behaviour Implementation

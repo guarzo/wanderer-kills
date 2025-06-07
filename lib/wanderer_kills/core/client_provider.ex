@@ -37,6 +37,6 @@ defmodule WandererKills.Core.Http.ClientProvider do
   """
   @spec get() :: module()
   def get do
-    WandererKills.Core.Config.http_client()
+    WandererKills.Core.Config.app().http_client
   end
 end

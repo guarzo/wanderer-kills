@@ -190,7 +190,8 @@ defmodule WandererKills.Killmails.Coordinator do
   defp store_killmail_async(system_id, enriched, killmail_id) do
     Task.start(fn ->
       try do
-        :ok = WandererKills.Killmails.Store.insert_event(system_id, enriched)
+        killmail_id = enriched["killmail_id"]
+        :ok = WandererKills.KillStore.put(killmail_id, system_id, enriched)
 
         Logger.info("Successfully enriched and stored killmail", %{
           killmail_id: killmail_id,
@@ -199,13 +200,22 @@ defmodule WandererKills.Killmails.Coordinator do
           status: :success
         })
       rescue
-        error ->
-          Logger.error("Failed to store killmail", %{
+        # Only rescue specific known exception types to avoid masking bugs
+        error in [ArgumentError] ->
+          Logger.error("Invalid arguments when storing killmail", %{
             killmail_id: killmail_id,
             system_id: system_id,
             operation: :process_killmail,
             error: Exception.message(error),
-            stacktrace: Exception.format_stacktrace(__STACKTRACE__),
+            status: :error
+          })
+
+        error in [BadMapError] ->
+          Logger.error("Invalid killmail data structure", %{
+            killmail_id: killmail_id,
+            system_id: system_id,
+            operation: :process_killmail,
+            error: Exception.message(error),
             status: :error
           })
       end
@@ -376,13 +386,22 @@ defmodule WandererKills.Killmails.Coordinator do
           {:error, reason}
       end
     rescue
-      error ->
-        Logger.error("Exception during single killmail processing",
-          error: inspect(error),
+      # Only rescue specific known exception types
+      error in [ArgumentError] ->
+        Logger.error("Invalid arguments during killmail processing",
+          error: Exception.message(error),
           operation: :process_single_killmail
         )
 
-        {:error, Error.parsing_error(:exception, "Exception during killmail processing")}
+        {:error, Error.validation_error(:invalid_arguments, Exception.message(error))}
+
+      error in [BadMapError] ->
+        Logger.error("Invalid killmail data structure",
+          error: Exception.message(error),
+          operation: :process_single_killmail
+        )
+
+        {:error, Error.killmail_error(:invalid_format, Exception.message(error))}
     end
   end
 

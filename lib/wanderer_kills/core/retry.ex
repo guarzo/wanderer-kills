@@ -41,9 +41,9 @@ defmodule WandererKills.Core.Retry do
   """
   @spec retry_with_backoff((-> term()), retry_opts()) :: {:ok, term()} | {:error, term()}
   def retry_with_backoff(fun, opts \\ []) do
-    max_retries = Keyword.get(opts, :max_retries, Config.retry_http_max_retries())
-    base_delay = Keyword.get(opts, :base_delay, Config.retry_http_base_delay())
-    max_delay = Keyword.get(opts, :max_delay, Config.retry_http_max_delay())
+    max_retries = Keyword.get(opts, :max_retries, Config.retry().http_max_retries)
+    base_delay = Keyword.get(opts, :base_delay, Config.retry().http_base_delay)
+    max_delay = Keyword.get(opts, :max_delay, Config.retry().http_max_delay)
     operation_name = Keyword.get(opts, :operation_name, "operation")
 
     rescue_only =

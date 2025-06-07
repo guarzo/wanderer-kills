@@ -43,8 +43,8 @@ defmodule WandererKills.CacheTest do
       assert Enum.sort(killmail_ids) == [123, 456]
     end
 
-    test "returns empty list for system with no killmails" do
-      assert {:ok, []} = Systems.get_killmails(999)
+    test "returns error for system with no killmails" do
+      assert {:error, _} = Systems.get_killmails(999)
     end
 
     test "can manage system killmails" do

@@ -43,7 +43,7 @@ defmodule WandererKills.Zkb.Client do
   @type killmail :: map()
 
   # Get the HTTP client from configuration
-  defp http_client, do: Config.http_client()
+  defp http_client, do: Config.app().http_client
 
   @doc """
   Fetches a killmail from zKillboard with telemetry.
@@ -403,9 +403,9 @@ defmodule WandererKills.Zkb.Client do
   end
 
   defp fetch_from_cache do
-    alias WandererKills.Core.Cache
+    alias WandererKills.Cache.Systems
 
-    case Cache.get_active_systems() do
+    case Systems.get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         {:ok, systems}
 

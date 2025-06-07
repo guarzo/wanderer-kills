@@ -7,10 +7,11 @@ defmodule WandererKills.Cache.Systems do
   Cachex dependencies.
   """
 
-  alias WandererKills.Core.{Config, Error, Clock}
+  alias WandererKills.Core.{Error, Clock}
+  alias WandererKills.Cache.Helper
   require Logger
 
-  @cache_name :systems
+  @namespace "systems"
 
   @doc """
   Generates a cache key for system data.
@@ -25,9 +26,9 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec get_killmails(integer()) :: {:ok, [integer()]} | {:error, Error.t()}
   def get_killmails(system_id) when is_integer(system_id) do
-    cache_key = key(:killmails, system_id)
+    cache_key = "killmails:#{system_id}"
 
-    case Cachex.get(@cache_name, cache_key) do
+    case Helper.get(@namespace, cache_key) do
       {:ok, nil} ->
         {:error, Error.cache_error(:not_found, "System killmails not found in cache")}
 
@@ -36,11 +37,15 @@ defmodule WandererKills.Cache.Systems do
 
       {:ok, _invalid_data} ->
         # Clean up corrupted data
-        Cachex.del(@cache_name, cache_key)
+        Helper.delete(@namespace, cache_key)
         {:error, Error.cache_error(:invalid_data, "Corrupted system killmails data")}
 
       {:error, reason} ->
-        Logger.error("Cache get failed", key: cache_key, reason: inspect(reason))
+        Logger.error("Cache get failed",
+          key: "#{@namespace}:#{cache_key}",
+          reason: inspect(reason)
+        )
+
         {:error, Error.cache_error(:get_failed, "Failed to get from cache", %{reason: reason})}
     end
   end
@@ -74,15 +79,18 @@ defmodule WandererKills.Cache.Systems do
   @spec put_killmails(integer(), [integer()]) :: :ok | {:error, Error.t()}
   def put_killmails(system_id, killmail_ids)
       when is_integer(system_id) and is_list(killmail_ids) do
-    cache_key = key(:killmails, system_id)
-    ttl_ms = Config.cache_ttl(:system) * 1000
+    cache_key = "killmails:#{system_id}"
 
-    case Cachex.put(@cache_name, cache_key, killmail_ids, ttl: ttl_ms) do
+    case Helper.put(@namespace, cache_key, killmail_ids) do
       {:ok, true} ->
         :ok
 
       {:error, reason} ->
-        Logger.error("Cache put failed", key: cache_key, reason: inspect(reason))
+        Logger.error("Cache put failed",
+          key: "#{@namespace}:#{cache_key}",
+          reason: inspect(reason)
+        )
+
         {:error, Error.cache_error(:put_failed, "Failed to put in cache", %{reason: reason})}
     end
   end
@@ -92,9 +100,9 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec is_active?(integer()) :: {:ok, boolean()} | {:error, Error.t()}
   def is_active?(system_id) when is_integer(system_id) do
-    cache_key = key(:active, system_id)
+    cache_key = "active:#{system_id}"
 
-    case Cachex.get(@cache_name, cache_key) do
+    case Helper.get(@namespace, cache_key) do
       {:ok, nil} ->
         {:ok, false}
 
@@ -102,7 +110,11 @@ defmodule WandererKills.Cache.Systems do
         {:ok, true}
 
       {:error, reason} ->
-        Logger.error("Cache get failed", key: cache_key, reason: inspect(reason))
+        Logger.error("Cache get failed",
+          key: "#{@namespace}:#{cache_key}",
+          reason: inspect(reason)
+        )
+
         {:error, Error.cache_error(:get_failed, "Failed to get from cache", %{reason: reason})}
     end
   end
@@ -112,21 +124,24 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec add_active(integer()) :: {:ok, :added | :already_exists} | {:error, Error.t()}
   def add_active(system_id) when is_integer(system_id) do
-    cache_key = key(:active, system_id)
+    cache_key = "active:#{system_id}"
     timestamp = Clock.now()
-    ttl_ms = Config.cache_ttl(:system) * 1000
 
     case is_active?(system_id) do
       {:ok, true} ->
         {:ok, :already_exists}
 
       {:ok, false} ->
-        case Cachex.put(@cache_name, cache_key, timestamp, ttl: ttl_ms) do
+        case Helper.put(@namespace, cache_key, timestamp) do
           {:ok, true} ->
             {:ok, :added}
 
           {:error, reason} ->
-            Logger.error("Cache put failed", key: cache_key, reason: inspect(reason))
+            Logger.error("Cache put failed",
+              key: "#{@namespace}:#{cache_key}",
+              reason: inspect(reason)
+            )
+
             {:error, Error.cache_error(:put_failed, "Failed to put in cache", %{reason: reason})}
         end
 
@@ -140,14 +155,14 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec get_active_systems() :: {:ok, [integer()]} | {:error, Error.t()}
   def get_active_systems do
-    case Cachex.stream(@cache_name, "system:active:*") do
+    case Helper.stream(@namespace, "active:*") do
       {:ok, stream} ->
         system_ids =
           stream
           |> Enum.map(fn {key, _value} ->
-            # Extract system_id from "system:active:12345" format
+            # Extract system_id from "systems:active:12345" format
             case String.split(key, ":") do
-              ["system", "active", system_id_str] ->
+              [@namespace, "active", system_id_str] ->
                 case Integer.parse(system_id_str) do
                   {system_id, ""} -> system_id
                   _ -> nil
@@ -175,9 +190,9 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec get_fetch_timestamp(integer()) :: {:ok, DateTime.t()} | {:error, Error.t()}
   def get_fetch_timestamp(system_id) when is_integer(system_id) do
-    cache_key = key(:fetch_timestamp, system_id)
+    cache_key = "fetch_timestamp:#{system_id}"
 
-    case Cachex.get(@cache_name, cache_key) do
+    case Helper.get(@namespace, cache_key) do
       {:ok, nil} ->
         {:error,
          Error.not_found_error("No fetch timestamp found for system", %{system_id: system_id})}
@@ -187,11 +202,15 @@ defmodule WandererKills.Cache.Systems do
 
       {:ok, _invalid_data} ->
         # Clean up corrupted data
-        Cachex.del(@cache_name, cache_key)
+        Helper.delete(@namespace, cache_key)
         {:error, Error.cache_error(:invalid_data, "Corrupted timestamp data")}
 
       {:error, reason} ->
-        Logger.error("Cache get failed", key: cache_key, reason: inspect(reason))
+        Logger.error("Cache get failed",
+          key: "#{@namespace}:#{cache_key}",
+          reason: inspect(reason)
+        )
+
         {:error, Error.cache_error(:get_failed, "Failed to get from cache", %{reason: reason})}
     end
   end
@@ -201,16 +220,19 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec set_fetch_timestamp(integer(), DateTime.t() | nil) :: {:ok, :set} | {:error, Error.t()}
   def set_fetch_timestamp(system_id, timestamp \\ nil) when is_integer(system_id) do
-    cache_key = key(:fetch_timestamp, system_id)
+    cache_key = "fetch_timestamp:#{system_id}"
     timestamp = timestamp || Clock.now()
-    ttl_ms = Config.cache_ttl(:system) * 1000
 
-    case Cachex.put(@cache_name, cache_key, timestamp, ttl: ttl_ms) do
+    case Helper.put(@namespace, cache_key, timestamp) do
       {:ok, true} ->
         {:ok, :set}
 
       {:error, reason} ->
-        Logger.error("Cache put failed", key: cache_key, reason: inspect(reason))
+        Logger.error("Cache put failed",
+          key: "#{@namespace}:#{cache_key}",
+          reason: inspect(reason)
+        )
+
         {:error, Error.cache_error(:put_failed, "Failed to put in cache", %{reason: reason})}
     end
   end
@@ -240,9 +262,9 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec get_kill_count(integer()) :: {:ok, integer()} | {:error, Error.t()}
   def get_kill_count(system_id) when is_integer(system_id) do
-    cache_key = key(:kill_count, system_id)
+    cache_key = "kill_count:#{system_id}"
 
-    case Cachex.get(@cache_name, cache_key) do
+    case Helper.get(@namespace, cache_key) do
       {:ok, nil} ->
         {:ok, 0}
 
@@ -251,11 +273,15 @@ defmodule WandererKills.Cache.Systems do
 
       {:ok, _invalid_data} ->
         # Clean up corrupted data and return 0
-        Cachex.del(@cache_name, cache_key)
+        Helper.delete(@namespace, cache_key)
         {:ok, 0}
 
       {:error, reason} ->
-        Logger.error("Cache get failed", key: cache_key, reason: inspect(reason))
+        Logger.error("Cache get failed",
+          key: "#{@namespace}:#{cache_key}",
+          reason: inspect(reason)
+        )
+
         {:error, Error.cache_error(:get_failed, "Failed to get from cache", %{reason: reason})}
     end
   end
@@ -265,19 +291,22 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec increment_kill_count(integer()) :: {:ok, integer()} | {:error, Error.t()}
   def increment_kill_count(system_id) when is_integer(system_id) do
-    cache_key = key(:kill_count, system_id)
-    ttl_ms = Config.cache_ttl(:system) * 1000
+    cache_key = "kill_count:#{system_id}"
 
     case get_kill_count(system_id) do
       {:ok, current_count} ->
         new_count = current_count + 1
 
-        case Cachex.put(@cache_name, cache_key, new_count, ttl: ttl_ms) do
+        case Helper.put(@namespace, cache_key, new_count) do
           {:ok, true} ->
             {:ok, new_count}
 
           {:error, reason} ->
-            Logger.error("Cache put failed", key: cache_key, reason: inspect(reason))
+            Logger.error("Cache put failed",
+              key: "#{@namespace}:#{cache_key}",
+              reason: inspect(reason)
+            )
+
             {:error, Error.cache_error(:put_failed, "Failed to put in cache", %{reason: reason})}
         end
 
@@ -291,13 +320,13 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec clear() :: :ok | {:error, Error.t()}
   def clear do
-    case Cachex.clear(@cache_name) do
-      {:ok, _} ->
-        :ok
-
-      {:error, reason} ->
-        Logger.error("Cache clear failed", reason: inspect(reason))
-        {:error, Error.cache_error(:clear_failed, "Failed to clear cache", %{reason: reason})}
+    try do
+      Helper.clear_namespace(@namespace)
+      :ok
+    rescue
+      error ->
+        Logger.error("Cache clear failed", reason: inspect(error))
+        {:error, Error.cache_error(:clear_failed, "Failed to clear cache", %{reason: error})}
     end
   end
 
@@ -306,12 +335,12 @@ defmodule WandererKills.Cache.Systems do
   """
   @spec stats() :: [map()]
   def stats do
-    case Cachex.stats(@cache_name) do
+    case Helper.stats() do
       {:ok, stats} ->
-        [Map.put(stats, :cache_name, @cache_name)]
+        [Map.put(stats, :cache_name, :wanderer_cache)]
 
       {:error, _reason} ->
-        [%{cache_name: @cache_name, error: true}]
+        [%{cache_name: :wanderer_cache, error: true}]
     end
   end
 end
