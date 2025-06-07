@@ -337,9 +337,6 @@ defmodule WandererKills.KillStore do
         events
         |> Enum.take(limit)
         |> Enum.map(&elem(&1, 2))
-
-      _ ->
-        []
     end
   end
 
