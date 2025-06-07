@@ -5,10 +5,10 @@
 
 # Define mocks
 Mox.defmock(WandererKills.Http.Client.Mock,
-  for: WandererKills.Infrastructure.Behaviours.HttpClient
+  for: WandererKills.Behaviours.HttpClient
 )
 
-Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Zkb.ClientBehaviour)
+Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Killmails.ZkbClientBehaviour)
 
 # Start ExUnit
 ExUnit.start()
@@ -29,7 +29,7 @@ end
 
 # Set up global mocks - do not stub with real implementation to allow proper mocking in tests
 # Mox.stub_with(WandererKills.Http.Client.Mock, WandererKills.Http.Client)
-# Mox.stub_with(WandererKills.Zkb.Client.Mock, WandererKills.Zkb.Client)
+# Mox.stub_with(WandererKills.Zkb.Client.Mock, WandererKills.Killmails.ZkbClient)
 
 # Configure ExUnit to run tests sequentially
 ExUnit.configure(parallel: false)

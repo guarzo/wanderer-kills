@@ -1,10 +1,10 @@
-defmodule WandererKills.Zkb.ClientTest do
+defmodule WandererKills.Killmails.ZkbClientTest do
   use ExUnit.Case, async: true
   import Mox
 
   @moduletag :external
 
-  alias WandererKills.Zkb.Client, as: ZKB
+  alias WandererKills.Killmails.ZkbClient, as: ZKB
   alias WandererKills.TestHelpers
   alias WandererKills.Http.Client.Mock, as: HttpClientMock
 

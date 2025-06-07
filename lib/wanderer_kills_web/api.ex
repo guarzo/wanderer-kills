@@ -10,10 +10,17 @@ defmodule WandererKillsWeb.Api do
 
   alias WandererKills.Observability.Monitoring
   alias WandererKills.Cache.Helper
-  alias WandererKillsWeb.Plugs.RequestId
+
+  # Moved from WandererKillsWeb.Plugs.RequestId to eliminate single-file directory
+  defp request_id_plug(conn, _opts) do
+    request_id = UUID.uuid4()
+    Process.put(:request_id, request_id)
+    Logger.metadata(request_id: request_id)
+    Plug.Conn.put_resp_header(conn, "x-request-id", request_id)
+  end
 
   plug(Plug.Logger, log: :info)
-  plug(RequestId)
+  plug(:request_id_plug)
   plug(:match)
   plug(Plug.Parsers, parsers: [:json], json_decoder: Jason)
   plug(:dispatch)

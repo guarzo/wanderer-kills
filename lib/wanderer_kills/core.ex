@@ -64,30 +64,8 @@ defmodule WandererKills.Core do
       def get(), do: get_client()
     end
 
-    defmodule Util do
-      @moduledoc false
-      # Deprecated: these functions have been moved to Client or ClientProvider
-      defdelegate request_with_telemetry(url, service, opts \\ []), to: WandererKills.Http.Client
-      defdelegate parse_json_response(response), to: WandererKills.Http.Client
-
-      def build_query_params(params) do
-        opts = WandererKills.Http.ClientProvider.build_request_opts(params: params)
-        Keyword.get(opts, :params, [])
-      end
-
-      def eve_api_headers(user_agent \\ nil) do
-        if user_agent do
-          WandererKills.Http.ClientProvider.default_headers(user_agent: user_agent)
-        else
-          WandererKills.Http.ClientProvider.eve_api_headers()
-        end
-      end
-
-      defdelegate retry_operation(fun, service, opts \\ []), to: WandererKills.Http.Client
-
-      defdelegate validate_response_structure(data, required_fields),
-        to: WandererKills.Http.Client
-    end
+    # Removed Http.Util module - deprecated and unused
+    # All functionality has been moved to Client or ClientProvider
   end
 
   # Processing Module Aliases
@@ -104,14 +82,6 @@ defmodule WandererKills.Core do
     defdelegate parse_ship_type_csvs(file_paths), to: WandererKills.ShipTypes.CSV
     defdelegate download_csv_files(opts \\ []), to: WandererKills.ShipTypes.CSV
     defdelegate read_file(file_path, parser, opts \\ []), to: WandererKills.ShipTypes.CSV
-
-    def parse_ship_types_csv(csv_content), do: parse_ship_type_csvs([csv_content])
-    def download_ship_types_csv(), do: download_csv_files()
-
-    def get_ship_types_from_csv(),
-      do: read_file("ship_types.csv", &WandererKills.ShipTypes.CSV.parse_type_row/1)
-
-    def update_ship_types(), do: parse_ship_type_csvs(["invTypes.csv", "invGroups.csv"])
   end
 
   # Infrastructure Module Aliases
@@ -132,9 +102,6 @@ defmodule WandererKills.Core do
     defdelegate app(), to: WandererKills.Infrastructure.Config
 
     def start_preloader?(), do: WandererKills.Infrastructure.Config.start_preloader?()
-    def cache_killmails_name(), do: :wanderer_kills_cache
-    def cache_system_name(), do: :wanderer_kills_system_cache
-    def cache_esi_name(), do: :wanderer_kills_esi_cache
   end
 
   defmodule Retry do
@@ -153,11 +120,6 @@ defmodule WandererKills.Core do
     defdelegate now_milliseconds(), to: WandererKills.Infrastructure.Clock
     defdelegate hours_ago(hours), to: WandererKills.Infrastructure.Clock
     defdelegate seconds_ago(seconds), to: WandererKills.Infrastructure.Clock
-
-    def utc_now(), do: WandererKills.Infrastructure.Clock.now()
-
-    def get_system_time_with_config(unit),
-      do: WandererKills.Infrastructure.Clock.system_time(unit)
   end
 
   defmodule Constants do

@@ -48,7 +48,7 @@ defmodule WandererKills.Observability.HealthChecks do
   """
 
   require Logger
-  alias WandererKills.Core.{Clock, Config}
+  alias WandererKills.Core.Clock
 
   # ============================================================================
   # Health Check Behaviour Definition
@@ -568,9 +568,8 @@ defmodule WandererKills.Observability.HealthChecks do
     @impl true
     def default_config do
       cache_names = [
-        Config.cache_killmails_name(),
-        Config.cache_system_name(),
-        Config.cache_esi_name()
+        # Single unified cache instance
+        :wanderer_cache
       ]
 
       [
