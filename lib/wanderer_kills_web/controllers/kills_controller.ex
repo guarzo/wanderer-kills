@@ -50,9 +50,6 @@ defmodule WandererKillsWeb.KillsController do
     else
       {:error, :invalid_format} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
-
-      {:error, :invalid_system_ids} ->
-        render_error(conn, 400, "Invalid parameters", "INVALID_PARAMETERS")
     end
   end
 

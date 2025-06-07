@@ -78,10 +78,17 @@ defmodule WandererKills.Client do
         end
       end)
 
+    total_kills =
+      case results do
+        res when is_map(res) -> res |> Map.values() |> List.flatten() |> length()
+        res when is_list(res) -> res |> List.flatten() |> length()
+        _ -> 0
+      end
+
     Logger.info("Fetched kills for multiple systems",
       requested_systems: length(system_ids),
       successful_systems: length(results),
-      total_kills: results |> Map.values() |> List.flatten() |> length()
+      total_kills: total_kills
     )
 
     {:ok, results}
@@ -230,13 +237,6 @@ defmodule WandererKills.Client do
           {:ok, count} -> count
           {:error, _reason} -> 0
         end
-
-      _ ->
-        Logger.warning("Unexpected response from cache for kill count",
-          system_id: system_id
-        )
-
-        0
     end
   end
 
@@ -254,28 +254,49 @@ defmodule WandererKills.Client do
   end
 
   defp get_kill_time(kill) do
-    cond do
-      # Try to get from standard killmail format
-      is_map(kill) and Map.has_key?(kill, "killmail_time") ->
-        parse_datetime(kill["killmail_time"])
+    kill
+    |> extract_time_from_killmail()
+    |> extract_time_from_kill_time()
+    |> extract_time_from_zkb()
+  end
 
-      is_map(kill) and Map.has_key?(kill, "kill_time") ->
-        parse_datetime(kill["kill_time"])
-
-      # Try from ZKB metadata if available
-      is_map(kill) and Map.has_key?(kill, "zkb") ->
-        zkb = kill["zkb"]
-
-        if is_map(zkb) and Map.has_key?(zkb, "killmail_time") do
-          parse_datetime(zkb["killmail_time"])
-        else
-          nil
-        end
-
-      true ->
-        nil
+  defp extract_time_from_killmail(kill) do
+    if is_map(kill) and Map.has_key?(kill, "killmail_time") do
+      {:found, parse_datetime(kill["killmail_time"])}
+    else
+      {:continue, kill}
     end
   end
+
+  defp extract_time_from_kill_time({:found, datetime}), do: datetime
+
+  defp extract_time_from_kill_time({:continue, kill}) do
+    if is_map(kill) and Map.has_key?(kill, "kill_time") do
+      {:found, parse_datetime(kill["kill_time"])}
+    else
+      {:continue, kill}
+    end
+  end
+
+  defp extract_time_from_zkb({:found, datetime}), do: datetime
+
+  defp extract_time_from_zkb({:continue, kill}) do
+    if is_map(kill) and Map.has_key?(kill, "zkb") do
+      extract_time_from_zkb_metadata(kill["zkb"])
+    else
+      nil
+    end
+  end
+
+  defp extract_time_from_zkb_metadata(zkb) when is_map(zkb) do
+    if Map.has_key?(zkb, "killmail_time") do
+      parse_datetime(zkb["killmail_time"])
+    else
+      nil
+    end
+  end
+
+  defp extract_time_from_zkb_metadata(_), do: nil
 
   defp parse_datetime(datetime_string) when is_binary(datetime_string) do
     case DateTime.from_iso8601(datetime_string) do

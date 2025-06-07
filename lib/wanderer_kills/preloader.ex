@@ -404,10 +404,6 @@ defmodule WandererKills.Preloader do
               {:error, reason}
           end
 
-        {:ok, []} ->
-          Logger.debug("No kills found for system", system_id: system_id)
-          {:ok, 0}
-
         {:error, reason} ->
           Logger.warning("Failed to fetch kills for system",
             system_id: system_id,

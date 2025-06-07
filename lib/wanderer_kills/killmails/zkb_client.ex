@@ -155,17 +155,34 @@ defmodule WandererKills.Killmails.ZkbClient do
 
             {:ok, converted_killmails}
 
-          other ->
-            Telemetry.fetch_system_error(system_id, other, :zkb)
+          {:error, reason} ->
+            Telemetry.fetch_system_error(system_id, reason, :zkb)
 
             Logger.error("Failed to fetch system killmails from ZKB",
               system_id: system_id,
               operation: :fetch_system_killmails,
-              error: other,
+              error: reason,
               step: :error
             )
 
-            other
+            {:error, reason}
+
+          other ->
+            # Handle unexpected successful responses
+            error_reason =
+              Error.zkb_error(:unexpected_response, "Unexpected response format from ZKB", false)
+
+            Telemetry.fetch_system_error(system_id, error_reason, :zkb)
+
+            Logger.error("Failed to fetch system killmails from ZKB",
+              system_id: system_id,
+              operation: :fetch_system_killmails,
+              error: error_reason,
+              unexpected_response: other,
+              step: :error
+            )
+
+            {:error, error_reason}
         end
 
       {:error, reason} ->
