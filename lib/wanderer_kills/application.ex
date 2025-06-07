@@ -26,8 +26,6 @@ defmodule WandererKills.Application do
     base_children = [
       {Task.Supervisor, name: WandererKills.TaskSupervisor},
       {Phoenix.PubSub, name: WandererKills.PubSub},
-      # ETS tables supervisor (must start before processes that use them)
-      WandererKills.Core.ETSSupervisor,
       {WandererKills.Core.Cache, []},
       WandererKills.Killmails.Store,
       WandererKills.Observability.Monitoring,

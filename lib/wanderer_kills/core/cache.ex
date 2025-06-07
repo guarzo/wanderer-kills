@@ -56,6 +56,12 @@ defmodule WandererKills.Core.Cache do
   @system_fetch_timestamps_table :system_fetch_timestamps
   @system_kill_counts_table :system_kill_counts
 
+  # KillmailStore tables
+  @killmail_events_table :killmail_events
+  @client_offsets_table :client_offsets
+  @counters_table :counters
+  @killmails_table :killmails
+
   @all_tables [
     @cache_table,
     @ship_types_table,
@@ -65,7 +71,12 @@ defmodule WandererKills.Core.Cache do
     @system_killmails_table,
     @active_systems_table,
     @system_fetch_timestamps_table,
-    @system_kill_counts_table
+    @system_kill_counts_table,
+    # KillmailStore tables
+    @killmail_events_table,
+    @client_offsets_table,
+    @counters_table,
+    @killmails_table
   ]
 
   ## GenServer API
@@ -303,7 +314,31 @@ defmodule WandererKills.Core.Cache do
   @spec create_table_specs([table_name()]) :: [table_spec()]
   defp create_table_specs(table_names) do
     Enum.map(table_names, fn table_name ->
-      {table_name, [:named_table, :set, :public], "Cache table for #{table_name}"}
+      case table_name do
+        :killmail_events ->
+          {table_name, [:ordered_set, :public, :named_table], "Killmail events for streaming"}
+
+        :client_offsets ->
+          {table_name, [:set, :public, :named_table], "Client offset tracking"}
+
+        :counters ->
+          {table_name, [:set, :public, :named_table], "Sequence counters"}
+
+        :killmails ->
+          {table_name, [:named_table, :set, :public], "Individual killmail storage"}
+
+        :system_killmails ->
+          {table_name, [:named_table, :set, :public], "System to killmail mapping"}
+
+        :system_kill_counts ->
+          {table_name, [:named_table, :set, :public], "Kill counts per system"}
+
+        :system_fetch_timestamps ->
+          {table_name, [:named_table, :set, :public], "Fetch timestamps per system"}
+
+        _ ->
+          {table_name, [:named_table, :set, :public], "Cache table for #{table_name}"}
+      end
     end)
   end
 

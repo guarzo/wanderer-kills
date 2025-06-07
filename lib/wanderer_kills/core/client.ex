@@ -43,7 +43,7 @@ defmodule WandererKills.Core.Http.Client do
     - Metadata: `%{method: "GET", url: url, error: reason}` on failure
   """
 
-  @behaviour WandererKills.Core.Http.ClientBehaviour
+  @behaviour WandererKills.Core.Behaviours.HttpClient
 
   require Logger
   alias WandererKills.Core.Error.{ConnectionError, TimeoutError, RateLimitError}
@@ -57,11 +57,76 @@ defmodule WandererKills.Core.Http.Client do
   @type opts :: keyword()
   @type response :: {:ok, map()} | {:error, term()}
 
-  @callback get(url :: String.t()) :: {:ok, map()} | {:error, term()}
-  @callback get_with_rate_limit(url :: String.t(), opts :: keyword()) ::
-              {:ok, map()} | {:error, term()}
+  # Implementation callbacks (not part of behaviour)
+
+  # ============================================================================
+  # HttpClient Behaviour Implementation
+  # ============================================================================
 
   @impl true
+  @doc """
+  Makes a GET request.
+
+  This is a simplified version that delegates to get_with_rate_limit/2.
+  """
+  @spec get(url(), headers(), opts()) :: response()
+  def get(url, headers \\ [], options \\ []) do
+    opts = Keyword.merge(options, headers: headers)
+    get_with_rate_limit(url, opts)
+  end
+
+  @impl true
+  @doc """
+  Makes a POST request.
+
+  Note: This is a basic implementation. Extend as needed.
+  """
+  @spec post(url(), term(), headers(), opts()) :: response()
+  def post(url, body, headers \\ [], options \\ []) do
+    opts = Keyword.merge(options, headers: headers, json: body)
+
+    case Req.post(url, opts) do
+      {:ok, %{status: status} = resp} -> handle_status_code(status, resp)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  @doc """
+  Makes a PUT request.
+
+  Note: This is a basic implementation. Extend as needed.
+  """
+  @spec put(url(), term(), headers(), opts()) :: response()
+  def put(url, body, headers \\ [], options \\ []) do
+    opts = Keyword.merge(options, headers: headers, json: body)
+
+    case Req.put(url, opts) do
+      {:ok, %{status: status} = resp} -> handle_status_code(status, resp)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  @doc """
+  Makes a DELETE request.
+
+  Note: This is a basic implementation. Extend as needed.
+  """
+  @spec delete(url(), headers(), opts()) :: response()
+  def delete(url, headers \\ [], options \\ []) do
+    opts = Keyword.merge(options, headers: headers)
+
+    case Req.delete(url, opts) do
+      {:ok, %{status: status} = resp} -> handle_status_code(status, resp)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # ============================================================================
+  # Main Implementation
+  # ============================================================================
+
   @doc """
   Makes a GET request with rate limiting and retries.
 
@@ -172,7 +237,6 @@ defmodule WandererKills.Core.Http.Client do
     result
   end
 
-  @impl true
   @doc """
   Centralized HTTP status code handling.
 

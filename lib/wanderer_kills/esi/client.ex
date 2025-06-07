@@ -77,6 +77,22 @@ defmodule WandererKills.ESI.Client do
   end
 
   @doc """
+  Fetches a killmail directly from ESI API (raw implementation).
+
+  This provides direct access to the ESI API for killmail fetching,
+  which is used by the parser when full killmail data is needed.
+  """
+  @spec get_killmail_raw(integer(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_killmail_raw(killmail_id, killmail_hash) do
+    url = "#{base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
+
+    case WandererKills.Core.Http.ClientProvider.get().get(url, []) do
+      {:ok, %{body: body}} -> {:ok, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Fetches multiple killmails concurrently.
   """
   def get_killmails_batch(killmail_specs) do

@@ -55,7 +55,7 @@ defmodule WandererKills.Killmails.Coordinator do
   """
 
   require Logger
-  alias WandererKills.Parser.Core
+  alias WandererKills.Killmails.Parser
   alias WandererKills.Core.Error
 
   @type killmail :: map()
@@ -106,55 +106,11 @@ defmodule WandererKills.Killmails.Coordinator do
   @spec process_killmail(killmail(), map(), DateTime.t()) ::
           {:ok, killmail()} | {:ok, :kill_older} | {:error, Error.t()}
   defp process_killmail(full, zkb, cutoff) do
-    with {:ok, merged} <- Core.merge_killmail_data(full, %{"zkb" => zkb}),
-         {:ok, built} <- Core.build_kill_data(merged, cutoff),
-         {:ok, enriched} <- enrich_killmail(built) do
-      # Get system_id with nil check
-      system_id = enriched["solar_system_id"] || enriched["system_id"]
+    # Merge zkb data into the full killmail
+    merged = Map.put(full, "zkb", zkb)
 
-      if system_id do
-        # Make insert_event asynchronous using Task
-        Task.start(fn ->
-          try do
-            :ok = WandererKills.Data.Stores.KillmailStore.insert_event(system_id, enriched)
-
-            Logger.info("Successfully enriched and stored killmail", %{
-              killmail_id: full["killmail_id"],
-              system_id: system_id,
-              operation: :process_killmail,
-              status: :success
-            })
-          rescue
-            error ->
-              Logger.error("Failed to store killmail", %{
-                killmail_id: full["killmail_id"],
-                system_id: system_id,
-                operation: :process_killmail,
-                error: Exception.message(error),
-                stacktrace: Exception.format_stacktrace(__STACKTRACE__),
-                status: :error
-              })
-          end
-        end)
-
-        {:ok, enriched}
-      else
-        Logger.error("Missing system_id in enriched killmail", %{
-          killmail_id: full["killmail_id"],
-          operation: :process_killmail,
-          status: :error
-        })
-
-        {:error,
-         Error.killmail_error(
-           :missing_system_id,
-           "System ID missing from enriched killmail",
-           false,
-           %{killmail_id: full["killmail_id"]}
-         )}
-      end
-    else
-      :older ->
+    case Parser.parse_full_killmail(merged, cutoff) do
+      {:ok, :kill_older} ->
         Logger.debug("Killmail is older than cutoff", %{
           killmail_id: full["killmail_id"],
           operation: :process_killmail,
@@ -163,8 +119,67 @@ defmodule WandererKills.Killmails.Coordinator do
 
         {:ok, :kill_older}
 
+      {:ok, parsed} ->
+        case enrich_killmail(parsed) do
+          {:ok, enriched} ->
+            # Get system_id with nil check
+            system_id = enriched["solar_system_id"] || enriched["system_id"]
+
+            if system_id do
+              # Make insert_event asynchronous using Task
+              Task.start(fn ->
+                try do
+                  :ok = WandererKills.Killmails.Store.insert_event(system_id, enriched)
+
+                  Logger.info("Successfully enriched and stored killmail", %{
+                    killmail_id: full["killmail_id"],
+                    system_id: system_id,
+                    operation: :process_killmail,
+                    status: :success
+                  })
+                rescue
+                  error ->
+                    Logger.error("Failed to store killmail", %{
+                      killmail_id: full["killmail_id"],
+                      system_id: system_id,
+                      operation: :process_killmail,
+                      error: Exception.message(error),
+                      stacktrace: Exception.format_stacktrace(__STACKTRACE__),
+                      status: :error
+                    })
+                end
+              end)
+
+              {:ok, enriched}
+            else
+              Logger.error("Missing system_id in enriched killmail", %{
+                killmail_id: full["killmail_id"],
+                operation: :process_killmail,
+                status: :error
+              })
+
+              {:error,
+               Error.killmail_error(
+                 :missing_system_id,
+                 "System ID missing from enriched killmail",
+                 false,
+                 %{killmail_id: full["killmail_id"]}
+               )}
+            end
+
+          {:error, reason} ->
+            Logger.error("Failed to enrich killmail", %{
+              killmail_id: full["killmail_id"],
+              operation: :process_killmail,
+              error: reason,
+              status: :error
+            })
+
+            {:error, reason}
+        end
+
       {:error, reason} ->
-        Logger.error("Failed to process killmail", %{
+        Logger.error("Failed to parse killmail", %{
           killmail_id: full["killmail_id"],
           operation: :process_killmail,
           error: reason,
@@ -221,7 +236,7 @@ defmodule WandererKills.Killmails.Coordinator do
       step: :start
     })
 
-    case WandererKills.External.ESI.Client.get_killmail(id, hash) do
+    case WandererKills.ESI.Client.get_killmail_raw(id, hash) do
       {:ok, full} ->
         Logger.debug("Successfully fetched full killmail from ESI", %{
           killmail_id: id,

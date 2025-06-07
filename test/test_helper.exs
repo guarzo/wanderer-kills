@@ -4,7 +4,7 @@
 :ets.new(:esi_cache_test, [:named_table, :public, :set])
 
 # Define mocks
-Mox.defmock(WandererKills.Core.Http.Client.Mock, for: WandererKills.Core.Http.ClientBehaviour)
+Mox.defmock(WandererKills.Core.Http.Client.Mock, for: WandererKills.Core.Behaviours.HttpClient)
 Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Zkb.ClientBehaviour)
 
 # Start ExUnit
