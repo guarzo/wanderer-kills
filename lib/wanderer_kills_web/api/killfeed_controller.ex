@@ -10,7 +10,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   import WandererKillsWeb.Api.Helpers, only: [send_json_resp: 3]
 
   alias WandererKills.Killmails.Store
-  alias WandererKills.Core.Constants
+  alias WandererKills.Infrastructure.Config
 
   # System ID validation
   defp validate_system_ids(system_ids) when is_list(system_ids) do
@@ -29,7 +29,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
   defp validate_system_ids(_), do: {:error, :systems_invalid_type}
 
   defp validate_system_id(system_id) when is_integer(system_id) do
-    if system_id >= 30_000_000 and system_id <= Constants.validation(:max_system_id) do
+    if system_id >= 30_000_000 and system_id <= Config.validation(:max_system_id) do
       {:ok, system_id}
     else
       {:error, :system_id_out_of_range}

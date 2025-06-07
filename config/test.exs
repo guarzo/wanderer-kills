@@ -44,7 +44,7 @@ config :wanderer_kills,
   telemetry_enabled_metrics: [],
   telemetry_sampling_rate: 0.0
 
-# ESI cache configuration removed - now using Core.Cache directly
+# ESI cache configuration removed - now using Cache.Helper directly
 
 # Configure Cachex for tests
 config :cachex, :default_ttl, :timer.minutes(1)

@@ -134,7 +134,7 @@ defmodule WandererKills.Infrastructure.Config do
     # Application settings
     app: %{
       port: 4004,
-      http_client: "WandererKills.Core.Http.Client",
+      http_client: "WandererKills.Http.Client",
       zkb_client: WandererKills.Killmails.ZkbClient
     }
   ]

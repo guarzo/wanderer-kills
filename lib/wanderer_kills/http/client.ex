@@ -13,7 +13,7 @@ defmodule WandererKills.Http.Client do
   ## Usage
 
       # Basic GET request with rate limiting
-      {:ok, response} = WandererKills.Core.Http.Client.get_with_rate_limit("https://api.example.com/data")
+      {:ok, response} = WandererKills.Http.Client.get_with_rate_limit("https://api.example.com/data")
 
       # GET request with custom options
       opts = [
@@ -21,11 +21,11 @@ defmodule WandererKills.Http.Client do
         headers: [{"authorization", "Bearer token"}],
         timeout: 5000
       ]
-      {:ok, response} = WandererKills.Core.Http.Client.get_with_rate_limit("https://api.example.com/data", opts)
+      {:ok, response} = WandererKills.Http.Client.get_with_rate_limit("https://api.example.com/data", opts)
 
   ## Error Handling
 
-  The module defines several custom error types (in `WandererKills.Core.Error`):
+  The module defines several custom error types (in `WandererKills.Infrastructure.Error`):
     - `ConnectionError` - Raised when a connection fails
     - `TimeoutError` - Raised when a request times out
     - `RateLimitError` - Raised when rate limit is exceeded

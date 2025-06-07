@@ -48,7 +48,7 @@ defmodule WandererKills.Observability.HealthChecks do
   """
 
   require Logger
-  alias WandererKills.Core.Clock
+  alias WandererKills.Infrastructure.Clock
 
   # ============================================================================
   # Health Check Behaviour Definition

@@ -6,7 +6,7 @@ defmodule WandererKills.Cache.Helper do
   with namespaced keys and appropriate TTLs per namespace.
   """
 
-  alias WandererKills.Core.Config
+  alias WandererKills.Infrastructure.Config
 
   @cache_name :wanderer_cache
 

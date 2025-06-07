@@ -266,7 +266,7 @@ defmodule WandererKills.ShipTypes.Updater do
   update_ship_groups([23, 16])
 
   # Update all known ship groups
-  update_ship_groups(Constants.ship_group_ids())
+  update_ship_groups(ship_group_ids())
   ```
   """
   @spec update_ship_groups([integer()]) :: :ok | {:error, term()}

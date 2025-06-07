@@ -32,6 +32,7 @@ defmodule WandererKills.ShipTypes.CSV do
   require Logger
   alias NimbleCSV.RFC4180, as: CSVParser
   alias WandererKills.Infrastructure.Error
+  alias WandererKills.Infrastructure.BatchProcessor
 
   @type parse_result :: {:ok, term()} | {:error, Error.t()}
   @type parser_function :: (map() -> term() | nil)
@@ -514,8 +515,6 @@ defmodule WandererKills.ShipTypes.CSV do
   end
 
   defp download_files(file_names, data_dir) do
-    alias WandererKills.Core.BatchProcessor
-
     download_fn = fn file_name -> download_single_file(file_name, data_dir) end
 
     case BatchProcessor.process_parallel(file_names, download_fn,
@@ -550,7 +549,7 @@ defmodule WandererKills.ShipTypes.CSV do
 
     Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
 
-    case WandererKills.Core.Http.ClientProvider.get_client().get(url, []) do
+    case WandererKills.Http.ClientProvider.get_client().get(url, []) do
       {:ok, %{body: body}} ->
         case File.write(download_path, body) do
           :ok ->

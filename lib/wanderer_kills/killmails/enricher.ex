@@ -9,7 +9,7 @@ defmodule WandererKills.Killmails.Enricher do
   """
 
   require Logger
-  alias WandererKills.Core.Config
+  alias WandererKills.Infrastructure.Config
   alias WandererKills.Cache.Helper
   alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
 

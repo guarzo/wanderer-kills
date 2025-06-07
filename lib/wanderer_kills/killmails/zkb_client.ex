@@ -435,7 +435,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     end
   end
 
-  # Note: Query parameter building now handled by WandererKills.Core.Http.Util
+  # Note: Query parameter building now handled by WandererKills.Http.Client
 
   # Helper functions for enriching killmails
   defp get_victim_info(killmail) do
@@ -460,7 +460,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     @base_url
   end
 
-  # Note: Response parsing now handled by WandererKills.Core.Http.Util
+  # Note: Response parsing now handled by WandererKills.Http.Client
 
   # Converts ZKB reference format to partial killmail format expected by parser.
   # ZKB format: %{"killmail_id" => id, "zkb" => metadata}

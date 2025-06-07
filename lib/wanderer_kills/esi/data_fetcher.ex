@@ -7,7 +7,7 @@ defmodule WandererKills.ESI.DataFetcher do
   """
 
   require Logger
-  alias WandererKills.Core.{Config, Error}
+  alias WandererKills.Infrastructure.{Config, Error}
   alias WandererKills.Behaviours.{ESIClient, DataFetcher}
   alias WandererKills.Cache.Helper
 

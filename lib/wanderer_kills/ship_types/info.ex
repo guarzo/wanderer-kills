@@ -8,7 +8,7 @@ defmodule WandererKills.ShipTypes.Info do
 
   require Logger
   alias WandererKills.Cache.Helper
-  alias WandererKills.Core.Error
+  alias WandererKills.Infrastructure.Error
 
   @doc """
   Gets ship type information from the ESI cache.
