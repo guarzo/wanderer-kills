@@ -37,6 +37,9 @@ defmodule WandererKills.Killmails.Cache do
   @doc """
   Stores a processed killmail in the cache.
 
+  This function also handles adding the killmail to the system's killmail list
+  and is compatible with both new and legacy killmail formats.
+
   ## Parameters
   - `killmail` - The processed killmail data to store
 
@@ -68,6 +71,13 @@ defmodule WandererKills.Killmails.Cache do
       case Cache.put(:killmails, killmail_id, killmail) do
         :ok ->
           Logger.debug("Successfully stored killmail", killmail_id: killmail_id)
+
+          # Add to system killmail list if system ID is available
+          case get_system_id(killmail) do
+            nil -> :ok
+            sys_id -> Cache.add_system_killmail(sys_id, killmail_id)
+          end
+
           :ok
 
         error ->
@@ -261,9 +271,41 @@ defmodule WandererKills.Killmails.Cache do
   def remove_killmail(_),
     do: {:error, Error.killmail_error(:invalid_killmail_id, "Killmail ID must be an integer")}
 
+  @doc """
+  Increments the kill count for a system.
+
+  This function extracts the system ID from a killmail and increments
+  the kill count for that system. This consolidates the previously
+  duplicated update_kill_count/1 and increment_kill_count/1 functions.
+  """
+  @spec increment_kill_count(killmail()) :: :ok
+  def increment_kill_count(killmail) when is_map(killmail) do
+    case get_system_id(killmail) do
+      nil ->
+        Logger.warning("Cannot increment kill count - no system ID found in killmail")
+        :ok
+
+      sys_id ->
+        Cache.increment_system_kill_count(sys_id)
+
+        Logger.debug("Incremented kill count for system",
+          system_id: sys_id,
+          operation: :increment_kill_count,
+          status: :success
+        )
+
+        :ok
+    end
+  end
+
   # Private helper functions
 
   @spec get_killmail_id(killmail()) :: killmail_id() | nil
   defp get_killmail_id(%{"killmail_id" => id}) when is_integer(id), do: id
   defp get_killmail_id(_), do: nil
+
+  @spec get_system_id(killmail()) :: integer() | nil
+  defp get_system_id(killmail) do
+    killmail["solar_system_id"] || killmail["solarSystemID"]
+  end
 end

@@ -312,4 +312,29 @@ defmodule WandererKills.Core.Error do
   def connection_error(message \\ "Connection failed", details \\ nil) do
     http_error(:connection_failed, message, true, details)
   end
+
+  # ============================================================================
+  # HTTP Exception Types
+  # ============================================================================
+
+  defmodule ConnectionError do
+    @moduledoc """
+    Error raised when a connection fails.
+    """
+    defexception [:message]
+  end
+
+  defmodule TimeoutError do
+    @moduledoc """
+    Error raised when a request times out.
+    """
+    defexception [:message]
+  end
+
+  defmodule RateLimitError do
+    @moduledoc """
+    Error raised when rate limit is exceeded.
+    """
+    defexception [:message]
+  end
 end

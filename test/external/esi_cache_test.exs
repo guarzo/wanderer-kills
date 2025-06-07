@@ -1,7 +1,7 @@
 defmodule WandererKills.EsiCacheTest do
   # Disable async to avoid cache interference
   use ExUnit.Case, async: false
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
 
   setup do
     WandererKills.TestHelpers.clear_all_caches()

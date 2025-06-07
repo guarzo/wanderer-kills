@@ -59,8 +59,10 @@ defmodule WandererKills.ESI.Client do
   end
 
   @impl ESIClient
-  def get_system_batch(_system_ids) do
-    {:error, Error.esi_error(:not_implemented, "System fetching not yet implemented")}
+  def get_system_batch(system_ids) when is_list(system_ids) do
+    Enum.map(system_ids, fn _ ->
+      {:error, Error.esi_error(:not_implemented, "System fetching not yet implemented")}
+    end)
   end
 
   # ============================================================================

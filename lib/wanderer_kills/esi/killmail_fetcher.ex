@@ -46,7 +46,7 @@ defmodule WandererKills.ESI.KillmailFetcher do
         result
 
       {:exit, reason} ->
-        {:error, Error.esi_error(:timeout, "Killmail fetch timeout", %{reason: reason})}
+        {:error, Error.esi_error(:timeout, "Killmail fetch timeout", false, %{reason: reason})}
     end)
   end
 
@@ -98,7 +98,7 @@ defmodule WandererKills.ESI.KillmailFetcher do
         Logger.debug("Killmail not found", killmail_id: killmail_id)
 
         {:error,
-         Error.esi_error(:not_found, "Killmail not found", %{
+         Error.esi_error(:not_found, "Killmail not found", false, %{
            killmail_id: killmail_id,
            killmail_hash: killmail_hash
          })}
@@ -107,7 +107,7 @@ defmodule WandererKills.ESI.KillmailFetcher do
         Logger.debug("Killmail access forbidden", killmail_id: killmail_id)
 
         {:error,
-         Error.esi_error(:forbidden, "Killmail access forbidden", %{
+         Error.esi_error(:forbidden, "Killmail access forbidden", false, %{
            killmail_id: killmail_id,
            killmail_hash: killmail_hash
          })}
@@ -119,7 +119,7 @@ defmodule WandererKills.ESI.KillmailFetcher do
         )
 
         {:error,
-         Error.esi_error(:server_error, "ESI server error", %{
+         Error.esi_error(:server_error, "ESI server error", false, %{
            killmail_id: killmail_id,
            killmail_hash: killmail_hash,
            status: status
@@ -132,7 +132,7 @@ defmodule WandererKills.ESI.KillmailFetcher do
         )
 
         {:error,
-         Error.esi_error(:api_error, "Failed to fetch killmail from ESI", %{
+         Error.esi_error(:api_error, "Failed to fetch killmail from ESI", false, %{
            killmail_id: killmail_id,
            killmail_hash: killmail_hash,
            reason: reason

@@ -252,7 +252,8 @@ config :logger, :console,
     :table,
     :expired_count,
     :type_count,
-    :type
+    :type,
+    :entry
   ]
 
 # Import environment specific config

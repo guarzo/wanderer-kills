@@ -44,9 +44,7 @@ config :wanderer_kills,
   telemetry_enabled_metrics: [],
   telemetry_sampling_rate: 0.0
 
-# Configure ESI cache to use mock HTTP client
-config :wanderer_kills, WandererKills.Cache.Specialized.EsiCache,
-  http_client: WandererKills.Core.Http.Client.Mock
+# ESI cache configuration removed - now using Core.Cache directly
 
 # Configure Cachex for tests
 config :cachex, :default_ttl, :timer.minutes(1)

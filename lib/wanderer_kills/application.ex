@@ -30,8 +30,6 @@ defmodule WandererKills.Application do
       WandererKills.Core.ETSSupervisor,
       {WandererKills.Core.Cache, []},
       WandererKills.Killmails.Store,
-      # Direct Cachex supervision instead of single-child supervisor
-      {Cachex, name: :unified_cache, ttl: Config.cache_ttl(:killmails)},
       WandererKills.Observability.Monitoring,
       {Plug.Cowboy, scheme: :http, plug: WandererKillsWeb.Api, options: [port: Config.port()]},
       {:telemetry_poller,

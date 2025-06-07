@@ -1,7 +1,7 @@
 defmodule WandererKills.CacheKeyTest do
   # Disable async to avoid cache interference
   use ExUnit.Case, async: false
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
 
   setup do
     WandererKills.TestHelpers.clear_all_caches()
@@ -20,7 +20,7 @@ defmodule WandererKills.CacheKeyTest do
       assert :ok = Cache.set_killmail(123, killmail_data)
       assert {:ok, ^killmail_data} = Cache.get_killmail(123)
       assert :ok = Cache.delete_killmail(123)
-      assert {:error, :not_found} = Cache.get_killmail(123)
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get_killmail(123)
     end
 
     test "system keys follow expected pattern" do
@@ -34,7 +34,7 @@ defmodule WandererKills.CacheKeyTest do
       assert {:ok, [123]} = Cache.get_system_killmails(456)
 
       assert {:ok, 0} = Cache.get_system_kill_count(456)
-      assert :ok = Cache.increment_system_kill_count(456)
+      assert {:ok, 1} = Cache.increment_system_kill_count(456)
       assert {:ok, 1} = Cache.get_system_kill_count(456)
     end
 
@@ -66,16 +66,20 @@ defmodule WandererKills.CacheKeyTest do
       key = "test:key"
       value = %{"test" => "data"}
 
-      assert {:error, :not_found} = Cache.get(key)
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get(key)
       assert :ok = Cache.set(key, value)
       assert {:ok, ^value} = Cache.get(key)
       assert :ok = Cache.del(key)
-      assert {:error, :not_found} = Cache.get(key)
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get(key)
     end
 
     test "system fetch timestamp operations work" do
-      system_id = 789
+      # Use a unique system ID to avoid conflicts with other tests
+      system_id = 99_789_123
       timestamp = DateTime.utc_now()
+
+      # Ensure cache is completely clear for this specific system
+      WandererKills.TestHelpers.clear_all_caches()
 
       assert {:ok, false} = Cache.system_recently_fetched?(system_id)
       assert {:ok, :set} = Cache.set_system_fetch_timestamp(system_id, timestamp)

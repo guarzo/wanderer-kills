@@ -1,7 +1,7 @@
 defmodule WandererKills.CacheTest do
   use WandererKills.TestCase
 
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
   alias WandererKills.TestHelpers
 
   setup do
@@ -17,14 +17,14 @@ defmodule WandererKills.CacheTest do
     end
 
     test "returns error for non-existent killmail" do
-      assert {:error, :not_found} = Cache.get_killmail(999)
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get_killmail(999)
     end
 
     test "can delete a killmail" do
       killmail = TestHelpers.create_test_killmail(123)
       assert :ok = Cache.set_killmail(123, killmail)
       assert :ok = Cache.delete_killmail(123)
-      assert {:error, :not_found} = Cache.get_killmail(123)
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get_killmail(123)
     end
   end
 

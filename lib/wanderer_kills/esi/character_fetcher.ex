@@ -92,24 +92,33 @@ defmodule WandererKills.ESI.CharacterFetcher do
   @impl ESIClient
   def get_type(_), do: {:error, Error.esi_error(:not_implemented, "Type fetching not supported")}
   @impl ESIClient
-  def get_type_batch(_),
-    do: {:error, Error.esi_error(:not_implemented, "Type fetching not supported")}
+  def get_type_batch(type_ids) when is_list(type_ids),
+    do:
+      Enum.map(type_ids, fn _ ->
+        {:error, Error.esi_error(:not_implemented, "Type fetching not supported")}
+      end)
 
   @impl ESIClient
   def get_group(_),
     do: {:error, Error.esi_error(:not_implemented, "Group fetching not supported")}
 
   @impl ESIClient
-  def get_group_batch(_),
-    do: {:error, Error.esi_error(:not_implemented, "Group fetching not supported")}
+  def get_group_batch(group_ids) when is_list(group_ids),
+    do:
+      Enum.map(group_ids, fn _ ->
+        {:error, Error.esi_error(:not_implemented, "Group fetching not supported")}
+      end)
 
   @impl ESIClient
   def get_system(_),
     do: {:error, Error.esi_error(:not_implemented, "System fetching not supported")}
 
   @impl ESIClient
-  def get_system_batch(_),
-    do: {:error, Error.esi_error(:not_implemented, "System fetching not supported")}
+  def get_system_batch(system_ids) when is_list(system_ids),
+    do:
+      Enum.map(system_ids, fn _ ->
+        {:error, Error.esi_error(:not_implemented, "System fetching not supported")}
+      end)
 
   # ============================================================================
   # Private Functions
@@ -140,7 +149,7 @@ defmodule WandererKills.ESI.CharacterFetcher do
         Logger.error("Failed to fetch character #{character_id}: #{inspect(reason)}")
 
         {:error,
-         Error.esi_error(:api_error, "Failed to fetch character from ESI", %{
+         Error.esi_error(:api_error, "Failed to fetch character from ESI", false, %{
            character_id: character_id,
            reason: reason
          })}
@@ -172,7 +181,7 @@ defmodule WandererKills.ESI.CharacterFetcher do
         Logger.error("Failed to fetch corporation #{corporation_id}: #{inspect(reason)}")
 
         {:error,
-         Error.esi_error(:api_error, "Failed to fetch corporation from ESI", %{
+         Error.esi_error(:api_error, "Failed to fetch corporation from ESI", false, %{
            corporation_id: corporation_id,
            reason: reason
          })}
@@ -199,7 +208,7 @@ defmodule WandererKills.ESI.CharacterFetcher do
         Logger.error("Failed to fetch alliance #{alliance_id}: #{inspect(reason)}")
 
         {:error,
-         Error.esi_error(:api_error, "Failed to fetch alliance from ESI", %{
+         Error.esi_error(:api_error, "Failed to fetch alliance from ESI", false, %{
            alliance_id: alliance_id,
            reason: reason
          })}

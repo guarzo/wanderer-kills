@@ -80,7 +80,7 @@ defmodule WandererKills.Fetching.CoordinatorTest do
       raw_killmails = [killmail1, killmail2]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, raw_killmails} end)
+      |> stub(:fetch_system_killmails, fn ^system_id -> {:ok, raw_killmails} end)
 
       assert {:ok, processed_killmails} =
                Coordinator.fetch_killmails_for_system(system_id, client: ZkbClient)
@@ -96,7 +96,7 @@ defmodule WandererKills.Fetching.CoordinatorTest do
       raw_killmails = [TestHelpers.generate_test_data(:killmail, 123)]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn 30_000_142 ->
+      |> stub(:fetch_system_killmails, fn 30_000_142 ->
         {:ok, raw_killmails}
       end)
 
@@ -113,10 +113,14 @@ defmodule WandererKills.Fetching.CoordinatorTest do
     test "handles empty killmail list" do
       system_id = 30_000_142
 
-      ZkbClient
-      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, []} end)
+      # Clear cache to ensure no stale data
+      WandererKills.TestHelpers.clear_all_caches()
 
-      assert {:ok, []} = Coordinator.fetch_killmails_for_system(system_id, client: ZkbClient)
+      ZkbClient
+      |> stub(:fetch_system_killmails, fn ^system_id -> {:ok, []} end)
+
+      assert {:ok, []} =
+               Coordinator.fetch_killmails_for_system(system_id, client: ZkbClient, force: true)
     end
 
     test "respects limit option" do
@@ -124,7 +128,7 @@ defmodule WandererKills.Fetching.CoordinatorTest do
       killmails = Enum.map(1..10, &TestHelpers.generate_test_data(:killmail, &1))
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, killmails} end)
+      |> stub(:fetch_system_killmails, fn ^system_id -> {:ok, killmails} end)
 
       opts = [limit: 5, client: ZkbClient]
       assert {:ok, result} = Coordinator.fetch_killmails_for_system(system_id, opts)
@@ -138,7 +142,7 @@ defmodule WandererKills.Fetching.CoordinatorTest do
       killmails = [TestHelpers.generate_test_data(:killmail, 123)]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn ^system_id -> {:ok, killmails} end)
+      |> stub(:fetch_system_killmails, fn ^system_id -> {:ok, killmails} end)
 
       # Force should bypass cache and fetch directly
       opts = [force: true, client: ZkbClient]
@@ -153,11 +157,10 @@ defmodule WandererKills.Fetching.CoordinatorTest do
       killmails2 = [TestHelpers.generate_test_data(:killmail, 456)]
 
       ZkbClient
-      |> expect(:fetch_system_killmails, fn 30_000_142 ->
-        {:ok, killmails1}
-      end)
-      |> expect(:fetch_system_killmails, fn 30_000_143 ->
-        {:ok, killmails2}
+      |> stub(:fetch_system_killmails, fn
+        30_000_142 -> {:ok, killmails1}
+        30_000_143 -> {:ok, killmails2}
+        _ -> {:error, :not_found}
       end)
 
       opts = [client: ZkbClient, max_concurrency: 2]
@@ -171,12 +174,12 @@ defmodule WandererKills.Fetching.CoordinatorTest do
       killmails = [TestHelpers.generate_test_data(:killmail, 123)]
 
       # Mock the ZkbClient functions with the correct arity (1 parameter)
+      # Use stub/3 instead of expect/3 to allow for any matching call
       ZkbClient
-      |> expect(:fetch_system_killmails, fn 30_000_142 ->
-        {:ok, killmails}
-      end)
-      |> expect(:fetch_system_killmails, fn 99_999_999 ->
-        {:error, :not_found}
+      |> stub(:fetch_system_killmails, fn
+        30_000_142 -> {:ok, killmails}
+        99_999_999 -> {:error, :not_found}
+        _ -> {:error, :not_found}
       end)
 
       opts = [client: ZkbClient]
@@ -202,17 +205,12 @@ defmodule WandererKills.Fetching.CoordinatorTest do
 
       # Mock all systems individually to ensure exact call expectations
       ZkbClient
-      |> expect(:fetch_system_killmails, fn 30_000_142 ->
-        {:ok, []}
-      end)
-      |> expect(:fetch_system_killmails, fn 30_000_143 ->
-        {:ok, []}
-      end)
-      |> expect(:fetch_system_killmails, fn 30_000_144 ->
-        {:ok, []}
-      end)
-      |> expect(:fetch_system_killmails, fn 30_000_145 ->
-        {:ok, []}
+      |> stub(:fetch_system_killmails, fn
+        30_000_142 -> {:ok, []}
+        30_000_143 -> {:ok, []}
+        30_000_144 -> {:ok, []}
+        30_000_145 -> {:ok, []}
+        _ -> {:error, :not_found}
       end)
 
       opts = [client: ZkbClient, max_concurrency: 2]

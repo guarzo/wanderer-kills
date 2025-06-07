@@ -63,7 +63,7 @@ defmodule WandererKills.External.ESI.Client do
       {:ok, _group_info} ->
         :ok
 
-      {:error, :not_found} ->
+      {:error, %WandererKills.Core.Error{type: :not_found}} ->
         fetch_and_cache_group_info(group_id)
 
       {:error, reason} ->
@@ -76,7 +76,7 @@ defmodule WandererKills.External.ESI.Client do
       {:ok, _type_info} ->
         :ok
 
-      {:error, :not_found} ->
+      {:error, %WandererKills.Core.Error{type: :not_found}} ->
         fetch_and_cache_type_info(type_id)
 
       {:error, reason} ->
@@ -89,7 +89,7 @@ defmodule WandererKills.External.ESI.Client do
       {:ok, _character_info} ->
         :ok
 
-      {:error, :not_found} ->
+      {:error, %WandererKills.Core.Error{type: :not_found}} ->
         fetch_and_cache_character_info(character_id)
 
       {:error, reason} ->
@@ -102,7 +102,7 @@ defmodule WandererKills.External.ESI.Client do
       {:ok, _corp_info} ->
         :ok
 
-      {:error, :not_found} ->
+      {:error, %WandererKills.Core.Error{type: :not_found}} ->
         fetch_and_cache_corporation_info(corporation_id)
 
       {:error, reason} ->
@@ -115,7 +115,7 @@ defmodule WandererKills.External.ESI.Client do
       {:ok, _alliance_info} ->
         :ok
 
-      {:error, :not_found} ->
+      {:error, %WandererKills.Core.Error{type: :not_found}} ->
         fetch_and_cache_alliance_info(alliance_id)
 
       {:error, reason} ->

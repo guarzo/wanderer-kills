@@ -25,7 +25,7 @@ defmodule WandererKills.Core.Http.Client do
 
   ## Error Handling
 
-  The module defines several custom error types (in `WandererKills.Core.Http.Errors`):
+  The module defines several custom error types (in `WandererKills.Core.Error`):
     - `ConnectionError` - Raised when a connection fails
     - `TimeoutError` - Raised when a request times out
     - `RateLimitError` - Raised when rate limit is exceeded
@@ -46,7 +46,7 @@ defmodule WandererKills.Core.Http.Client do
   @behaviour WandererKills.Core.Http.ClientBehaviour
 
   require Logger
-  alias WandererKills.Core.Http.Errors.{ConnectionError, TimeoutError, RateLimitError}
+  alias WandererKills.Core.Error.{ConnectionError, TimeoutError, RateLimitError}
   alias WandererKills.Core.Retry
   alias WandererKills.Observability.Telemetry
 

@@ -48,9 +48,9 @@ defmodule WandererKills.Core.Retry do
 
     rescue_only =
       Keyword.get(opts, :rescue_only, [
-        WandererKills.Core.Http.Errors.ConnectionError,
-        WandererKills.Core.Http.Errors.TimeoutError,
-        WandererKills.Core.Http.Errors.RateLimitError,
+        WandererKills.Core.Error.ConnectionError,
+        WandererKills.Core.Error.TimeoutError,
+        WandererKills.Core.Error.RateLimitError,
         # Add common retryable exceptions
         RuntimeError,
         ArgumentError
@@ -106,9 +106,9 @@ defmodule WandererKills.Core.Retry do
   """
   @spec retriable_http_error?(term()) :: boolean()
   def retriable_http_error?(:rate_limited), do: true
-  def retriable_http_error?(%WandererKills.Core.Http.Errors.RateLimitError{}), do: true
-  def retriable_http_error?(%WandererKills.Core.Http.Errors.TimeoutError{}), do: true
-  def retriable_http_error?(%WandererKills.Core.Http.Errors.ConnectionError{}), do: true
+  def retriable_http_error?(%WandererKills.Core.Error.RateLimitError{}), do: true
+  def retriable_http_error?(%WandererKills.Core.Error.TimeoutError{}), do: true
+  def retriable_http_error?(%WandererKills.Core.Error.ConnectionError{}), do: true
   def retriable_http_error?(_), do: false
 
   @doc """
@@ -133,9 +133,9 @@ defmodule WandererKills.Core.Retry do
     default_opts = [
       operation_name: "HTTP request",
       rescue_only: [
-        WandererKills.Core.Http.Errors.ConnectionError,
-        WandererKills.Core.Http.Errors.TimeoutError,
-        WandererKills.Core.Http.Errors.RateLimitError
+        WandererKills.Core.Error.ConnectionError,
+        WandererKills.Core.Error.TimeoutError,
+        WandererKills.Core.Error.RateLimitError
       ]
     ]
 

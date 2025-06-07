@@ -41,9 +41,9 @@ defmodule WandererKills.Core.Cache do
   use GenServer
   require Logger
 
+  alias WandererKills.Core.Clock
   alias WandererKills.Core.Config
   alias WandererKills.Core.Error
-  alias WandererKills.Core.Clock
 
   # Table definitions
   @cache_table :wanderer_kills_cache
@@ -442,30 +442,57 @@ defmodule WandererKills.Core.Cache do
   @spec increment_stat(table_name(), :hits | :misses) :: :ok
   defp increment_stat(table_name, stat_type) do
     if table_exists?(:cache_stats) do
-      stats_key = :"#{table_name}_stats"
-
-      case :ets.lookup(:cache_stats, stats_key) do
-        [{^stats_key, {hits, misses, created_at}}] ->
-          new_stats =
-            case stat_type do
-              :hits -> {hits + 1, misses, created_at}
-              :misses -> {hits, misses + 1, created_at}
-            end
-
-          :ets.insert(:cache_stats, {stats_key, new_stats})
-
-        [] ->
-          # Initialize if not exists
-          initial_stats =
-            case stat_type do
-              :hits -> {1, 0, Clock.now()}
-              :misses -> {0, 1, Clock.now()}
-            end
-
-          :ets.insert(:cache_stats, {stats_key, initial_stats})
-      end
+      do_increment_stat(table_name, stat_type)
     end
 
+    :ok
+  end
+
+  # Helper function to handle the actual stat increment logic
+  @spec do_increment_stat(table_name(), :hits | :misses) :: :ok
+  defp do_increment_stat(table_name, stat_type) do
+    stats_key = :"#{table_name}_stats"
+
+    case :ets.lookup(:cache_stats, stats_key) do
+      [{^stats_key, {hits, misses, created_at}}] ->
+        update_existing_stats(stats_key, stat_type, hits, misses, created_at)
+
+      [] ->
+        insert_initial_stats(stats_key, stat_type)
+    end
+
+    :ok
+  end
+
+  # Helper function to update existing stats
+  @spec update_existing_stats(
+          atom(),
+          :hits | :misses,
+          non_neg_integer(),
+          non_neg_integer(),
+          DateTime.t()
+        ) :: :ok
+  defp update_existing_stats(stats_key, stat_type, hits, misses, created_at) do
+    new_stats =
+      case stat_type do
+        :hits -> {hits + 1, misses, created_at}
+        :misses -> {hits, misses + 1, created_at}
+      end
+
+    :ets.insert(:cache_stats, {stats_key, new_stats})
+    :ok
+  end
+
+  # Helper function to insert initial stats
+  @spec insert_initial_stats(atom(), :hits | :misses) :: :ok
+  defp insert_initial_stats(stats_key, stat_type) do
+    initial_stats =
+      case stat_type do
+        :hits -> {1, 0, DateTime.utc_now()}
+        :misses -> {0, 1, DateTime.utc_now()}
+      end
+
+    :ets.insert(:cache_stats, {stats_key, initial_stats})
     :ok
   end
 
@@ -505,34 +532,61 @@ defmodule WandererKills.Core.Cache do
     tables_to_clean = [:killmails, :systems, :ship_types, :esi_cache]
 
     Enum.each(tables_to_clean, fn table ->
-      if table_exists?(table) do
-        # Find and delete expired entries
-        expired_keys =
-          :ets.foldl(
-            fn
-              {key, _value, expires_at}, acc
-              when is_integer(expires_at) and expires_at < current_time ->
-                [key | acc]
-
-              _entry, acc ->
-                acc
-            end,
-            [],
-            table
-          )
-
-        Enum.each(expired_keys, fn key ->
-          :ets.delete(table, key)
-        end)
-
-        if length(expired_keys) > 0 do
-          Logger.debug("Cleaned up expired cache entries",
-            table: table,
-            expired_count: length(expired_keys)
-          )
-        end
-      end
+      cleanup_table_if_exists(table, current_time)
     end)
+
+    :ok
+  end
+
+  # Helper function to clean up a table if it exists
+  @spec cleanup_table_if_exists(atom(), integer()) :: :ok
+  defp cleanup_table_if_exists(table, current_time) do
+    if table_exists?(table) do
+      perform_table_cleanup(table, current_time)
+    end
+
+    :ok
+  end
+
+  # Helper function to perform the actual cleanup operations
+  @spec perform_table_cleanup(atom(), integer()) :: :ok
+  defp perform_table_cleanup(table, current_time) do
+    # Find and delete expired entries
+    expired_keys = find_expired_keys(table, current_time)
+
+    Enum.each(expired_keys, fn key ->
+      :ets.delete(table, key)
+    end)
+
+    log_cleanup_results(table, expired_keys)
+  end
+
+  # Helper function to find expired keys in a table
+  @spec find_expired_keys(atom(), integer()) :: [term()]
+  defp find_expired_keys(table, current_time) do
+    :ets.foldl(
+      fn
+        {key, _value, expires_at}, acc
+        when is_integer(expires_at) and expires_at < current_time ->
+          [key | acc]
+
+        _entry, acc ->
+          acc
+      end,
+      [],
+      table
+    )
+  end
+
+  # Helper function to log cleanup results
+  @spec log_cleanup_results(atom(), [term()]) :: :ok
+  defp log_cleanup_results(table, expired_keys) do
+    if length(expired_keys) > 0 do
+      Logger.debug("Cleaned up expired cache entries",
+        table: table,
+        expired_count: length(expired_keys)
+      )
+    end
 
     :ok
   end
@@ -619,25 +673,7 @@ defmodule WandererKills.Core.Cache do
   def add_system_killmail(system_id, killmail_id)
       when is_integer(system_id) and system_id > 0 and is_integer(killmail_id) do
     if table_exists?(:system_killmails) do
-      case :ets.lookup(:system_killmails, system_id) do
-        [] ->
-          :ets.insert(:system_killmails, {system_id, [killmail_id]})
-          :ok
-
-        [{^system_id, existing_ids}] when is_list(existing_ids) ->
-          # Ensure we don't add duplicates
-          if killmail_id not in existing_ids do
-            new_ids = [killmail_id | existing_ids]
-            :ets.insert(:system_killmails, {system_id, new_ids})
-          end
-
-          :ok
-
-        _other ->
-          # Fix corrupted entry
-          :ets.insert(:system_killmails, {system_id, [killmail_id]})
-          :ok
-      end
+      do_add_system_killmail(system_id, killmail_id)
     else
       {:error, Error.cache_error(:table_missing, "system_killmails table not available")}
     end
@@ -649,6 +685,36 @@ defmodule WandererKills.Core.Cache do
        :invalid_format,
        "Invalid parameters: system_id=#{inspect(invalid_system_id)}, killmail_id=#{inspect(invalid_killmail_id)}"
      )}
+  end
+
+  # Helper function to handle the ETS operations for add_system_killmail
+  @spec do_add_system_killmail(integer(), integer()) :: :ok
+  defp do_add_system_killmail(system_id, killmail_id) do
+    case :ets.lookup(:system_killmails, system_id) do
+      [] ->
+        :ets.insert(:system_killmails, {system_id, [killmail_id]})
+        :ok
+
+      [{^system_id, existing_ids}] when is_list(existing_ids) ->
+        handle_existing_killmail_ids(system_id, killmail_id, existing_ids)
+
+      _other ->
+        # Fix corrupted entry
+        :ets.insert(:system_killmails, {system_id, [killmail_id]})
+        :ok
+    end
+  end
+
+  # Helper function to handle adding killmail to existing list
+  @spec handle_existing_killmail_ids(integer(), integer(), [integer()]) :: :ok
+  defp handle_existing_killmail_ids(system_id, killmail_id, existing_ids) do
+    # Ensure we don't add duplicates
+    if killmail_id not in existing_ids do
+      new_ids = [killmail_id | existing_ids]
+      :ets.insert(:system_killmails, {system_id, new_ids})
+    end
+
+    :ok
   end
 
   @doc """
@@ -922,5 +988,204 @@ defmodule WandererKills.Core.Cache do
 
   def get_system_kill_count(invalid_id) do
     {:error, Error.validation_error(:invalid_format, "Invalid system ID: #{inspect(invalid_id)}")}
+  end
+
+  # ============================================================================
+  # ESI Cache Operations (for backward compatibility)
+  # ============================================================================
+
+  @doc """
+  Sets character information in the cache.
+  """
+  @spec set_character_info(integer(), map()) :: :ok | {:error, Error.t()}
+  def set_character_info(character_id, character_data) when is_integer(character_id) do
+    put_with_ttl(:characters, character_id, character_data, 24 * 3600)
+  end
+
+  @doc """
+  Gets character information from the cache.
+  """
+  @spec get_character_info(integer()) :: {:ok, map()} | {:error, Error.t()}
+  def get_character_info(character_id) when is_integer(character_id) do
+    get(:characters, character_id)
+  end
+
+  @doc """
+  Sets corporation information in the cache.
+  """
+  @spec set_corporation_info(integer(), map()) :: :ok | {:error, Error.t()}
+  def set_corporation_info(corporation_id, corporation_data) when is_integer(corporation_id) do
+    put_with_ttl(:corporations, corporation_id, corporation_data, 24 * 3600)
+  end
+
+  @doc """
+  Gets corporation information from the cache.
+  """
+  @spec get_corporation_info(integer()) :: {:ok, map()} | {:error, Error.t()}
+  def get_corporation_info(corporation_id) when is_integer(corporation_id) do
+    get(:corporations, corporation_id)
+  end
+
+  @doc """
+  Sets alliance information in the cache.
+  """
+  @spec set_alliance_info(integer(), map()) :: :ok | {:error, Error.t()}
+  def set_alliance_info(alliance_id, alliance_data) when is_integer(alliance_id) do
+    put_with_ttl(:alliances, alliance_id, alliance_data, 24 * 3600)
+  end
+
+  @doc """
+  Gets alliance information from the cache.
+  """
+  @spec get_alliance_info(integer()) :: {:ok, map()} | {:error, Error.t()}
+  def get_alliance_info(alliance_id) when is_integer(alliance_id) do
+    get(:alliances, alliance_id)
+  end
+
+  @doc """
+  Sets type information in the cache.
+  """
+  @spec set_type_info(integer(), map()) :: :ok | {:error, Error.t()}
+  def set_type_info(type_id, type_data) when is_integer(type_id) do
+    put_with_ttl(:ship_types, type_id, type_data, 24 * 3600)
+  end
+
+  @doc """
+  Gets type information from the cache.
+  """
+  @spec get_type_info(integer()) :: {:ok, map()} | {:error, Error.t()}
+  def get_type_info(type_id) when is_integer(type_id) do
+    get(:ship_types, type_id)
+  end
+
+  @doc """
+  Sets group information in the cache.
+  """
+  @spec set_group_info(integer(), map()) :: :ok | {:error, Error.t()}
+  def set_group_info(group_id, group_data) when is_integer(group_id) do
+    put_with_ttl(:ship_types, "group_#{group_id}", group_data, 24 * 3600)
+  end
+
+  @doc """
+  Gets group information from the cache.
+  """
+  @spec get_group_info(integer()) :: {:ok, map()} | {:error, Error.t()}
+  def get_group_info(group_id) when is_integer(group_id) do
+    get(:ship_types, "group_#{group_id}")
+  end
+
+  # ============================================================================
+  # Killmail Operations (for backward compatibility)
+  # ============================================================================
+
+  @doc """
+  Sets a killmail in the cache.
+  """
+  @spec set_killmail(integer(), map()) :: :ok | {:error, Error.t()}
+  def set_killmail(killmail_id, killmail_data) when is_integer(killmail_id) do
+    put(@cache_table, "killmail:#{killmail_id}", killmail_data)
+  end
+
+  @doc """
+  Gets a killmail from the cache.
+  """
+  @spec get_killmail(integer()) :: {:ok, map()} | {:error, Error.t()}
+  def get_killmail(killmail_id) when is_integer(killmail_id) do
+    get(@cache_table, "killmail:#{killmail_id}")
+  end
+
+  @doc """
+  Deletes a killmail from the cache.
+  """
+  @spec delete_killmail(integer()) :: :ok | {:error, Error.t()}
+  def delete_killmail(killmail_id) when is_integer(killmail_id) do
+    delete(@cache_table, "killmail:#{killmail_id}")
+  end
+
+  @doc """
+  Gets system killmails (alias for get_killmails_for_system).
+  """
+  @spec get_system_killmails(integer()) :: {:ok, [integer()]} | {:error, Error.t()}
+  def get_system_killmails(system_id) do
+    get_killmails_for_system(system_id)
+  end
+
+  # ============================================================================
+  # General Cache Operations (for backward compatibility)
+  # ============================================================================
+
+  @doc """
+  Sets a value in the cache (general purpose).
+  """
+  @spec set(term(), term()) :: :ok | {:error, Error.t()}
+  def set(key, value) do
+    put(@cache_table, key, value)
+  end
+
+  @doc """
+  Gets a value from the cache (general purpose).
+  """
+  @spec get(term()) :: {:ok, term()} | {:error, Error.t()}
+  def get(key) do
+    get(@cache_table, key)
+  end
+
+  @doc """
+  Deletes a value from the cache (general purpose).
+  """
+  @spec del(term()) :: :ok | {:error, Error.t()}
+  def del(key) do
+    delete(@cache_table, key)
+  end
+
+  @doc """
+  Clears all entries in a namespace.
+  """
+  @spec clear_namespace(String.t()) :: :ok
+  def clear_namespace(namespace) do
+    # Use match to find all keys with the namespace prefix
+    match_spec = [
+      {{:"$1", :_, :_},
+       [{:==, {:hd, {:binary_to_list, :"$1"}}, {:const, String.to_charlist(namespace)}}], [:"$1"]}
+    ]
+
+    try do
+      keys = :ets.select(@cache_table, match_spec)
+      Enum.each(keys, fn key -> :ets.delete(@cache_table, key) end)
+      :ok
+    rescue
+      _ -> :ok
+    end
+  end
+
+  @doc """
+  Checks if the cache is healthy.
+  """
+  @spec healthy?() :: boolean()
+  def healthy?() do
+    try do
+      # Try a simple operation to check if cache is working
+      case put(@cache_table, "health_check", true) do
+        :ok ->
+          delete(@cache_table, "health_check")
+          true
+
+        _ ->
+          false
+      end
+    rescue
+      _ -> false
+    end
+  end
+
+  @doc """
+  Gets cache statistics (general version).
+  """
+  @spec stats() :: {:ok, map()} | {:error, :disabled}
+  def stats() do
+    case stats(@cache_table) do
+      {:ok, stats} -> {:ok, stats}
+      {:error, _} -> {:error, :disabled}
+    end
   end
 end

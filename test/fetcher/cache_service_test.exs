@@ -6,7 +6,7 @@ defmodule WandererKills.Fetching.CacheServiceTest do
 
   alias WandererKills.Fetching.CacheService
   alias WandererKills.TestHelpers
-  alias WandererKills.Cache
+  alias WandererKills.Core.Cache
 
   setup do
     TestHelpers.clear_all_caches()
@@ -20,8 +20,12 @@ defmodule WandererKills.Fetching.CacheServiceTest do
 
   describe "get_cached_killmails/1" do
     test "returns cached killmails for a system" do
-      system_id = 30_000_142
+      # Use a unique system ID to avoid cache pollution from other tests
+      system_id = 30_000_999
       killmail_ids = [123, 456, 789]
+
+      # Ensure clean cache for this system
+      WandererKills.TestHelpers.clear_all_caches()
 
       # Pre-populate cache
       :ok = Cache.add_system_killmail(system_id, 123)
@@ -88,7 +92,7 @@ defmodule WandererKills.Fetching.CacheServiceTest do
       # Set timestamp to 25 hours ago
       old_timestamp = DateTime.add(DateTime.utc_now(), -25, :hour)
 
-      :ok = Cache.set_system_fetch_timestamp(system_id, old_timestamp)
+      {:ok, :set} = Cache.set_system_fetch_timestamp(system_id, old_timestamp)
 
       # The logic may have changed - accept either result as long as it doesn't crash
       result = CacheService.should_refresh_cache?(system_id, 24)
@@ -100,7 +104,7 @@ defmodule WandererKills.Fetching.CacheServiceTest do
       # Set timestamp to 1 hour ago
       recent_timestamp = DateTime.add(DateTime.utc_now(), -1, :hour)
 
-      :ok = Cache.set_system_fetch_timestamp(system_id, recent_timestamp)
+      {:ok, :set} = Cache.set_system_fetch_timestamp(system_id, recent_timestamp)
 
       # The function may now return true if the implementation has changed
       assert {:ok, _result} = CacheService.should_refresh_cache?(system_id, 24)
@@ -125,7 +129,7 @@ defmodule WandererKills.Fetching.CacheServiceTest do
       # Truncate to seconds to avoid microsecond precision issues
       timestamp = DateTime.utc_now() |> DateTime.truncate(:second)
 
-      :ok = Cache.set_system_fetch_timestamp(system_id, timestamp)
+      {:ok, :set} = Cache.set_system_fetch_timestamp(system_id, timestamp)
 
       # Small delay to ensure cache operation completes
       Process.sleep(10)
@@ -193,7 +197,7 @@ defmodule WandererKills.Fetching.CacheServiceTest do
       system_id = 30_000_142
       # Set recent timestamp
       recent_timestamp = DateTime.add(DateTime.utc_now(), -1, :hour)
-      :ok = Cache.set_system_fetch_timestamp(system_id, recent_timestamp)
+      {:ok, :set} = Cache.set_system_fetch_timestamp(system_id, recent_timestamp)
 
       # Add some cached killmails
       :ok = Cache.add_system_killmail(system_id, 123)
@@ -208,7 +212,7 @@ defmodule WandererKills.Fetching.CacheServiceTest do
       system_id = 30_000_142
       # Set old timestamp
       old_timestamp = DateTime.add(DateTime.utc_now(), -25, :hour)
-      :ok = Cache.set_system_fetch_timestamp(system_id, old_timestamp)
+      {:ok, :set} = Cache.set_system_fetch_timestamp(system_id, old_timestamp)
 
       assert {:fetch, :required} = CacheService.check_cache_or_fetch(system_id, 24)
     end
