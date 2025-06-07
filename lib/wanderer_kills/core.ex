@@ -67,12 +67,26 @@ defmodule WandererKills.Core do
     defmodule Util do
       @moduledoc false
       # Deprecated: these functions have been moved to Client or ClientProvider
-      defdelegate request_with_telemetry(url, service, opts \\ []), to: WandererKills.Http.Util
-      defdelegate parse_json_response(response), to: WandererKills.Http.Util
-      defdelegate build_query_params(params), to: WandererKills.Http.Util
-      defdelegate eve_api_headers(user_agent \\ nil), to: WandererKills.Http.Util
-      defdelegate retry_operation(fun, service, opts \\ []), to: WandererKills.Http.Util
-      defdelegate validate_response_structure(data, required_fields), to: WandererKills.Http.Util
+      defdelegate request_with_telemetry(url, service, opts \\ []), to: WandererKills.Http.Client
+      defdelegate parse_json_response(response), to: WandererKills.Http.Client
+
+      def build_query_params(params) do
+        opts = WandererKills.Http.ClientProvider.build_request_opts(params: params)
+        Keyword.get(opts, :params, [])
+      end
+
+      def eve_api_headers(user_agent \\ nil) do
+        if user_agent do
+          WandererKills.Http.ClientProvider.default_headers(user_agent: user_agent)
+        else
+          WandererKills.Http.ClientProvider.eve_api_headers()
+        end
+      end
+
+      defdelegate retry_operation(fun, service, opts \\ []), to: WandererKills.Http.Client
+
+      defdelegate validate_response_structure(data, required_fields),
+        to: WandererKills.Http.Client
     end
   end
 
