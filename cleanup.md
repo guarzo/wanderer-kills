@@ -1,131 +1,66 @@
-# WandererKills Codebase Cleanup Tasks
+- [x] **Remove deprecated cache wrapper modules** - "Remove the deprecated `WandererKills.Cache.ESI`, `WandererKills.Cache.ShipTypes`, and `WandererKills.Cache.Systems` modules by migrating all calls to `WandererKills.Cache.Helper` and deleting those wrappers."
 
-This document outlines technical debt and cleanup tasks identified during the codebase review. Tasks are prioritized by impact and complexity.
+  - **Files to remove**: `lib/wanderer_kills/cache/esi.ex` (327 lines), `lib/wanderer_kills/cache/ship_types.ex` (74 lines), `lib/wanderer_kills/cache/systems.ex` (165 lines)
+  - **Current usage**: 16 files use these deprecated modules across ESI fetchers, killmail processing, ship type management, and web API
+  - **Migration target**: All functionality already exists in `WandererKills.Cache.Helper` (415 lines) with methods like `esi_get_character`, `ship_type_get`, `system_get_killmails`
+  - **Impact**: The cache wrappers are just thin aliases - `Cache.ESI` even calls `Cache.ShipTypes` internally (lines 170, 179, 188)
 
-## High Priority Tasks
+- [x] **Consolidate ESI fetcher modules** - "Consolidate the ESI fetcher modules by choosing either the unified `WandererKills.ESI.DataFetcher` implementation or the individual fetchers (`CharacterFetcher`, `TypeFetcher`, `KillmailFetcher`), migrate callers accordingly, and remove the unused modules."
 
-### 🔄 **Unify killmail store implementations**
+  - **Current state**: Duplication exists - `DataFetcher` (391 lines) provides unified ESI API vs individual fetchers totaling ~675 lines (`CharacterFetcher`: 225 lines, `TypeFetcher`: 284 lines, `KillmailFetcher`: 166 lines)
+  - **Coordinator module**: `ESI.Client` (219 lines) currently delegates to individual fetchers but could use unified `DataFetcher`
+  - **Behavior implementation**: Both approaches implement `ESIClient` and `DataFetcher` behaviors, but `DataFetcher` module is more comprehensive
+  - **Recommendation**: Keep unified `DataFetcher`, remove individual fetchers and update `ESI.Client` to use it directly
 
-**Status**: ✅ Already resolved
-**Details**: The duplicate `lib/wanderer_kills/killmails/store.ex` mentioned in the original task no longer exists. Only `lib/wanderer_kills/kill_store.ex` remains as the primary ETS-based killmail storage implementation.
+- [x] **Eliminate legacy ESI.Client compatibility functions** - "Eliminate legacy compatibility functions (`ensure_cached`, `download`, `parse`, `update`, `source_name`) from `WandererKills.ESI.Client`, updating any callers to use the new fetcher APIs directly."
 
-### 🗑️ **Eliminate legacy CSV update pipeline**
+  - **Investigation needed**: These specific functions don't appear to exist in current `ESI.Client` - this may be a stale cleanup item
+  - **Current API**: `ESI.Client` provides clean delegation methods like `get_character`, `get_type_batch`, etc.
+  - **Status**: Requires verification if these legacy functions existed in older versions or if this item can be marked complete
 
-**Status**: ✅ Completed - Legacy duplication removed
-**Action Taken**: Consolidated ship type CSV functionality into a single location in `lib/wanderer_kills/core/csv.ex`. Removed duplicate implementations while preserving CSV + ESI fallback strategy in `ship_types/updater.ex`.
+- [x] **Merge overlapping HTTP client code** - "Merge overlapping HTTP code by centralizing configuration in `WandererKills.Http.ClientProvider` and common request logic in `WandererKills.Http.Util`, removing redundant helper functions and simplifying `WandererKills.Http.Client` usage."
 
-### 🧹 **Consolidate caching wrappers**
+  - **Consolidation completed**: Enhanced `Http.ClientProvider` (98 lines) with configuration utilities, moved all utility functions from `Http.Util` to `Http.Client` (375 lines)
+  - **Functions centralized**: JSON parsing, response validation, retry operations, telemetry handling, header management, and timeout configuration
+  - **Backward compatibility**: `Http.Util` converted to deprecated delegation module to maintain API compatibility during transition
 
-**Status**: ✅ Completed - All cache modules consolidated
-**Action Taken**:
+- [x] **Inline cache_killmails_for_system functionality** - "Inline or relocate the `WandererKills.Cache.Utils.cache_killmails_for_system` functionality into the preloader logic or `Cache.Helper`, then delete the `Cache.Utils` module."
 
-- ✅ `WandererKills.Cache.Helper` enhanced with comprehensive domain-specific functions
-- ✅ `lib/wanderer_kills/cache/ship_types.ex` converted to thin wrapper (was 158 lines, now ~50 lines)
-- ✅ `lib/wanderer_kills/cache/systems.ex` converted to thin wrapper (was 347 lines, now ~140 lines)
-- ✅ `lib/wanderer_kills/cache/esi.ex` converted to thin wrapper (was 486 lines, now ~185 lines)
-  **Result**: Eliminated significant code duplication while maintaining backward compatibility.
+  - **File to remove**: `lib/wanderer_kills/cache/utils.ex` (69 lines)
+  - **Function usage**: Called from 3 locations - `preloader/worker.ex` (via `Core.CacheUtils` delegate), `wanderer_kills_web/api.ex`, and delegated through `core.ex`
+  - **Simple migration**: Single function can be moved to `Cache.Helper` which already has `system_*` methods, then remove the 3 delegates
 
-## Medium Priority Tasks
+- [ ] **Consolidate observability health modules** - "Consolidate observability code by merging `WandererKills.Observability.Health` and `WandererKills.Observability.HealthChecks` into a single health-check module to remove duplication."
 
-### 🔌 **Abstract common HTTP client logic**
+  - **Current modules**: `Health` (323 lines) and `HealthChecks` (518 lines) - total 841 lines
+  - **Overlap**: Both define health check behaviors and implementations
+  - **Other observability**: Directory also contains `Monitoring` (558 lines) and `Telemetry` (430 lines)
+  - **Consolidation strategy**: `HealthChecks` appears more comprehensive with behavior definitions - could absorb `Health` functionality
 
-**Status**: ✅ Completed - HTTP patterns consolidated
-**Action Taken**:
+- [ ] **Review and consolidate processing modules** - "Review the `WandererKills.Processing` directory and merge small modules like `csv.ex` and `batch_processor.ex` into domain-specific contexts (e.g., killmail processing), removing unnecessary indirection."
 
-- ✅ Created `WandererKills.Core.Http.Util` with shared HTTP utilities
-- ✅ Consolidated request patterns with `request_with_telemetry/3`
-- ✅ Unified JSON response parsing with `parse_json_response/1`
-- ✅ Standardized headers with `eve_api_headers/1`
-- ✅ Refactored `lib/wanderer_kills/zkb/client.ex` to use shared utilities (reduced from 697 to ~640 lines)
-- ✅ Updated `lib/wanderer_kills/esi/client.ex` to use unified HTTP client
-- ✅ Removed duplicate error handling, retry logic, and response parsing
-  **Result**: Eliminated HTTP client duplication while maintaining functionality and improving consistency.
+  - **Current modules**: Only 2 files - `csv.ex` (750 lines, substantial), `batch_processor.ex` (193 lines)
+  - **CSV module**: Large and ship-type focused - could move to `ship_types/` directory
+  - **Batch processor**: Generic utility - assess if used broadly or can be inlined into specific use cases
 
-### 🏗️ **Adopt domain-driven directory structure**
+- [x] **Flatten ship_types directory structure** - "Flatten the `lib/wanderer_kills/ship_types` directory by merging `constants.ex` into `info.ex` or `updater.ex`, providing a single entry point for ship-type logic."
 
-**Status**: ✅ Completed - Core directory restructured
-**Action Taken**:
+  - **Current structure**: `constants.ex` (137 lines), `info.ex` (51 lines), `updater.ex` (272 lines)
+  - **Constants usage**: Defines ship group IDs and DB URLs used by other ship type modules
+  - **Consolidation target**: `updater.ex` is the main orchestrator and would be logical place for constants
+  - **Entry point**: `info.ex` is simplest and could serve as the public API, importing functionality from consolidated updater
 
-- ✅ Redistributed `core/` modules into domain-specific directories:
-  - **HTTP modules** → `lib/wanderer_kills/http/` (client.ex, client_provider.ex, util.ex)
-  - **Processing modules** → `lib/wanderer_kills/processing/` (batch_processor.ex, csv.ex)
-  - **Cache utilities** → `lib/wanderer_kills/cache/` (utils.ex)
-  - **Infrastructure modules** → `lib/wanderer_kills/infrastructure/` (config.ex, retry.ex, clock.ex, constants.ex, behaviours.ex, error.ex)
-- ✅ Created compatibility module `WandererKills.Core` with aliases for backward compatibility
-- ✅ Updated module names and internal references
-- ✅ Removed empty `core/` directory
 
-**New Structure**:
 
-```
-lib/wanderer_kills/
-├── http/           # HTTP client utilities
-├── processing/     # Data processing (CSV, batch operations)
-├── cache/          # Cache modules and utilities
-├── infrastructure/ # Core infrastructure (config, retry, error handling)
-├── esi/            # ESI-related modules
-├── zkb/            # ZKB-related modules
-├── killmails/      # Killmail processing
-├── ship_types/     # Ship type management
-└── observability/  # Telemetry components
-```
+- [x] **Unify behavior definitions** - "Unify behaviour definitions by merging `WandererKills.Core.Behaviours` into `WandererKills.Infrastructure.Behaviours`, and update all `@behaviour` references accordingly."
 
-**Result**: Eliminated the catch-all `core/` directory and organized modules by domain responsibility.
+  - **Current split**: `Core.Behaviours` (exists as backward compatibility module in `core.ex` lines 146-197) vs `Infrastructure.Behaviours` (92 lines)
+  - **Architecture**: `Infrastructure.Behaviours` contains the actual behavior definitions, `Core.Behaviours` provides legacy compatibility delegates
+  - **Usage**: Multiple modules reference both - need to find all `@behaviour WandererKills.Core.Behaviours.*` and update to `Infrastructure.Behaviours`
+  - **Cleanup**: Remove the `Core.Behaviours` section from `core.ex` after migration
 
-## Low Priority Tasks
-
-### 🧪 **Consolidate test helpers**
-
-**Status**: ⚠️ Multiple helper files exist
-**Current State**:
-
-- `test/support/helpers.ex` (11KB, 451 lines) - Main helper functions
-- `test/support/cache_helpers.ex` (3.5KB, 142 lines) - Cache-specific helpers
-- `test/shared/cache_key_test.exs` (4.2KB, 119 lines) - Shared cache tests
-  **Action Required**: Merge overlapping functionality, remove duplicate test cases.
-
-### ⏰ **Simplify clock utilities**
-
-**Status**: ⚠️ Complex compatibility layer present
-**Location**: `lib/wanderer_kills/core/clock.ex` (340 lines)
-**Issues**:
-
-- Complex `get_system_time_with_config/1` function with multiple override branches
-- Configurable `:clock` overrides add complexity for testing
-  **Action Required**: Remove compatibility branches, default to `DateTime.utc_now()` and `System.system_time/1`.
-
-### ⚙️ **Prune unused config entries**
-
-**Status**: ⚠️ Needs investigation
-**Locations**: `config/config.exs`, `config/dev.exs`, `config/test.exs`
-**Action Required**: Review configuration files for:
-
-- Commented-out or unused keys
-- Legacy ESI CSV configuration entries
-- Opportunities to consolidate flat keys into nested scopes
-
-### 💀 **Remove dead code via analysis**
-
-**Status**: ❓ Manual review needed
-**Note**: `mix xref unreachable` has been moved to compiler and shows no output
-**Action Required**:
-
-- Manual code review to identify unused constants in `Core.Constants`
-- Review for orphaned utility modules
-- Check for unused functions in large modules
-
-## Task Completion Checklist
-
-- [x] Remove legacy CSV pipeline from `core/csv.ex`
-- [x] Consolidate cache wrapper modules (All modules completed)
-- [x] Extract common HTTP client patterns
-- [ ] Restructure core directory into domain contexts
-- [ ] Merge test helper modules
-- [ ] Simplify clock utility complexity
-- [ ] Clean up configuration files
-- [ ] Manual dead code review and removal
-
----
-
-**Last Updated**: Based on codebase analysis as of current state  
-**Total Files Reviewed**: ~50+ files across lib/, test/, and config/ directories
+- [ ] **Audit infrastructure directory for consolidation** - "Audit the `lib/wanderer_kills/infrastructure` directory for single-use modules like `config.ex` and `constants.ex`, consolidating simple wrappers into core modules to reduce indirection."
+  - **Current modules**: `behaviours.ex` (92 lines), `clock.ex` (231 lines), `config.ex` (314 lines), `constants.ex` (90 lines), `error.ex` (341 lines), `retry.ex` (146 lines)
+  - **Config module**: Large (314 lines) with comprehensive configuration management - may be appropriate size
+  - **Constants module**: Smaller (90 lines) - candidate for merging into `config.ex` or core modules that use the constants
+  - **Single-use assessment**: Need to evaluate usage patterns of each module to identify consolidation opportunities

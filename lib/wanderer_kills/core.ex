@@ -31,23 +31,42 @@ defmodule WandererKills.Core do
   - `WandererKills.Core.Error` → `WandererKills.Infrastructure.Error`
   """
 
-  # HTTP Module Aliases
+  # HTTP Module Aliases (consolidated)
   defmodule Http do
     defmodule Client do
       @moduledoc false
+      # Core HTTP client functions
       defdelegate get(url, headers \\ [], options \\ []), to: WandererKills.Http.Client
       defdelegate get_with_rate_limit(url, opts \\ []), to: WandererKills.Http.Client
       defdelegate handle_status_code(status, resp \\ %{}), to: WandererKills.Http.Client
       defdelegate retriable_error?(error), to: WandererKills.Http.Client
+
+      # Consolidated utility functions (moved from Http.Util)
+      defdelegate request_with_telemetry(url, service, opts \\ []), to: WandererKills.Http.Client
+      defdelegate parse_json_response(response), to: WandererKills.Http.Client
+      defdelegate retry_operation(fun, service, opts \\ []), to: WandererKills.Http.Client
+
+      defdelegate validate_response_structure(data, required_fields),
+        to: WandererKills.Http.Client
     end
 
     defmodule ClientProvider do
       @moduledoc false
-      defdelegate get(), to: WandererKills.Http.ClientProvider
+      # Enhanced configuration provider
+      defdelegate get_client(), to: WandererKills.Http.ClientProvider
+      defdelegate default_headers(opts \\ []), to: WandererKills.Http.ClientProvider
+      defdelegate eve_api_headers(), to: WandererKills.Http.ClientProvider
+      defdelegate default_timeout(), to: WandererKills.Http.ClientProvider
+      defdelegate esi_timeout(), to: WandererKills.Http.ClientProvider
+      defdelegate build_request_opts(opts \\ []), to: WandererKills.Http.ClientProvider
+
+      # Legacy compatibility
+      def get(), do: get_client()
     end
 
     defmodule Util do
       @moduledoc false
+      # Deprecated: these functions have been moved to Client or ClientProvider
       defdelegate request_with_telemetry(url, service, opts \\ []), to: WandererKills.Http.Util
       defdelegate parse_json_response(response), to: WandererKills.Http.Util
       defdelegate build_query_params(params), to: WandererKills.Http.Util
@@ -79,12 +98,6 @@ defmodule WandererKills.Core do
       do: read_file("ship_types.csv", &WandererKills.Processing.CSV.parse_type_row/1)
 
     def update_ship_types(), do: parse_ship_type_csvs(["invTypes.csv", "invGroups.csv"])
-  end
-
-  # Cache Module Aliases
-  defmodule CacheUtils do
-    @moduledoc false
-    defdelegate cache_killmails_for_system(system_id, killmails), to: WandererKills.Cache.Utils
   end
 
   # Infrastructure Module Aliases
@@ -141,56 +154,6 @@ defmodule WandererKills.Core do
     defdelegate retry_max_delay(), to: WandererKills.Infrastructure.Constants
     defdelegate retry_backoff_factor(), to: WandererKills.Infrastructure.Constants
     defdelegate validation(type), to: WandererKills.Infrastructure.Constants
-  end
-
-  defmodule Behaviours do
-    @moduledoc false
-    # Re-export the behaviour modules for backward compatibility
-
-    defmodule HttpClient do
-      @moduledoc false
-      defdelegate get(url, headers, options), to: WandererKills.Http.Client
-      defdelegate get_with_rate_limit(url, opts), to: WandererKills.Http.Client
-    end
-
-    defmodule DataFetcher do
-      @moduledoc false
-      # Legacy DataFetcher behavior - these need to be implemented by actual clients
-      @callback fetch(term()) :: {:ok, term()} | {:error, term()}
-      @callback fetch_many([term()]) :: {:ok, [term()]} | {:error, term()}
-      @callback supports?(term()) :: boolean()
-    end
-
-    defmodule ESIClient do
-      @moduledoc false
-      # Legacy ESIClient behavior - define callbacks for backward compatibility
-      @callback get_alliance(integer()) :: {:ok, map()} | {:error, term()}
-      @callback get_alliance_batch([integer()]) :: {:ok, [map()]} | {:error, term()}
-      @callback get_character(integer()) :: {:ok, map()} | {:error, term()}
-      @callback get_character_batch([integer()]) :: {:ok, [map()]} | {:error, term()}
-      @callback get_corporation(integer()) :: {:ok, map()} | {:error, term()}
-      @callback get_corporation_batch([integer()]) :: {:ok, [map()]} | {:error, term()}
-      @callback get_group(integer()) :: {:ok, map()} | {:error, term()}
-      @callback get_group_batch([integer()]) :: {:ok, [map()]} | {:error, term()}
-      @callback get_system(integer()) :: {:ok, map()} | {:error, term()}
-      @callback get_system_batch([integer()]) :: {:ok, [map()]} | {:error, term()}
-      @callback get_type(integer()) :: {:ok, map()} | {:error, term()}
-      @callback get_type_batch([integer()]) :: {:ok, [map()]} | {:error, term()}
-
-      # Default implementation delegates to ESI client
-      defdelegate get_alliance(id), to: WandererKills.ESI.Client
-      defdelegate get_alliance_batch(ids), to: WandererKills.ESI.Client
-      defdelegate get_character(id), to: WandererKills.ESI.Client
-      defdelegate get_character_batch(ids), to: WandererKills.ESI.Client
-      defdelegate get_corporation(id), to: WandererKills.ESI.Client
-      defdelegate get_corporation_batch(ids), to: WandererKills.ESI.Client
-      defdelegate get_group(id), to: WandererKills.ESI.Client
-      defdelegate get_group_batch(ids), to: WandererKills.ESI.Client
-      defdelegate get_system(id), to: WandererKills.ESI.Client
-      defdelegate get_system_batch(ids), to: WandererKills.ESI.Client
-      defdelegate get_type(id), to: WandererKills.ESI.Client
-      defdelegate get_type_batch(ids), to: WandererKills.ESI.Client
-    end
   end
 
   defmodule Error do

@@ -47,15 +47,24 @@ defmodule WandererKills.Http.Client do
 
   require Logger
   alias WandererKills.Infrastructure.Error.{ConnectionError, TimeoutError, RateLimitError}
-  alias WandererKills.Infrastructure.Retry
+  alias WandererKills.Infrastructure.{Config, Error, Retry}
+  alias WandererKills.Http.ClientProvider
   alias WandererKills.Observability.Telemetry
-
-  @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 
   @type url :: String.t()
   @type headers :: [{String.t(), String.t()}]
   @type opts :: keyword()
   @type response :: {:ok, map()} | {:error, term()}
+
+  # Get the configured HTTP client implementation
+  defp http_client do
+    Application.get_env(:wanderer_kills, :http_client, __MODULE__)
+  end
+
+  # Real HTTP implementation using Req
+  def real_get(url, headers, raw, into) do
+    Req.get(url, headers: headers, raw: raw, into: into)
+  end
 
   # Implementation callbacks (not part of behaviour)
 
@@ -117,12 +126,26 @@ defmodule WandererKills.Http.Client do
   """
   @spec get_with_rate_limit(url(), opts()) :: response()
   def get_with_rate_limit(url, opts \\ []) do
+    # Check if we should use a mock client
+    case http_client() do
+      __MODULE__ ->
+        # Use the real implementation
+        do_get_with_rate_limit(url, opts)
+
+      mock_client ->
+        # Use mock implementation directly
+        mock_client.get_with_rate_limit(url, opts)
+    end
+  end
+
+  # The real implementation moved to a private function
+  defp do_get_with_rate_limit(url, opts) do
     headers = Keyword.get(opts, :headers, [])
     raw = Keyword.get(opts, :raw, false)
     into = Keyword.get(opts, :into)
 
-    # Merge default user-agent into headers
-    merged_headers = [{"user-agent", @user_agent} | headers]
+    # Merge default headers with custom headers
+    merged_headers = ClientProvider.default_headers() ++ headers
 
     fetch_fun = fn ->
       case do_get(url, merged_headers, raw, into) do
@@ -164,7 +187,7 @@ defmodule WandererKills.Http.Client do
     Telemetry.http_request_start("GET", url)
 
     result =
-      case Req.get(url, headers: headers, raw: raw, into: into) do
+      case real_get(url, headers, raw, into) do
         {:ok, %{status: status} = resp} ->
           handle_status_code(status, resp)
 
@@ -259,4 +282,136 @@ defmodule WandererKills.Http.Client do
 
   @spec retriable_error?(term()) :: boolean()
   def retriable_error?(error), do: Retry.retriable_http_error?(error)
+
+  # ============================================================================
+  # Consolidated Utility Functions (from Http.Util)
+  # ============================================================================
+
+  @doc """
+  Standard request with telemetry and error handling.
+
+  Provides consistent request patterns with automatic telemetry,
+  logging, and error handling across all HTTP clients.
+  """
+  @spec request_with_telemetry(url(), atom(), keyword()) :: response()
+  def request_with_telemetry(url, service, opts \\ []) do
+    operation = Keyword.get(opts, :operation, :http_request)
+    request_opts = ClientProvider.build_request_opts(opts)
+
+    Logger.debug("Starting HTTP request",
+      url: url,
+      service: service,
+      operation: operation
+    )
+
+    case get_with_rate_limit(url, request_opts) do
+      {:ok, response} ->
+        Logger.debug("HTTP request successful",
+          url: url,
+          service: service,
+          operation: operation,
+          status: Map.get(response, :status)
+        )
+
+        {:ok, response}
+
+      {:error, reason} ->
+        Logger.error("HTTP request failed",
+          url: url,
+          service: service,
+          operation: operation,
+          error: inspect(reason)
+        )
+
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Parse JSON response with error handling.
+
+  Provides consistent JSON parsing across all HTTP clients.
+  """
+  @spec parse_json_response(map()) :: {:ok, term()} | {:error, term()}
+  def parse_json_response(%{status: 200, body: body}) when is_map(body) or is_list(body) do
+    {:ok, body}
+  end
+
+  def parse_json_response(%{status: 200, body: body}) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, parsed} ->
+        {:ok, parsed}
+
+      {:error, reason} ->
+        {:error, Error.parsing_error("Invalid JSON response", %{reason: reason})}
+    end
+  end
+
+  def parse_json_response(%{status: 404}) do
+    {:error, :not_found}
+  end
+
+  def parse_json_response(%{status: 429}) do
+    {:error, :rate_limited}
+  end
+
+  def parse_json_response(%{status: status}) when status >= 500 do
+    {:error, Error.http_error("Server error", %{status: status})}
+  end
+
+  def parse_json_response(%{status: status}) do
+    {:error, Error.http_error("HTTP error", %{status: status})}
+  end
+
+  @doc """
+  Retry an operation with specific service configuration.
+  """
+  @spec retry_operation((-> term()), atom(), keyword()) :: {:ok, term()} | {:error, term()}
+  def retry_operation(fun, service, opts \\ []) do
+    operation_name = Keyword.get(opts, :operation_name, "#{service} request")
+    max_retries = Keyword.get(opts, :max_retries, Config.retry().http_max_retries)
+
+    Retry.retry_http_operation(fun,
+      operation_name: operation_name,
+      max_retries: max_retries
+    )
+  end
+
+  @doc """
+  Validate response format and structure.
+
+  Provides consistent validation across different API responses.
+  """
+  @spec validate_response_structure(term(), list()) :: {:ok, term()} | {:error, term()}
+  def validate_response_structure(data, required_fields) when is_map(data) do
+    missing_fields =
+      required_fields
+      |> Enum.reject(&Map.has_key?(data, &1))
+
+    case missing_fields do
+      [] -> {:ok, data}
+      missing -> {:error, Error.validation_error("Missing required fields", %{missing: missing})}
+    end
+  end
+
+  def validate_response_structure(data, _required_fields) when is_list(data) do
+    {:ok, data}
+  end
+
+  def validate_response_structure(data, _required_fields) do
+    {:error, Error.validation_error("Invalid response format", %{type: typeof(data)})}
+  end
+
+  # ============================================================================
+  # Private Helper Functions
+  # ============================================================================
+
+  defp typeof(data) when is_map(data), do: :map
+  defp typeof(data) when is_list(data), do: :list
+  defp typeof(data) when is_binary(data), do: :string
+  defp typeof(data) when is_integer(data), do: :integer
+  defp typeof(data) when is_float(data), do: :float
+  defp typeof(data) when is_boolean(data), do: :boolean
+  defp typeof(data) when is_atom(data), do: :atom
+  defp typeof(_), do: :unknown
 end

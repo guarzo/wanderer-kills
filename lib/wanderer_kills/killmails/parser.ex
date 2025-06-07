@@ -37,7 +37,7 @@ defmodule WandererKills.Killmails.Parser do
   require Logger
 
   alias WandererKills.Killmails.Enricher
-  alias WandererKills.Cache.ESI
+  alias WandererKills.Cache.Helper
   alias WandererKills.Observability.Monitoring
   alias WandererKills.Infrastructure.Error
 
@@ -310,7 +310,7 @@ defmodule WandererKills.Killmails.Parser do
     case Enricher.enrich_killmail(killmail) do
       {:ok, enriched} ->
         # Store in cache after successful enrichment
-        ESI.put_killmail(enriched["killmail_id"], enriched)
+        Helper.killmail_put(enriched["killmail_id"], enriched)
         {:ok, enriched}
 
       {:error, reason} ->
@@ -320,7 +320,7 @@ defmodule WandererKills.Killmails.Parser do
         )
 
         # Store basic data even if enrichment fails
-        ESI.put_killmail(killmail["killmail_id"], killmail)
+        Helper.killmail_put(killmail["killmail_id"], killmail)
         {:ok, killmail}
     end
   end
@@ -330,7 +330,7 @@ defmodule WandererKills.Killmails.Parser do
     hash = zkb["hash"]
 
     # Try to get from cache first, then fetch from ESI if needed
-    case ESI.get_killmail(killmail_id) do
+    case Helper.killmail_get(killmail_id) do
       {:ok, full_data} ->
         {:ok, full_data}
 
@@ -339,7 +339,7 @@ defmodule WandererKills.Killmails.Parser do
         case WandererKills.ESI.Client.get_killmail_raw(killmail_id, hash) do
           {:ok, esi_data} when is_map(esi_data) ->
             # Cache the result
-            ESI.put_killmail(killmail_id, esi_data)
+            Helper.killmail_put(killmail_id, esi_data)
             {:ok, esi_data}
 
           {:error, reason} ->

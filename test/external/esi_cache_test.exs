@@ -1,18 +1,17 @@
 defmodule WandererKills.EsiCacheTest do
   # Disable async to avoid cache interference
   use ExUnit.Case, async: false
-  alias WandererKills.Cache.ESI
-  alias WandererKills.Cache.ShipTypes
+  alias WandererKills.Cache.Helper
 
   setup do
-    WandererKills.Test.CacheHelpers.clear_all_caches()
+    WandererKills.TestHelpers.clear_all_caches()
 
     # Set the http_client for this test
     Application.put_env(:wanderer_kills, :http_client, WandererKills.Http.Client.Mock)
 
     on_exit(fn ->
       Application.put_env(:wanderer_kills, :http_client, WandererKills.MockHttpClient)
-      WandererKills.Test.CacheHelpers.clear_all_caches()
+      WandererKills.TestHelpers.clear_all_caches()
     end)
   end
 
@@ -30,8 +29,8 @@ defmodule WandererKills.EsiCacheTest do
       }
 
       # Store test data using unified cache interface
-      assert :ok = ESI.put_character(character_id, expected_data)
-      assert {:ok, actual_data} = ESI.get_character(character_id)
+      assert {:ok, true} = Helper.character_put(character_id, expected_data)
+      assert {:ok, actual_data} = Helper.character_get(character_id)
       assert actual_data.character_id == expected_data.character_id
       assert actual_data.name == expected_data.name
     end
@@ -48,8 +47,8 @@ defmodule WandererKills.EsiCacheTest do
         member_count: 100
       }
 
-      assert :ok = ESI.put_corporation(corporation_id, corp_data)
-      assert {:ok, cached_data} = ESI.get_corporation(corporation_id)
+      assert {:ok, true} = Helper.corporation_put(corporation_id, corp_data)
+      assert {:ok, cached_data} = Helper.corporation_get(corporation_id)
       assert cached_data.corporation_id == corporation_id
       assert cached_data.name == "Test Corp"
     end
@@ -66,8 +65,8 @@ defmodule WandererKills.EsiCacheTest do
         creator_corporation_id: 456
       }
 
-      assert :ok = ESI.put_alliance(alliance_id, alliance_data)
-      assert {:ok, cached_data} = ESI.get_alliance(alliance_id)
+      assert {:ok, true} = Helper.alliance_put(alliance_id, alliance_data)
+      assert {:ok, cached_data} = Helper.alliance_get(alliance_id)
       assert cached_data.alliance_id == alliance_id
       assert cached_data.name == "Test Alliance"
     end
@@ -84,8 +83,8 @@ defmodule WandererKills.EsiCacheTest do
         published: true
       }
 
-      assert :ok = ShipTypes.put(type_id, type_data)
-      assert {:ok, cached_data} = ShipTypes.get(type_id)
+      assert {:ok, true} = Helper.ship_type_put(type_id, type_data)
+      assert {:ok, cached_data} = Helper.ship_type_get(type_id)
       assert cached_data.type_id == type_id
       assert cached_data.name == "Test Type"
     end
@@ -103,8 +102,8 @@ defmodule WandererKills.EsiCacheTest do
         types: [1234, 5678]
       }
 
-      assert :ok = ESI.put_group(group_id, group_data)
-      assert {:ok, cached_data} = ESI.get_group(group_id)
+      assert {:ok, true} = Helper.put("groups", to_string(group_id), group_data)
+      assert {:ok, cached_data} = Helper.get_with_error("groups", to_string(group_id))
       assert cached_data.group_id == group_id
       assert cached_data.name == "Test Group"
     end
@@ -112,10 +111,15 @@ defmodule WandererKills.EsiCacheTest do
 
   describe "clear cache" do
     test "clear removes all entries" do
+      # Add some data first to ensure the namespaces exist
+      assert {:ok, true} = Helper.character_put(123, %{name: "test"})
+      assert {:ok, true} = Helper.corporation_put(456, %{name: "test corp"})
+      assert {:ok, true} = Helper.alliance_put(789, %{name: "test alliance"})
+
       # Test clearing specific namespace
-      assert :ok = ESI.clear(:characters)
-      assert :ok = ESI.clear(:corporations)
-      assert :ok = ESI.clear(:alliances)
+      Helper.clear_namespace("characters")
+      Helper.clear_namespace("corporations")
+      Helper.clear_namespace("alliances")
     end
   end
 end

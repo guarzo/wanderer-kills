@@ -140,19 +140,28 @@ defmodule WandererKills.Cache.Helper do
   def clear_namespace(namespace) do
     pattern = build_key(namespace, "*")
 
-    case Cachex.stream(@cache_name, pattern) do
-      {:ok, stream} ->
-        stream
-        |> Stream.each(fn {key, _value} -> Cachex.del(@cache_name, key) end)
-        |> Stream.run()
+    try do
+      case Cachex.stream(@cache_name, pattern) do
+        {:ok, stream} ->
+          stream
+          |> Stream.each(fn {key, _value} -> Cachex.del(@cache_name, key) end)
+          |> Stream.run()
 
-      stream when is_struct(stream, Stream) ->
-        stream
-        |> Stream.each(fn {key, _value} -> Cachex.del(@cache_name, key) end)
-        |> Stream.run()
+          :ok
 
-      {:error, reason} ->
-        raise "Failed to stream cache for clearing: #{inspect(reason)}"
+        stream when is_struct(stream, Stream) ->
+          stream
+          |> Stream.each(fn {key, _value} -> Cachex.del(@cache_name, key) end)
+          |> Stream.run()
+
+          :ok
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    rescue
+      error ->
+        {:error, error}
     end
   end
 
@@ -192,6 +201,21 @@ defmodule WandererKills.Cache.Helper do
     do: get_or_set("alliances", to_string(id), fallback_fn)
 
   def alliance_delete(id), do: delete("alliances", to_string(id))
+
+  @doc """
+  ESI-specific cache operations (legacy compatibility).
+  These functions provide direct ESI cache access for modules that expect ESI-prefixed functions.
+  """
+  def esi_get_character(id), do: character_get(id)
+  def esi_get_corporation(id), do: corporation_get(id)
+  def esi_get_alliance(id), do: alliance_get(id)
+
+  def esi_get_or_set_character(id, fallback_fn), do: character_get_or_set(id, fallback_fn)
+  def esi_get_or_set_corporation(id, fallback_fn), do: corporation_get_or_set(id, fallback_fn)
+  def esi_get_or_set_alliance(id, fallback_fn), do: alliance_get_or_set(id, fallback_fn)
+  def esi_get_or_set_type(id, fallback_fn), do: ship_type_get_or_set(id, fallback_fn)
+  def esi_get_or_set_group(id, fallback_fn), do: get_or_set("groups", to_string(id), fallback_fn)
+  def esi_get_or_set_killmail(id, fallback_fn), do: killmail_get_or_set(id, fallback_fn)
 
   @doc """
   Ship type cache operations.
@@ -394,6 +418,63 @@ defmodule WandererKills.Cache.Helper do
     do: get_or_set("killmails", to_string(id), fallback_fn)
 
   def killmail_delete(id), do: delete("killmails", to_string(id))
+
+  @doc """
+  Caches killmails for a specific system.
+
+  This function:
+  1. Updates the system's fetch timestamp
+  2. Caches individual killmails by ID
+  3. Associates killmail IDs with the system
+  4. Adds the system to the active systems list
+
+  ## Parameters
+  - `system_id` - The solar system ID
+  - `killmails` - List of killmail maps
+
+  ## Returns
+  - `:ok` on success
+  - `{:error, :cache_exception}` on failure
+  """
+  @spec cache_killmails_for_system(integer(), [map()]) :: :ok | {:error, term()}
+  def cache_killmails_for_system(system_id, killmails) when is_list(killmails) do
+    try do
+      # Update fetch timestamp
+      case system_set_fetch_timestamp(system_id, DateTime.utc_now()) do
+        {:ok, _} -> :ok
+        # Continue anyway
+        {:error, _reason} -> :ok
+      end
+
+      # Extract killmail IDs and cache individual killmails
+      killmail_ids =
+        killmails
+        |> Enum.map(fn killmail ->
+          killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, "killID")
+
+          if killmail_id do
+            # Cache the individual killmail
+            killmail_put(killmail_id, killmail)
+            killmail_id
+          else
+            nil
+          end
+        end)
+        |> Enum.filter(&(&1 != nil))
+
+      # Add each killmail ID to system's killmail list
+      Enum.each(killmail_ids, fn killmail_id ->
+        system_add_killmail(system_id, killmail_id)
+      end)
+
+      # Add system to active list
+      system_add_active(system_id)
+
+      :ok
+    rescue
+      _error -> {:error, :cache_exception}
+    end
+  end
 
   # Private functions
 

@@ -8,8 +8,8 @@ defmodule WandererKills.ESI.DataFetcher do
 
   require Logger
   alias WandererKills.Core.{Config, Error}
-  alias WandererKills.Core.Behaviours.{ESIClient, DataFetcher}
-  alias WandererKills.Cache.ESI
+  alias WandererKills.Infrastructure.Behaviours.{ESIClient, DataFetcher}
+  alias WandererKills.Cache.Helper
 
   @behaviour ESIClient
   @behaviour DataFetcher
@@ -23,7 +23,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_character(character_id) when is_integer(character_id) do
-    ESI.get_or_set_character(character_id, fn ->
+    Helper.esi_get_or_set_character(character_id, fn ->
       fetch_from_api(:character, character_id)
     end)
   end
@@ -35,7 +35,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_corporation(corporation_id) when is_integer(corporation_id) do
-    ESI.get_or_set_corporation(corporation_id, fn ->
+    Helper.esi_get_or_set_corporation(corporation_id, fn ->
       fetch_from_api(:corporation, corporation_id)
     end)
   end
@@ -47,7 +47,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_alliance(alliance_id) when is_integer(alliance_id) do
-    ESI.get_or_set_alliance(alliance_id, fn ->
+    Helper.esi_get_or_set_alliance(alliance_id, fn ->
       fetch_from_api(:alliance, alliance_id)
     end)
   end
@@ -59,7 +59,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_type(type_id) when is_integer(type_id) do
-    ESI.get_or_set_type(type_id, fn ->
+    Helper.esi_get_or_set_type(type_id, fn ->
       fetch_from_api(:type, type_id)
     end)
   end
@@ -71,7 +71,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl ESIClient
   def get_group(group_id) when is_integer(group_id) do
-    ESI.get_or_set_group(group_id, fn ->
+    Helper.esi_get_or_set_group(group_id, fn ->
       fetch_from_api(:group, group_id)
     end)
   end
@@ -129,7 +129,7 @@ defmodule WandererKills.ESI.DataFetcher do
   """
   def get_killmail(killmail_id, killmail_hash)
       when is_integer(killmail_id) and is_binary(killmail_hash) do
-    ESI.get_or_set_killmail(killmail_id, fn ->
+    Helper.esi_get_or_set_killmail(killmail_id, fn ->
       fetch_killmail_from_api(killmail_id, killmail_hash)
     end)
   end
@@ -187,9 +187,90 @@ defmodule WandererKills.ESI.DataFetcher do
     end
   end
 
+  @doc """
+  Fetches types for specific groups and returns parsed ship data.
+  """
+  def fetch_ship_types_for_groups(group_ids \\ @ship_group_ids) when is_list(group_ids) do
+    Logger.info("Fetching ship types for groups", group_ids: group_ids)
+
+    with {:ok, groups} <- fetch_groups(group_ids),
+         {:ok, ship_types} <- extract_and_fetch_types(groups) do
+      {:ok, ship_types}
+    else
+      {:error, reason} ->
+        Logger.error("Failed to fetch ship types: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Fetches a killmail directly from ESI API (raw implementation).
+
+  This provides direct access to the ESI API for killmail fetching,
+  bypassing the cache layer. Used by the parser when fresh killmail data is needed.
+  """
+  @spec get_killmail_raw(integer(), String.t()) :: {:ok, map()} | {:error, term()}
+  def get_killmail_raw(killmail_id, killmail_hash) do
+    url = "#{esi_base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
+
+    case WandererKills.Http.Client.get_with_rate_limit(url) do
+      {:ok, %{body: body}} -> {:ok, body}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   # ============================================================================
   # Private Functions
   # ============================================================================
+
+  defp fetch_groups(group_ids) do
+    Logger.debug("Fetching groups from ESI", group_ids: group_ids)
+
+    results = Enum.map(group_ids, &get_group/1)
+
+    errors = Enum.filter(results, &match?({:error, _}, &1))
+    successes = Enum.filter(results, &match?({:ok, _}, &1))
+
+    if length(errors) > 0 do
+      Logger.error("Failed to fetch some groups",
+        error_count: length(errors),
+        success_count: length(successes)
+      )
+
+      {:error, {:partial_failure, errors}}
+    else
+      groups = Enum.map(successes, fn {:ok, group} -> group end)
+      {:ok, groups}
+    end
+  end
+
+  defp extract_and_fetch_types(groups) do
+    Logger.debug("Extracting type IDs from groups")
+
+    type_ids =
+      groups
+      |> Enum.flat_map(fn group -> Map.get(group, "types", []) end)
+      |> Enum.uniq()
+
+    Logger.debug("Fetching types", type_count: length(type_ids))
+
+    results = Enum.map(type_ids, &get_type/1)
+
+    errors = Enum.filter(results, &match?({:error, _}, &1))
+    successes = Enum.filter(results, &match?({:ok, _}, &1))
+
+    if length(errors) > 0 do
+      Logger.error("Failed to fetch some types",
+        error_count: length(errors),
+        success_count: length(successes)
+      )
+
+      {:error, {:partial_failure, errors}}
+    else
+      types = Enum.map(successes, fn {:ok, type} -> type end)
+      {:ok, types}
+    end
+  end
 
   defp fetch_batch(entity_type, ids) when is_list(ids) do
     ids

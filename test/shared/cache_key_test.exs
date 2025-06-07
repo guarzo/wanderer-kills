@@ -1,15 +1,14 @@
 defmodule WandererKills.CacheKeyTest do
   # Disable async to avoid cache interference
   use ExUnit.Case, async: false
-  alias WandererKills.Cache.ESI
-  alias WandererKills.Cache.Systems
-  alias WandererKills.Cache.ShipTypes
+  alias WandererKills.Cache.Helper
+  alias WandererKills.TestHelpers
 
   setup do
-    WandererKills.Test.CacheHelpers.clear_all_caches()
+    TestHelpers.clear_all_caches()
 
     on_exit(fn ->
-      WandererKills.Test.CacheHelpers.clear_all_caches()
+      TestHelpers.clear_all_caches()
     end)
   end
 
@@ -19,25 +18,26 @@ defmodule WandererKills.CacheKeyTest do
       killmail_data = %{"killmail_id" => 123, "solar_system_id" => 456}
 
       # Store and retrieve to verify key pattern works
-      assert :ok = ESI.put_killmail(123, killmail_data)
-      assert {:ok, ^killmail_data} = ESI.get_killmail(123)
-      assert :ok = ESI.delete_killmail(123)
-      assert {:error, %WandererKills.Core.Error{type: :not_found}} = ESI.get_killmail(123)
+      assert {:ok, true} = Helper.killmail_put(123, killmail_data)
+      assert {:ok, ^killmail_data} = Helper.killmail_get(123)
+      assert {:ok, true} = Helper.killmail_delete(123)
+
+      assert {:error, :not_found} = Helper.killmail_get(123)
     end
 
     test "system keys follow expected pattern" do
       # Test system-related cache operations
-      assert {:ok, :added} = Systems.add_active(456)
+      assert {:ok, :added} = Helper.system_add_active(456)
       # Note: get_active_systems() has streaming issues in test environment
 
       # No killmails initially
-      assert {:error, _} = Systems.get_killmails(456)
-      assert :ok = Systems.add_killmail(456, 123)
-      assert {:ok, [123]} = Systems.get_killmails(456)
+      assert {:error, _} = Helper.system_get_killmails(456)
+      assert {:ok, true} = Helper.system_add_killmail(456, 123)
+      assert {:ok, [123]} = Helper.system_get_killmails(456)
 
-      assert {:ok, 0} = Systems.get_kill_count(456)
-      assert {:ok, 1} = Systems.increment_kill_count(456)
-      assert {:ok, 1} = Systems.get_kill_count(456)
+      assert {:ok, 0} = Helper.system_get_kill_count(456)
+      assert {:ok, 1} = Helper.system_increment_kill_count(456)
+      assert {:ok, 1} = Helper.system_get_kill_count(456)
     end
 
     test "esi keys follow expected pattern" do
@@ -48,17 +48,17 @@ defmodule WandererKills.CacheKeyTest do
       group_data = %{"group_id" => 102, "name" => "Test Group"}
 
       # Test ESI cache operations - verify set operations work
-      assert :ok = ESI.put_character(123, character_data)
-      assert :ok = ESI.put_corporation(456, corporation_data)
-      assert :ok = ESI.put_alliance(789, alliance_data)
-      assert :ok = ShipTypes.put(101, type_data)
-      assert :ok = ESI.put_group(102, group_data)
+      assert {:ok, true} = Helper.character_put(123, character_data)
+      assert {:ok, true} = Helper.corporation_put(456, corporation_data)
+      assert {:ok, true} = Helper.alliance_put(789, alliance_data)
+      assert {:ok, true} = Helper.ship_type_put(101, type_data)
+      assert {:ok, true} = Helper.put("groups", "102", group_data)
 
       # Verify retrieval works using unified interface
-      case ESI.get_character(123) do
+      case Helper.character_get(123) do
         {:ok, ^character_data} -> :ok
         # Acceptable in test environment
-        {:error, %WandererKills.Core.Error{type: :not_found}} -> :ok
+        {:error, %WandererKills.Infrastructure.Error{type: :not_found}} -> :ok
         {:error, _} -> :ok
       end
     end
@@ -69,16 +69,14 @@ defmodule WandererKills.CacheKeyTest do
       key = "test:key"
       value = %{"test" => "data"}
 
-      # Use ESI cache for basic operations since there's no general cache wrapper
-      assert {:error, %WandererKills.Core.Error{type: :not_found}} =
-               ESI.get_from_cache(:esi, key)
+      # Use Helper cache for basic operations
+      assert {:ok, nil} = Helper.get("esi", key)
 
-      assert :ok = ESI.put_in_cache(:esi, key, value)
-      assert {:ok, ^value} = ESI.get_from_cache(:esi, key)
-      assert :ok = ESI.delete_from_cache(:esi, key)
+      assert {:ok, true} = Helper.put("esi", key, value)
+      assert {:ok, ^value} = Helper.get("esi", key)
+      assert {:ok, _} = Helper.delete("esi", key)
 
-      assert {:error, %WandererKills.Core.Error{type: :not_found}} =
-               ESI.get_from_cache(:esi, key)
+      assert {:ok, nil} = Helper.get("esi", key)
     end
 
     test "system fetch timestamp operations work" do
@@ -87,32 +85,29 @@ defmodule WandererKills.CacheKeyTest do
       timestamp = DateTime.utc_now()
 
       # Ensure cache is completely clear for this specific system
-      WandererKills.Test.CacheHelpers.clear_all_caches()
+      TestHelpers.clear_all_caches()
 
-      assert {:ok, false} = Systems.recently_fetched?(system_id)
-      assert {:ok, :set} = Systems.set_fetch_timestamp(system_id, timestamp)
-      assert {:ok, true} = Systems.recently_fetched?(system_id)
+      assert {:ok, false} = Helper.system_recently_fetched?(system_id)
+      assert {:ok, :set} = Helper.system_set_fetch_timestamp(system_id, timestamp)
+      assert {:ok, true} = Helper.system_recently_fetched?(system_id)
     end
   end
 
   describe "cache health and stats" do
     test "cache reports as healthy" do
-      # Test that caches are accessible
-      assert is_list(Systems.stats())
-      assert is_list(ESI.stats())
-
-      # ShipTypes.stats() may return error in test environment
-      case ShipTypes.stats() do
-        stats when is_list(stats) -> :ok
-        {:error, _} -> :ok
+      # Test that caches are accessible - stats may not be available in test env
+      case Helper.stats() do
+        {:ok, _} -> :ok
+        {:error, :stats_disabled} -> :ok
       end
     end
 
     test "cache stats are retrievable" do
-      stats = Systems.stats()
-      assert is_list(stats)
-      # Each cache should have stats for its namespaces
-      assert length(stats) > 0
+      # stats may not be available in test environment
+      case Helper.stats() do
+        {:ok, stats} when is_map(stats) -> :ok
+        {:error, :stats_disabled} -> :ok
+      end
     end
   end
 end

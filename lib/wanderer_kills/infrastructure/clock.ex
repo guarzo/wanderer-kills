@@ -2,23 +2,8 @@ defmodule WandererKills.Infrastructure.Clock do
   @moduledoc """
   Unified time and clock utilities for WandererKills.
 
-  This module consolidates all time-related functions from Infrastructure.Clock
-  and TimeHandler modules, providing a single API for time operations.
-
-  ## Configuration
-
-  For testing, you can override the time source via application config:
-
-  ```elixir
-  # Use a fixed time
-  config :wanderer_kills, :clock, ~U[2025-01-01T00:00:00Z]
-
-  # Use a custom function
-  config :wanderer_kills, :clock, fn -> DateTime.utc_now() end
-
-  # Use a module and function
-  config :wanderer_kills, :clock, {MyTimeModule, :current_time}
-  ```
+  This module provides a clean, simple API for time operations without
+  complex configuration overrides that were previously used for testing.
 
   ## Usage
 
@@ -35,17 +20,15 @@ defmodule WandererKills.Infrastructure.Clock do
   # Parse killmail times
   {:ok, datetime} = Clock.parse_time("2025-01-01T00:00:00Z")
   ```
+
+  ## Testing
+
+  For testing time-dependent behavior, use libraries like `ExMachina` or
+  inject time values directly into your test functions rather than relying
+  on global configuration overrides.
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Config
-
-  @type clock_config ::
-          nil
-          | {module(), atom()}
-          | (-> DateTime.t() | integer())
-          | DateTime.t()
-          | integer()
 
   @type killmail :: map()
   @type time_result :: {:ok, DateTime.t()} | {:error, term()}
@@ -57,25 +40,10 @@ defmodule WandererKills.Infrastructure.Clock do
 
   @doc """
   Returns the current `DateTime` in UTC.
-
-  In production, this calls `DateTime.utc_now()`.
-  In test mode, you can override via `:wanderer_kills, :clock`.
   """
   @spec now() :: DateTime.t()
   def now do
-    case Config.clock() do
-      nil ->
-        DateTime.utc_now()
-
-      {mod, fun} ->
-        apply(mod, fun, [])
-
-      fun when is_function(fun, 0) ->
-        fun.()
-
-      fixed_time when is_struct(fixed_time, DateTime) ->
-        fixed_time
-    end
+    DateTime.utc_now()
   end
 
   @doc """
@@ -83,23 +51,7 @@ defmodule WandererKills.Infrastructure.Clock do
   """
   @spec now_milliseconds() :: integer()
   def now_milliseconds do
-    case Config.clock() do
-      nil ->
-        System.system_time(:millisecond)
-
-      {mod, fun} ->
-        apply(mod, fun, [])
-        |> datetime_or_int_to_milliseconds()
-
-      fun when is_function(fun, 0) ->
-        fun.() |> datetime_or_int_to_milliseconds()
-
-      fixed_time when is_struct(fixed_time, DateTime) ->
-        DateTime.to_unix(fixed_time, :millisecond)
-
-      fixed_ms when is_integer(fixed_ms) ->
-        fixed_ms
-    end
+    System.system_time(:millisecond)
   end
 
   @doc """
@@ -107,7 +59,7 @@ defmodule WandererKills.Infrastructure.Clock do
   """
   @spec system_time() :: integer()
   def system_time() do
-    system_time(:nanosecond)
+    System.system_time(:nanosecond)
   end
 
   @doc """
@@ -115,7 +67,7 @@ defmodule WandererKills.Infrastructure.Clock do
   """
   @spec system_time(System.time_unit()) :: integer()
   def system_time(unit) do
-    get_system_time_with_config(unit)
+    System.system_time(unit)
   end
 
   @doc """
@@ -275,65 +227,4 @@ defmodule WandererKills.Infrastructure.Clock do
   end
 
   defp older_than_cutoff?(km_dt, cutoff_dt), do: DateTime.compare(km_dt, cutoff_dt) == :lt
-
-  defp get_system_time_with_config(unit) do
-    case Config.clock() do
-      nil ->
-        System.system_time(unit)
-
-      {WandererKills.Clock, :system_time} ->
-        # Avoid recursion by calling System directly
-        System.system_time(unit)
-
-      config ->
-        get_configured_time(config, unit)
-    end
-  end
-
-  @spec get_configured_time(clock_config(), System.time_unit()) :: integer()
-  # Module function tuple - call and convert
-  defp get_configured_time({mod, fun}, unit) when is_atom(mod) and is_atom(fun) do
-    mod
-    |> apply(fun, [])
-    |> convert_time_to_unit(unit)
-  end
-
-  # Function reference - call and convert
-  defp get_configured_time(fun, unit) when is_function(fun, 0) do
-    fun
-    |> apply([])
-    |> convert_time_to_unit(unit)
-  end
-
-  # Fixed values - convert directly
-  defp get_configured_time(value, unit) when is_struct(value, DateTime) or is_integer(value) do
-    convert_time_to_unit(value, unit)
-  end
-
-  # Catch-all: fallback to system time
-  defp get_configured_time(_config, unit) do
-    System.system_time(unit)
-  end
-
-  @spec datetime_or_int_to_milliseconds(DateTime.t() | integer()) :: integer()
-  defp datetime_or_int_to_milliseconds(%DateTime{} = dt) do
-    DateTime.to_unix(dt, :millisecond)
-  end
-
-  defp datetime_or_int_to_milliseconds(ms) when is_integer(ms) do
-    ms
-  end
-
-  @spec convert_time_to_unit(DateTime.t() | integer(), System.time_unit()) :: integer()
-  defp convert_time_to_unit(%DateTime{} = dt, unit) do
-    DateTime.to_unix(dt, unit)
-  end
-
-  defp convert_time_to_unit(ms, :millisecond) when is_integer(ms), do: ms
-  defp convert_time_to_unit(ms, :second) when is_integer(ms), do: div(ms, 1000)
-  defp convert_time_to_unit(ms, :microsecond) when is_integer(ms), do: ms * 1000
-  defp convert_time_to_unit(ms, :nanosecond) when is_integer(ms), do: ms * 1_000_000
-
-  defp convert_time_to_unit(ms, :native) when is_integer(ms),
-    do: System.convert_time_unit(ms, :millisecond, :native)
 end

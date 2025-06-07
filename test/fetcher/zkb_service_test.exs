@@ -6,12 +6,21 @@ defmodule WandererKills.Zkb.ClientTest do
 
   alias WandererKills.Zkb.Client, as: ZKB
   alias WandererKills.TestHelpers
-  alias WandererKills.Core.Http.Client.Mock, as: HttpClientMock
+  alias WandererKills.Http.Client.Mock, as: HttpClientMock
 
   setup :verify_on_exit!
 
   setup do
     TestHelpers.clear_all_caches()
+
+    # Configure the HTTP client to use the mock
+    Application.put_env(:wanderer_kills, :http_client, HttpClientMock)
+
+    on_exit(fn ->
+      # Reset to default
+      Application.delete_env(:wanderer_kills, :http_client)
+    end)
+
     :ok
   end
 

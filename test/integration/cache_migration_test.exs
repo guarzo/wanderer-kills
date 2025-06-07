@@ -2,7 +2,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
   use ExUnit.Case, async: false
   use WandererKills.TestCase
 
-  alias WandererKills.Cache.{ESI, ShipTypes, Systems, Helper}
+  alias WandererKills.Cache.Helper
   alias WandererKills.ESI.DataFetcher
 
   describe "Cachex migration integration tests" do
@@ -16,11 +16,11 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       }
 
       # Test cache miss then hit
-      assert {:error, _} = ESI.get_character(character_id)
+      assert {:error, _} = Helper.character_get(character_id)
 
       # Put data and verify it can be retrieved
-      assert :ok = ESI.put_character(character_id, character_data)
-      assert {:ok, ^character_data} = ESI.get_character(character_id)
+      assert {:ok, true} = Helper.character_put(character_id, character_data)
+      assert {:ok, ^character_data} = Helper.character_get(character_id)
 
       # Verify cache namespace
       assert Helper.exists?("characters", character_id)
@@ -37,14 +37,14 @@ defmodule WandererKills.Integration.CacheMigrationTest do
 
       # Test get_or_set functionality
       result =
-        ESI.get_or_set_corporation(corporation_id, fn ->
+        Helper.corporation_get_or_set(corporation_id, fn ->
           corporation_data
         end)
 
       assert {:ok, ^corporation_data} = result
 
       # Verify it's now cached
-      assert {:ok, ^corporation_data} = ESI.get_corporation(corporation_id)
+      assert {:ok, ^corporation_data} = Helper.corporation_get(corporation_id)
     end
 
     test "ESI cache handles alliance data correctly" do
@@ -58,14 +58,14 @@ defmodule WandererKills.Integration.CacheMigrationTest do
 
       # Test get_or_set functionality
       result =
-        ESI.get_or_set_alliance(alliance_id, fn ->
+        Helper.alliance_get_or_set(alliance_id, fn ->
           alliance_data
         end)
 
       assert {:ok, ^alliance_data} = result
 
       # Verify it's now cached
-      assert {:ok, ^alliance_data} = ESI.get_alliance(alliance_id)
+      assert {:ok, ^alliance_data} = Helper.alliance_get(alliance_id)
     end
 
     test "ship types cache preserves behavior" do
@@ -78,15 +78,15 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       }
 
       # Test cache miss then hit
-      assert {:error, _} = ShipTypes.get(type_id)
+      assert {:error, _} = Helper.ship_type_get(type_id)
 
       # Put data and verify it can be retrieved
-      assert :ok = ShipTypes.put(type_id, ship_data)
-      assert {:ok, ^ship_data} = ShipTypes.get(type_id)
+      assert {:ok, true} = Helper.ship_type_put(type_id, ship_data)
+      assert {:ok, ^ship_data} = Helper.ship_type_get(type_id)
 
       # Test get_or_set functionality
       result =
-        ShipTypes.get_or_set(type_id, fn ->
+        Helper.ship_type_get_or_set(type_id, fn ->
           ship_data
         end)
 
@@ -98,15 +98,15 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       killmail_ids = [12_345, 67_890, 54_321]
 
       # Test empty system initially - should return not found error
-      assert {:error, _} = Systems.get_killmails(system_id)
+      assert {:error, _} = Helper.system_get_killmails(system_id)
 
       # Add killmails to system
       Enum.each(killmail_ids, fn killmail_id ->
-        assert :ok = Systems.add_killmail(system_id, killmail_id)
+        assert {:ok, true} = Helper.system_add_killmail(system_id, killmail_id)
       end)
 
       # Verify killmails are associated
-      assert {:ok, retrieved_ids} = Systems.get_killmails(system_id)
+      assert {:ok, retrieved_ids} = Helper.system_get_killmails(system_id)
       assert length(retrieved_ids) == length(killmail_ids)
 
       # All original IDs should be present (order may vary)
@@ -119,10 +119,10 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       system_id = 30_000_143
 
       # Add system to active list first
-      assert {:ok, _} = Systems.add_active(system_id)
+      assert {:ok, _} = Helper.system_add_active(system_id)
 
       # Test that the system is marked as active
-      assert {:ok, true} = Systems.is_active?(system_id)
+      assert {:ok, true} = Helper.system_is_active?(system_id)
 
       # Note: get_active_systems() has a streaming issue in test environment
       # but the core functionality (is_active?) works correctly
@@ -133,13 +133,13 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       timestamp = DateTime.utc_now()
 
       # Should not have timestamp initially
-      assert {:error, _} = Systems.get_fetch_timestamp(system_id)
+      assert {:error, _} = Helper.system_get_fetch_timestamp(system_id)
 
       # Set timestamp
-      assert {:ok, _} = Systems.set_fetch_timestamp(system_id, timestamp)
+      assert {:ok, _} = Helper.system_set_fetch_timestamp(system_id, timestamp)
 
       # Verify timestamp is retrieved correctly
-      assert {:ok, retrieved_timestamp} = Systems.get_fetch_timestamp(system_id)
+      assert {:ok, retrieved_timestamp} = Helper.system_get_fetch_timestamp(system_id)
 
       # Allow small time difference due to serialization
       time_diff = DateTime.diff(timestamp, retrieved_timestamp, :millisecond)
@@ -150,16 +150,16 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       system_id = 30_000_145
 
       # Should not be recently fetched initially
-      assert {:ok, false} = Systems.recently_fetched?(system_id)
+      assert {:ok, false} = Helper.system_recently_fetched?(system_id)
 
       # Set current timestamp
-      assert {:ok, _} = Systems.set_fetch_timestamp(system_id, DateTime.utc_now())
+      assert {:ok, _} = Helper.system_set_fetch_timestamp(system_id, DateTime.utc_now())
 
       # Should now be recently fetched (within default threshold)
-      assert {:ok, true} = Systems.recently_fetched?(system_id)
+      assert {:ok, true} = Helper.system_recently_fetched?(system_id)
 
       # Test with custom threshold
-      assert {:ok, true} = Systems.recently_fetched?(system_id, 60)
+      assert {:ok, true} = Helper.system_recently_fetched?(system_id, 60)
     end
 
     test "killmail cache handles individual killmails correctly" do
@@ -172,11 +172,11 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       }
 
       # Test cache miss then hit
-      assert {:error, _} = ESI.get_killmail(killmail_id)
+      assert {:error, _} = Helper.killmail_get(killmail_id)
 
       # Put data and verify it can be retrieved
-      assert :ok = ESI.put_killmail(killmail_id, killmail_data)
-      assert {:ok, ^killmail_data} = ESI.get_killmail(killmail_id)
+      assert {:ok, true} = Helper.killmail_put(killmail_id, killmail_data)
+      assert {:ok, ^killmail_data} = Helper.killmail_get(killmail_id)
     end
 
     test "unified ESI DataFetcher works correctly" do
@@ -185,7 +185,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       character_data = %{"character_id" => character_id, "name" => "DataFetcher Test"}
 
       # Mock ESI response
-      :ok = ESI.put_character(character_id, character_data)
+      {:ok, true} = Helper.character_put(character_id, character_data)
 
       # Test DataFetcher behavior implementation
       assert {:ok, ^character_data} = DataFetcher.fetch({:character, character_id})
@@ -228,10 +228,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
 
     test "cache stats work correctly" do
       # Test basic stats functionality
-      stats = Helper.stats()
-
-      # Should return stats in expected format (may be disabled in test env)
-      case stats do
+      case Helper.stats() do
         {:ok, %{}} -> :ok
         {:error, :stats_disabled} -> :ok
         other -> flunk("Unexpected stats result: #{inspect(other)}")
@@ -260,14 +257,14 @@ defmodule WandererKills.Integration.CacheMigrationTest do
 
       # Should call fallback on cache miss
       result =
-        ESI.get_or_set_character(character_id, fn ->
+        Helper.character_get_or_set(character_id, fn ->
           fallback_data
         end)
 
       assert {:ok, ^fallback_data} = result
 
       # Should now be cached and not call fallback again
-      assert {:ok, ^fallback_data} = ESI.get_character(character_id)
+      assert {:ok, ^fallback_data} = Helper.character_get(character_id)
     end
 
     test "ship types fallback preserves behavior" do
@@ -276,14 +273,14 @@ defmodule WandererKills.Integration.CacheMigrationTest do
 
       # Should call fallback on cache miss
       result =
-        ShipTypes.get_or_set(type_id, fn ->
+        Helper.ship_type_get_or_set(type_id, fn ->
           fallback_data
         end)
 
       assert {:ok, ^fallback_data} = result
 
       # Should now be cached
-      assert {:ok, ^fallback_data} = ShipTypes.get(type_id)
+      assert {:ok, ^fallback_data} = Helper.ship_type_get(type_id)
     end
   end
 
@@ -294,9 +291,9 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       # for invalid input types, which is the expected behavior
 
       # Test with non-existent valid IDs instead
-      assert {:error, _} = ESI.get_character(999_999_999)
-      assert {:error, _} = ShipTypes.get(999_999_999)
-      assert {:error, _} = Systems.get_killmails(999_999_999)
+      assert {:error, _} = Helper.character_get(999_999_999)
+      assert {:error, _} = Helper.ship_type_get(999_999_999)
+      assert {:error, _} = Helper.system_get_killmails(999_999_999)
     end
 
     test "fallback function errors are handled correctly" do
@@ -306,7 +303,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       # Note: The current implementation has a bug where {:ignore, error} is not handled
       # This test documents the current behavior
       assert_raise CaseClauseError, fn ->
-        ESI.get_or_set_character(character_id, fn ->
+        Helper.character_get_or_set(character_id, fn ->
           raise "Fallback error"
         end)
       end

@@ -37,7 +37,7 @@ defmodule WandererKills.ApiTest do
 
     test "returns 404 for non-existent killmail" do
       # Mock the HTTP client that ZKB actually uses internally
-      WandererKills.Core.Http.Client.Mock
+      WandererKills.Http.Client.Mock
       |> expect(:get_with_rate_limit, fn _url, _opts ->
         # ZKB returns empty array for not found
         {:ok, %{status: 200, body: "[]"}}

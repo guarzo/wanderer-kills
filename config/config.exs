@@ -3,42 +3,51 @@ import Config
 config :wanderer_kills,
   port: String.to_integer(System.get_env("PORT") || "4004"),
 
-  # Flattened cache configuration (was nested in cache: %{})
+  # Cache configuration
   cache_killmails_ttl: 3600,
   cache_system_ttl: 1800,
   cache_esi_ttl: 3600,
-
-  # System cache thresholds
+  cache_esi_killmail_ttl: 86_400,
   cache_system_recent_fetch_threshold: 5,
 
-  # Flattened parser configuration (was nested in parser: %{})
+  # Parser configuration
   parser_cutoff_seconds: 3_600,
   parser_summary_interval_ms: 60_000,
 
-  # Flattened enricher configuration (was nested in enricher: %{})
+  # Enricher configuration
   enricher_max_concurrency: 10,
   enricher_task_timeout_ms: 30_000,
   enricher_min_attackers_for_parallel: 3,
 
-  # Flattened concurrency configuration (was nested in concurrency: %{})
+  # Batch processing configuration
   concurrency_batch_size: 100,
 
-  # Flattened ESI configuration (was nested in esi: %{})
+  # Service URLs
   esi_base_url: "https://esi.evetech.net/latest",
-
-  # Flattened zKillboard configuration (was nested in zkb: %{})
   zkb_base_url: "https://zkillboard.com/api",
 
   # HTTP client configuration
   http_client: WandererKills.Http.Client,
 
-  # Flattened retry configuration (was nested in retry: %{})
+  # Request timeout configuration (missing from original config)
+  esi_request_timeout_ms: 30_000,
+  zkb_request_timeout_ms: 15_000,
+  http_request_timeout_ms: 10_000,
+  default_request_timeout_ms: 10_000,
+
+  # Batch concurrency configuration (missing from original config)
+  esi_batch_concurrency: 10,
+  zkb_batch_concurrency: 5,
+  default_batch_concurrency: 5,
+
+  # Retry configuration
   retry_http_max_retries: 3,
   retry_http_base_delay: 1000,
+  retry_http_max_delay: 30_000,
   retry_redisq_max_retries: 5,
   retry_redisq_base_delay: 500,
 
-  # Flattened RedisQ stream configuration (was nested in redisq: %{})
+  # RedisQ stream configuration
   redisq_base_url: "https://zkillredisq.stream/listen.php",
   redisq_fast_interval_ms: 1_000,
   redisq_idle_interval_ms: 5_000,
@@ -47,17 +56,17 @@ config :wanderer_kills,
   redisq_backoff_factor: 2,
   redisq_task_timeout_ms: 10_000,
 
-  # Flattened killmail store configuration (was nested in killmail_store: %{})
+  # Killmail store configuration
   killmail_store_gc_interval_ms: 60_000,
   killmail_store_max_events_per_system: 10_000,
 
-  # Flattened telemetry configuration (was nested in telemetry: %{})
+  # Telemetry configuration
   telemetry_enabled_metrics: [:cache, :api, :circuit, :event],
   telemetry_sampling_rate: 1.0,
   # 7 days in seconds
   telemetry_retention_period: 604_800,
 
-  # Add configuration guards for services (for test environment)
+  # Service startup configuration
   start_preloader: true,
   start_redisq: true
 
@@ -74,152 +83,57 @@ config :logger,
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [
+    # Standard Elixir metadata
     :request_id,
     :application,
     :module,
     :function,
     :line,
-    # Application-specific metadata
+
+    # Core application metadata
     :system_id,
     :killmail_id,
     :operation,
     :step,
     :status,
     :error,
-    :killmail_count,
-    :provided_id,
-    :cache_key,
     :duration,
     :source,
     :reason,
-    :attempt,
+
+    # HTTP and API metadata
     :url,
     :response_time,
+    :method,
+    :service,
+    :endpoint,
+
+    # EVE Online entity metadata
     :character_id,
     :corporation_id,
     :alliance_id,
     :type_id,
+    :solar_system_id,
+    :ship_type_id,
+
+    # Cache metadata
+    :cache,
+    :cache_key,
     :cache_type,
-    :id,
-    :limit,
-    :since_hours,
-    :force,
+    :ttl,
+
+    # Processing metadata
+    :killmail_count,
+    :count,
+    :result,
+    :data_source,
+
+    # Retry and timeout metadata
+    :attempt,
     :max_attempts,
     :remaining_attempts,
     :delay_ms,
-    :message,
-    :timestamp,
-    :system_count,
-    :stat,
-    :new_value,
-    :state,
-    :hash,
-    :kill_time,
-    :cutoff,
-    :solar_system_id,
-    :solar_system_name,
-    :ship_type_id,
-    :options,
-    :failed_count,
-    :failed_ids,
-    :count,
-    :result,
-    :kind,
-    :duration_ms,
-    :file,
-    :path,
-    :value,
-    :ttl,
-    :default_ttl,
-    :cache_value,
-    :from,
-    :max_concurrency,
-    :timeout,
-    :endpoint,
-    :client_id,
-    :systems,
-    :system_ids,
-    :event_id,
-    :killmail_id,
-    :killmail,
-    :killmail_count,
-    :service,
-    :method,
-    :cache,
-    :key,
-    :client_id,
-    :event_count,
-    :opts,
-    :response,
-    :size,
-    :format,
-    :percentage,
-    :description,
-    :recommendation,
-    :data_source,
-    :total_killmails_analyzed,
-    :format_distribution,
-    :purpose,
-    :sample_index,
-    :structure,
-    :has_full_data,
-    :needs_esi_fetch,
-    :raw_keys,
-    :raw_structure,
-    :byte_size,
-    :data_type,
-    :killmail_keys,
-    :killmail_sample,
-    :available_keys,
-    :has_solar_system_id,
-    :has_victim,
-    :has_attackers,
-    :has_killmail_id,
-    :has_kill_time,
-    :has_solar_system_id,
-    :has_victim,
-    :has_attackers,
-    :has_killmail_id,
-    :has_kill_time,
-    :kill_count,
-    :raw_count,
-    :parsed_count,
-    :parser_type,
-    :cached_count,
-    :stats,
-    :total_calls,
-    :victim_ship_type_id,
-    :attacker_count,
-    :has_zkb_data,
-    :enriched_count,
-    :processed_count,
-    :sample_structure,
-    :request_type,
-    :required_fields,
-    :missing_fields,
-    :has_zkb,
-    :total_tables,
-    :successful_tables,
-    :name,
-    :table_count,
-    :enriched_count,
-    :cutoff_time,
-    :enrich,
-    :total_systems,
-    :successful_systems,
-    :missing_tables,
-    :killmail_hash,
-    :error_count,
-    :success_count,
-    :group_ids,
-    :total_groups,
-    :table,
-    :expired_count,
-    :type_count,
-    :type,
-    :entry,
-    :types,
-    :groups
+    :timeout
   ]
 
 # Import environment specific config

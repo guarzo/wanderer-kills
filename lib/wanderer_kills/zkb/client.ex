@@ -32,7 +32,7 @@ defmodule WandererKills.Zkb.Client do
 
   require Logger
   alias WandererKills.Infrastructure.{Config, Error}
-  alias WandererKills.Http.Util
+  alias WandererKills.Http.{Client, ClientProvider}
   alias WandererKills.Observability.Telemetry
 
   @base_url Application.compile_env(:wanderer_kills, :zkb_base_url)
@@ -56,18 +56,19 @@ defmodule WandererKills.Zkb.Client do
     Telemetry.fetch_system_start(killmail_id, 1, :zkb)
 
     url = "#{base_url()}/killID/#{killmail_id}/"
-    params = Util.build_query_params(no_items: true)
 
-    request_opts = [
-      params: params,
-      headers: Util.eve_api_headers(),
-      operation: :fetch_killmail,
-      timeout: Config.timeouts().zkb_request_ms
-    ]
+    request_opts =
+      ClientProvider.build_request_opts(
+        params: [no_items: true],
+        headers: ClientProvider.eve_api_headers(),
+        timeout: Config.timeouts().zkb_request_ms
+      )
 
-    case Util.request_with_telemetry(url, :zkb, request_opts) do
+    request_opts = Keyword.put(request_opts, :operation, :fetch_killmail)
+
+    case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case Util.parse_json_response(response) do
+        case Client.parse_json_response(response) do
           # ZKB API returns array with single killmail
           {:ok, [killmail]} ->
             Telemetry.fetch_system_complete(killmail_id, :success)
@@ -113,7 +114,6 @@ defmodule WandererKills.Zkb.Client do
     Telemetry.fetch_system_start(system_id, 0, :zkb)
 
     url = "#{base_url()}/systemID/#{system_id}/"
-    params = Util.build_query_params(no_items: true)
 
     Logger.info("[ZKB] Fetching system killmails",
       system_id: system_id,
@@ -121,16 +121,18 @@ defmodule WandererKills.Zkb.Client do
       request_type: "historical_data"
     )
 
-    request_opts = [
-      params: params,
-      headers: Util.eve_api_headers(),
-      operation: :fetch_system_killmails,
-      timeout: 60_000
-    ]
+    request_opts =
+      ClientProvider.build_request_opts(
+        params: [no_items: true],
+        headers: ClientProvider.eve_api_headers(),
+        timeout: 60_000
+      )
 
-    case Util.request_with_telemetry(url, :zkb, request_opts) do
+    request_opts = Keyword.put(request_opts, :operation, :fetch_system_killmails)
+
+    case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case Util.parse_json_response(response) do
+        case Client.parse_json_response(response) do
           {:ok, killmails} when is_list(killmails) ->
             Telemetry.fetch_system_success(system_id, length(killmails), :zkb)
 
@@ -226,17 +228,18 @@ defmodule WandererKills.Zkb.Client do
   # Shared function for fetching killmails by entity type
   defp fetch_entity_killmails(entity_type, entity_id) do
     url = "#{base_url()}/#{entity_type}/#{entity_id}/"
-    params = Util.build_query_params(no_items: true)
 
-    request_opts = [
-      params: params,
-      headers: Util.eve_api_headers(),
-      operation: :"fetch_#{entity_type}_killmails",
-      timeout: Config.timeouts().zkb_request_ms
-    ]
+    request_opts =
+      ClientProvider.build_request_opts(
+        params: [no_items: true],
+        headers: ClientProvider.eve_api_headers(),
+        timeout: Config.timeouts().zkb_request_ms
+      )
 
-    case Util.request_with_telemetry(url, :zkb, request_opts) do
-      {:ok, response} -> Util.parse_json_response(response)
+    request_opts = Keyword.put(request_opts, :operation, :"fetch_#{entity_type}_killmails")
+
+    case Client.request_with_telemetry(url, :zkb, request_opts) do
+      {:ok, response} -> Client.parse_json_response(response)
       {:error, reason} -> {:error, reason}
     end
   end
@@ -248,14 +251,16 @@ defmodule WandererKills.Zkb.Client do
   def fetch_system_killmails_esi(system_id) do
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    request_opts = [
-      headers: Util.eve_api_headers(),
-      operation: :fetch_system_killmails_esi,
-      timeout: Config.timeouts().zkb_request_ms
-    ]
+    request_opts =
+      ClientProvider.build_request_opts(
+        headers: ClientProvider.eve_api_headers(),
+        timeout: Config.timeouts().zkb_request_ms
+      )
 
-    case Util.request_with_telemetry(url, :zkb, request_opts) do
-      {:ok, response} -> Util.parse_json_response(response)
+    request_opts = Keyword.put(request_opts, :operation, :fetch_system_killmails_esi)
+
+    case Client.request_with_telemetry(url, :zkb, request_opts) do
+      {:ok, response} -> Client.parse_json_response(response)
       {:error, reason} -> {:error, reason}
     end
   end
@@ -293,15 +298,17 @@ defmodule WandererKills.Zkb.Client do
 
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    request_opts = [
-      headers: Util.eve_api_headers(),
-      operation: :get_system_kill_count,
-      timeout: Config.timeouts().zkb_request_ms
-    ]
+    request_opts =
+      ClientProvider.build_request_opts(
+        headers: ClientProvider.eve_api_headers(),
+        timeout: Config.timeouts().zkb_request_ms
+      )
 
-    case Util.request_with_telemetry(url, :zkb, request_opts) do
+    request_opts = Keyword.put(request_opts, :operation, :get_system_kill_count)
+
+    case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case Util.parse_json_response(response) do
+        case Client.parse_json_response(response) do
           {:ok, data} when is_list(data) ->
             count = length(data)
 
@@ -377,9 +384,9 @@ defmodule WandererKills.Zkb.Client do
   end
 
   defp fetch_from_cache do
-    alias WandererKills.Cache.Systems
+    alias WandererKills.Cache.Helper
 
-    case Systems.get_active_systems() do
+    case Helper.system_get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         {:ok, systems}
 
@@ -397,15 +404,17 @@ defmodule WandererKills.Zkb.Client do
   defp do_fetch_active_systems do
     url = "#{base_url()}/systems/"
 
-    request_opts = [
-      headers: Util.eve_api_headers(),
-      operation: :fetch_active_systems,
-      timeout: Config.timeouts().zkb_request_ms
-    ]
+    request_opts =
+      ClientProvider.build_request_opts(
+        headers: ClientProvider.eve_api_headers(),
+        timeout: Config.timeouts().zkb_request_ms
+      )
 
-    case Util.request_with_telemetry(url, :zkb, request_opts) do
+    request_opts = Keyword.put(request_opts, :operation, :fetch_active_systems)
+
+    case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
-        case Util.parse_json_response(response) do
+        case Client.parse_json_response(response) do
           {:ok, systems} when is_list(systems) ->
             {:ok, systems}
 

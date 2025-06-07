@@ -97,6 +97,19 @@ defmodule WandererKills.TestHelpers do
   @spec clear_additional_caches() :: :ok
   def clear_additional_caches do
     safe_clear_cache(:active_systems_cache)
+
+    # Clear namespace-specific caches from CacheHelpers
+    additional_cache_names = [
+      :esi,
+      :ship_types,
+      :systems,
+      :killmails,
+      :characters,
+      :corporations,
+      :alliances
+    ]
+
+    Enum.each(additional_cache_names, &safe_clear_cache/1)
     :ok
   end
 
@@ -141,6 +154,98 @@ defmodule WandererKills.TestHelpers do
 
       other ->
         flunk("Expected cache operation to succeed, got: #{inspect(other)}")
+    end
+  end
+
+  @doc """
+  Sets up cache entries for testing.
+
+  ## Parameters
+  - `cache_name` - The cache namespace to use
+  - `entries` - A list of {key, value} tuples to insert
+
+  ## Examples
+
+      setup_cache_entries(:ship_types, [
+        {"ship_type:123", %{name: "Rifter"}},
+        {"ship_type:456", %{name: "Crow"}}
+      ])
+  """
+  @spec setup_cache_entries(atom(), [{String.t(), term()}]) :: :ok
+  def setup_cache_entries(cache_name, entries) when is_list(entries) do
+    Enum.each(entries, fn {key, value} ->
+      Cachex.put(cache_name, key, value)
+    end)
+
+    :ok
+  end
+
+  @doc """
+  Gets a value from cache for testing assertions.
+  """
+  @spec get_cache_value(atom(), String.t()) :: {:ok, term()} | {:error, term()}
+  def get_cache_value(cache_name, key) do
+    case Cachex.get(cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      error -> error
+    end
+  end
+
+  @doc """
+  Checks if a cache entry exists.
+  """
+  @spec cache_exists?(atom(), String.t()) :: boolean()
+  def cache_exists?(cache_name, key) do
+    case Cachex.exists?(cache_name, key) do
+      {:ok, exists?} -> exists?
+      {:error, _} -> false
+    end
+  end
+
+  @doc """
+  Gets the size of a cache for testing assertions.
+  """
+  @spec cache_size(atom()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def cache_size(cache_name) do
+    case Cachex.size(cache_name) do
+      {:ok, size} -> {:ok, size}
+      error -> error
+    end
+  end
+
+  @doc """
+  Verifies cache state matches expected values.
+
+  ## Parameters
+  - `cache_name` - The cache namespace to check
+  - `expected` - A map of key => value pairs that should exist
+
+  Returns `:ok` if all expected entries exist with correct values,
+  or `{:error, details}` if there are mismatches.
+  """
+  @spec verify_cache_state(atom(), %{String.t() => term()}) :: :ok | {:error, term()}
+  def verify_cache_state(cache_name, expected) when is_map(expected) do
+    mismatches =
+      Enum.reduce(expected, [], fn {key, expected_value}, acc ->
+        case get_cache_value(cache_name, key) do
+          {:ok, ^expected_value} ->
+            acc
+
+          {:ok, actual_value} ->
+            [{:value_mismatch, key, expected_value, actual_value} | acc]
+
+          {:error, :not_found} ->
+            [{:missing_key, key, expected_value} | acc]
+
+          {:error, reason} ->
+            [{:cache_error, key, reason} | acc]
+        end
+      end)
+
+    case mismatches do
+      [] -> :ok
+      mismatches -> {:error, mismatches}
     end
   end
 

@@ -9,7 +9,7 @@ defmodule WandererKillsWeb.Api do
   import WandererKillsWeb.Api.Helpers, only: [send_json_resp: 3]
 
   alias WandererKills.Observability.Monitoring
-  alias WandererKills.Cache.Systems
+  alias WandererKills.Cache.Helper
   alias WandererKillsWeb.Plugs.RequestId
 
   plug(Plug.Logger, log: :info)
@@ -89,7 +89,7 @@ defmodule WandererKillsWeb.Api do
   get "/system_kill_count/:system_id" do
     case validate_system_id(system_id) do
       {:ok, id} ->
-        case Systems.get_kill_count(id) do
+        case Helper.system_get_kill_count(id) do
           {:ok, count} when is_integer(count) ->
             Logger.info("Successfully fetched kill count for system", %{
               system_id: id,
@@ -285,11 +285,11 @@ defmodule WandererKillsWeb.Api do
   defp fetch_and_cache_killmail(killmail_id) do
     alias WandererKills.Zkb.Client, as: ZKB
     alias WandererKills.Killmails.Coordinator
-    alias WandererKills.Cache.ESI
+    alias WandererKills.Cache.Helper
 
     with {:ok, raw_killmail} <- ZKB.fetch_killmail(killmail_id),
          {:ok, processed_killmail} <- Coordinator.process_single_killmail(raw_killmail),
-         :ok <- ESI.put_killmail(killmail_id, processed_killmail) do
+         :ok <- Helper.killmail_put(killmail_id, processed_killmail) do
       {:ok, processed_killmail}
     else
       {:error, reason} -> {:error, reason}
@@ -300,13 +300,13 @@ defmodule WandererKillsWeb.Api do
   defp fetch_killmails_for_system(system_id) do
     alias WandererKills.Zkb.Client, as: ZKB
     alias WandererKills.Killmails.Coordinator
-    alias WandererKills.Cache.Systems
+    alias WandererKills.Cache.Helper
 
     # Check cache first
-    case Systems.recently_fetched?(system_id) do
+    case Helper.system_recently_fetched?(system_id) do
       {:ok, true} ->
         # Cache is fresh, get cached data
-        case Systems.get_killmails(system_id) do
+        case Helper.system_get_killmails(system_id) do
           {:ok, killmail_ids} -> {:ok, killmail_ids}
           {:error, _reason} -> fetch_remote_killmails(system_id)
         end
@@ -335,7 +335,7 @@ defmodule WandererKillsWeb.Api do
          {:ok, processed_killmails} <-
            Coordinator.process_killmails(raw_killmails, system_id, since_hours),
          :ok <-
-           WandererKills.Cache.Utils.cache_killmails_for_system(
+           WandererKills.Cache.Helper.cache_killmails_for_system(
              system_id,
              processed_killmails
            ) do

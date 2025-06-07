@@ -1,196 +1,43 @@
 defmodule WandererKills.Http.Util do
   @moduledoc """
-  Shared HTTP utilities for consistent request handling across clients.
+  **DEPRECATED**: This module has been consolidated into `WandererKills.Http.Client`.
 
-  This module provides common patterns for HTTP operations used by both
-  ESI and ZKB clients, reducing duplication and ensuring consistency.
+  All functionality from this module has been moved to `WandererKills.Http.Client`
+  and `WandererKills.Http.ClientProvider` for better organization and reduced duplication.
+
+  ## Migration Guide
+
+  Replace calls to:
+  - `Http.Util.request_with_telemetry/3` → `Http.Client.request_with_telemetry/3`
+  - `Http.Util.parse_json_response/1` → `Http.Client.parse_json_response/1`
+  - `Http.Util.build_query_params/1` → `Http.ClientProvider.build_request_opts/1`
+  - `Http.Util.eve_api_headers/1` → `Http.ClientProvider.eve_api_headers/0`
+  - `Http.Util.retry_operation/3` → `Http.Client.retry_operation/3`
+  - `Http.Util.validate_response_structure/2` → `Http.Client.validate_response_structure/2`
   """
 
-  require Logger
-  alias WandererKills.Infrastructure.{Config, Error}
-  alias WandererKills.Http.Client
-  alias WandererKills.Observability.Telemetry
+  alias WandererKills.Http.{Client, ClientProvider}
 
-  @type url :: String.t()
-  @type params :: keyword()
-  @type headers :: [{String.t(), String.t()}]
-  @type response :: {:ok, map()} | {:error, term()}
+  @deprecated "Use WandererKills.Http.Client.request_with_telemetry/3 instead"
+  defdelegate request_with_telemetry(url, service, opts \\ []), to: Client
 
-  @doc """
-  Standard request with telemetry and error handling.
+  @deprecated "Use WandererKills.Http.Client.parse_json_response/1 instead"
+  defdelegate parse_json_response(response), to: Client
 
-  Provides consistent request patterns with automatic telemetry,
-  logging, and error handling across all HTTP clients.
-  """
-  @spec request_with_telemetry(url(), atom(), keyword()) :: response()
-  def request_with_telemetry(url, service, opts \\ []) do
-    operation = Keyword.get(opts, :operation, :http_request)
-    headers = Keyword.get(opts, :headers, [])
-    params = Keyword.get(opts, :params, [])
-    timeout = Keyword.get(opts, :timeout, Config.timeouts().default_request_ms)
-
-    Logger.debug("Starting HTTP request",
-      url: url,
-      service: service,
-      operation: operation
-    )
-
-    Telemetry.http_request_start("GET", url)
-    start_time = System.monotonic_time()
-
-    request_opts = [
-      headers: headers,
-      params: params,
-      timeout: timeout,
-      recv_timeout: timeout
-    ]
-
-    result = Client.get_with_rate_limit(url, request_opts)
-    duration = System.monotonic_time() - start_time
-
-    case result do
-      {:ok, response} ->
-        Telemetry.http_request_stop("GET", url, duration, response.status)
-
-        Logger.debug("HTTP request successful",
-          url: url,
-          service: service,
-          operation: operation,
-          status: response.status
-        )
-
-        {:ok, response}
-
-      {:error, reason} ->
-        Telemetry.http_request_error("GET", url, duration, reason)
-
-        Logger.error("HTTP request failed",
-          url: url,
-          service: service,
-          operation: operation,
-          error: inspect(reason)
-        )
-
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Parse JSON response with error handling.
-
-  Provides consistent JSON parsing across all HTTP clients.
-  """
-  @spec parse_json_response(map()) :: {:ok, term()} | {:error, term()}
-  def parse_json_response(%{status: 200, body: body}) when is_map(body) or is_list(body) do
-    {:ok, body}
-  end
-
-  def parse_json_response(%{status: 200, body: body}) when is_binary(body) do
-    case Jason.decode(body) do
-      {:ok, parsed} ->
-        {:ok, parsed}
-
-      {:error, reason} ->
-        {:error, Error.parsing_error("Invalid JSON response", %{reason: reason})}
-    end
-  end
-
-  def parse_json_response(%{status: 404}) do
-    {:error, :not_found}
-  end
-
-  def parse_json_response(%{status: 429}) do
-    {:error, :rate_limited}
-  end
-
-  def parse_json_response(%{status: status}) when status >= 500 do
-    {:error, Error.http_error("Server error", %{status: status})}
-  end
-
-  def parse_json_response(%{status: status}) do
-    {:error, Error.http_error("HTTP error", %{status: status})}
-  end
-
-  @doc """
-  Build query parameters string.
-
-  Provides consistent parameter handling across clients.
-  """
-  @spec build_query_params(keyword()) :: keyword()
+  @deprecated "Use WandererKills.Http.ClientProvider.build_request_opts/1 instead"
   def build_query_params(params) do
-    params
-    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
-    |> Enum.map(fn
-      {key, true} -> {key, "true"}
-      {key, false} -> {key, "false"}
-      {key, value} when is_integer(value) -> {key, Integer.to_string(value)}
-      {key, value} -> {key, value}
-    end)
+    # For backward compatibility, just return the params processed the same way
+    ClientProvider.build_request_opts(params: params)[:params]
   end
 
-  @doc """
-  Standard headers for EVE Online API requests.
-  """
-  @spec eve_api_headers(String.t()) :: headers()
-  def eve_api_headers(user_agent \\ default_user_agent()) do
-    [
-      {"User-Agent", user_agent},
-      {"Accept", "application/json"},
-      {"Accept-Encoding", "gzip"}
-    ]
+  @deprecated "Use WandererKills.Http.ClientProvider.eve_api_headers/0 instead"
+  def eve_api_headers(_user_agent \\ nil) do
+    ClientProvider.eve_api_headers()
   end
 
-  @doc """
-  Retry an operation with specific service configuration.
-  """
-  @spec retry_operation((-> term()), atom(), keyword()) :: {:ok, term()} | {:error, term()}
-  def retry_operation(fun, service, opts \\ []) do
-    operation_name = Keyword.get(opts, :operation_name, "#{service} request")
-    max_retries = Keyword.get(opts, :max_retries, Config.retry().http_max_retries)
+  @deprecated "Use WandererKills.Http.Client.retry_operation/3 instead"
+  defdelegate retry_operation(fun, service, opts \\ []), to: Client
 
-    WandererKills.Infrastructure.Retry.retry_http_operation(fun,
-      operation_name: operation_name,
-      max_retries: max_retries
-    )
-  end
-
-  @doc """
-  Validate response format and structure.
-
-  Provides consistent validation across different API responses.
-  """
-  @spec validate_response_structure(term(), list()) :: {:ok, term()} | {:error, term()}
-  def validate_response_structure(data, required_fields) when is_map(data) do
-    missing_fields =
-      required_fields
-      |> Enum.reject(&Map.has_key?(data, &1))
-
-    case missing_fields do
-      [] -> {:ok, data}
-      missing -> {:error, Error.validation_error("Missing required fields", %{missing: missing})}
-    end
-  end
-
-  def validate_response_structure(data, _required_fields) when is_list(data) do
-    {:ok, data}
-  end
-
-  def validate_response_structure(data, _required_fields) do
-    {:error, Error.validation_error("Invalid response format", %{type: typeof(data)})}
-  end
-
-  # Private functions
-
-  defp default_user_agent do
-    "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
-  end
-
-  defp typeof(data) when is_map(data), do: :map
-  defp typeof(data) when is_list(data), do: :list
-  defp typeof(data) when is_binary(data), do: :string
-  defp typeof(data) when is_integer(data), do: :integer
-  defp typeof(data) when is_float(data), do: :float
-  defp typeof(data) when is_boolean(data), do: :boolean
-  defp typeof(data) when is_atom(data), do: :atom
-  defp typeof(_), do: :unknown
+  @deprecated "Use WandererKills.Http.Client.validate_response_structure/2 instead"
+  defdelegate validate_response_structure(data, required_fields), to: Client
 end

@@ -27,9 +27,9 @@ defmodule WandererKills.TestCase do
   end
 end
 
-# Set up global mocks
-Mox.stub_with(WandererKills.Http.Client.Mock, WandererKills.Http.Client)
-Mox.stub_with(WandererKills.Zkb.Client.Mock, WandererKills.Zkb.Client)
+# Set up global mocks - do not stub with real implementation to allow proper mocking in tests
+# Mox.stub_with(WandererKills.Http.Client.Mock, WandererKills.Http.Client)
+# Mox.stub_with(WandererKills.Zkb.Client.Mock, WandererKills.Zkb.Client)
 
 # Configure ExUnit to run tests sequentially
 ExUnit.configure(parallel: false)

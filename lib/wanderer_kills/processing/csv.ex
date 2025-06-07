@@ -550,7 +550,7 @@ defmodule WandererKills.Processing.CSV do
 
     Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
 
-    case WandererKills.Core.Http.ClientProvider.get().get(url, []) do
+    case WandererKills.Core.Http.ClientProvider.get_client().get(url, []) do
       {:ok, %{body: body}} ->
         case File.write(download_path, body) do
           :ok ->
