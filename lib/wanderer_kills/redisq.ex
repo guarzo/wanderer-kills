@@ -184,11 +184,11 @@ defmodule WandererKills.RedisQ do
         Logger.debug("[RedisQ] Kill is older than cutoff → skipping.")
         {:ok, :kill_older}
 
-      {:ok, _any_other} ->
+      {:ok, enriched_killmail} ->
         Logger.debug("[RedisQ] Successfully parsed & stored new killmail.")
 
-        # Broadcast kill update via PubSub
-        broadcast_kill_update(killmail, zkb)
+        # Broadcast kill update via PubSub using the enriched killmail
+        broadcast_kill_update_enriched(enriched_killmail)
 
         {:ok, :kill_received}
 
@@ -321,31 +321,26 @@ defmodule WandererKills.RedisQ do
     start_listening()
   end
 
-  # Broadcast kill update to PubSub subscribers
-  defp broadcast_kill_update(killmail, zkb) do
-    system_id = Map.get(killmail, "solar_system_id")
-    killmail_id = Map.get(killmail, "killmail_id")
+  # Broadcast kill update to PubSub subscribers using enriched killmail
+  defp broadcast_kill_update_enriched(enriched_killmail) do
+    system_id = Map.get(enriched_killmail, "solar_system_id")
+    killmail_id = Map.get(enriched_killmail, "killmail_id")
 
     if system_id do
-      # Create a formatted kill for broadcasting
-      formatted_kill = %{
+      Logger.debug("[RedisQ] Broadcasting enriched killmail",
+        system_id: system_id,
         killmail_id: killmail_id,
-        kill_time: parse_kill_time(killmail),
-        solar_system_id: system_id,
-        victim: Map.get(killmail, "victim", %{}),
-        attackers: Map.get(killmail, "attackers", []),
-        zkb: zkb
-      }
+        has_character_name: get_in(enriched_killmail, ["victim", "character_name"]) != nil,
+        has_corp_name: get_in(enriched_killmail, ["victim", "corporation_name"]) != nil
+      )
 
       # Broadcast detailed kill update
-      WandererKills.SubscriptionManager.broadcast_kill_update(system_id, [formatted_kill])
+      WandererKills.SubscriptionManager.broadcast_kill_update(system_id, [enriched_killmail])
 
       # Also broadcast kill count update (increment by 1)
-      # Note: This is a simplified approach - in a real system you might want to
-      # fetch the current count and increment it
       WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, 1)
 
-      Logger.debug("[RedisQ] Broadcasted kill update",
+      Logger.debug("[RedisQ] Broadcasted enriched kill update",
         system_id: system_id,
         killmail_id: killmail_id
       )
@@ -353,23 +348,6 @@ defmodule WandererKills.RedisQ do
       Logger.warning("[RedisQ] Cannot broadcast kill update - missing solar_system_id",
         killmail_id: killmail_id
       )
-    end
-  end
-
-  # Parse kill time from killmail
-  defp parse_kill_time(killmail) do
-    case Map.get(killmail, "killmail_time") do
-      nil ->
-        DateTime.utc_now()
-
-      time_str when is_binary(time_str) ->
-        case DateTime.from_iso8601(time_str) do
-          {:ok, datetime, _offset} -> datetime
-          {:error, _reason} -> DateTime.utc_now()
-        end
-
-      _ ->
-        DateTime.utc_now()
     end
   end
 end

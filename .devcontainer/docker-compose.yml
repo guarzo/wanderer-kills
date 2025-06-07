@@ -12,6 +12,8 @@ services:
       ERL_AFLAGS: "-kernel shell_history enabled"
     ports:
       - "4004:4004"
+    networks:
+      - default
     volumes:
       # Mount source code for development
       - ..:/app:delegated
@@ -26,3 +28,7 @@ services:
 
 volumes:
   elixir-artifacts: {}
+
+networks:
+  default:
+    name: wanderer-kills-network

@@ -10,6 +10,9 @@ Mox.defmock(WandererKills.Http.Client.Mock,
 
 Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Killmails.ZkbClientBehaviour)
 
+# Mock for ESI client
+Mox.defmock(EsiClientMock, for: WandererKills.Behaviours.ESIClient)
+
 # Start ExUnit
 ExUnit.start()
 

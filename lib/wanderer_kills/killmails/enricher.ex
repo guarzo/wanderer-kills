@@ -33,7 +33,8 @@ defmodule WandererKills.Killmails.Enricher do
   def enrich_killmail(killmail) do
     with {:ok, killmail} <- enrich_victim(killmail),
          {:ok, killmail} <- enrich_attackers(killmail),
-         {:ok, killmail} <- enrich_ship(killmail) do
+         {:ok, killmail} <- enrich_ship(killmail),
+         {:ok, killmail} <- flatten_enriched_data(killmail) do
       {:ok, killmail}
     else
       error ->
@@ -166,4 +167,105 @@ defmodule WandererKills.Killmails.Enricher do
   end
 
   defp get_alliance_info_safe(_), do: nil
+
+  defp flatten_enriched_data(killmail) do
+    try do
+      flattened =
+        killmail
+        |> flatten_victim_data()
+        |> flatten_attackers_data()
+        |> add_attacker_count()
+
+      {:ok, flattened}
+    rescue
+      error ->
+        Logger.warning("Failed to flatten enriched data", error: inspect(error))
+        # Return original killmail if flattening fails
+        {:ok, killmail}
+    end
+  end
+
+  defp flatten_victim_data(killmail) do
+    victim = Map.get(killmail, "victim", %{})
+
+    # Extract names from nested enriched data and add to victim object
+    flattened_victim =
+      victim
+      |> add_character_name(get_in(victim, ["character", "name"]))
+      |> add_corporation_info()
+      |> add_alliance_info()
+      |> add_ship_name()
+
+    Map.put(killmail, "victim", flattened_victim)
+  end
+
+  defp flatten_attackers_data(killmail) do
+    attackers = Map.get(killmail, "attackers", [])
+
+    # Flatten enriched data for each attacker
+    flattened_attackers =
+      Enum.map(attackers, fn attacker ->
+        attacker
+        |> add_character_name(get_in(attacker, ["character", "name"]))
+        |> add_corporation_info()
+        |> add_alliance_info()
+        |> add_ship_name_for_attacker()
+      end)
+
+    Map.put(killmail, "attackers", flattened_attackers)
+  end
+
+  defp add_character_name(entity, character_name) do
+    entity
+    |> Map.put("character_name", character_name)
+    |> Map.put("name", character_name)  # Alternative field name
+  end
+
+  defp add_corporation_info(entity) do
+    corp_name = get_in(entity, ["corporation", "name"])
+    corp_ticker = get_in(entity, ["corporation", "ticker"])
+
+    entity
+    |> Map.put("corporation_name", corp_name)
+    |> Map.put("corp_name", corp_name)  # Alternative field name
+    |> Map.put("corporation_ticker", corp_ticker)
+    |> Map.put("corp_ticker", corp_ticker)  # Alternative field name
+  end
+
+  defp add_alliance_info(entity) do
+    alliance_name = get_in(entity, ["alliance", "name"])
+    alliance_ticker = get_in(entity, ["alliance", "ticker"])
+
+    entity
+    |> Map.put("alliance_name", alliance_name)
+    |> Map.put("alliance_ticker", alliance_ticker)
+  end
+
+  defp add_ship_name(entity) do
+    ship_name = get_in(entity, ["ship", "name"])
+
+    entity
+    |> Map.put("ship_name", ship_name)
+    |> Map.put("ship_type_name", ship_name)  # Alternative field name
+  end
+
+  defp add_ship_name_for_attacker(attacker) do
+    # For attackers, get ship name from ship type ID
+    ship_type_id = Map.get(attacker, "ship_type_id")
+    ship_name = case ShipTypeInfo.get_ship_type(ship_type_id) do
+      {:ok, ship_data} -> Map.get(ship_data, "name")
+      _ -> nil
+    end
+
+    attacker
+    |> Map.put("ship_name", ship_name)
+    |> Map.put("ship_type_name", ship_name)  # Alternative field name
+  end
+
+  defp add_attacker_count(killmail) do
+    attackers = Map.get(killmail, "attackers", [])
+    attacker_count = length(attackers)
+
+    Map.put(killmail, "attacker_count", attacker_count)
+  end
 end

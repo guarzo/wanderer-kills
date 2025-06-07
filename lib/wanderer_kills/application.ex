@@ -37,7 +37,9 @@ defmodule WandererKills.Application do
          [
            WandererKills.Observability.Monitoring,
            {Plug.Cowboy,
-            scheme: :http, plug: WandererKillsWeb.Api, options: [port: Config.app().port]},
+            scheme: :http,
+            plug: WandererKillsWeb.Api,
+            options: [port: Config.app().port, ip: {0, 0, 0, 0}]},
            {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
          ])
       |> maybe_preloader()

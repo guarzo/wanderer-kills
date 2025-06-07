@@ -38,16 +38,14 @@ defmodule WandererKills.Observability.Monitoring do
   ## Cache Names
 
   The following cache names are monitored:
-  - `:killmails_cache` - Individual killmail data
-  - `:system_cache` - System-level data and timestamps
-  - `:esi_cache` - ESI API response cache
+  - `:wanderer_cache` - Unified cache with namespaced keys (killmails, systems, ESI data)
   """
 
   use GenServer
   require Logger
   alias WandererKills.Infrastructure.Clock
 
-  @cache_names [:killmails_cache, :system_cache, :esi_cache]
+  @cache_names [:wanderer_cache]
   @health_check_interval :timer.minutes(5)
   @summary_interval :timer.minutes(5)
 
@@ -77,8 +75,7 @@ defmodule WandererKills.Observability.Monitoring do
   #   version: "1.0.0",
   #   uptime_seconds: 3600,
   #   caches: [
-  #     %{name: :killmails_cache, healthy: true, status: "ok"},
-  #     %{name: :system_cache, healthy: true, status: "ok"}
+  #     %{name: :wanderer_cache, healthy: true, status: "ok"}
   #   ]
   # }
   ```
@@ -106,8 +103,7 @@ defmodule WandererKills.Observability.Monitoring do
   #   timestamp: "2024-01-01T12:00:00Z",
   #   uptime_seconds: 3600,
   #   caches: [
-  #     %{name: :killmails_cache, size: 1000, hit_rate: 0.85, miss_rate: 0.15},
-  #     %{name: :system_cache, size: 500, hit_rate: 0.92, miss_rate: 0.08}
+  #     %{name: :wanderer_cache, size: 1000, hit_rate: 0.85, miss_rate: 0.15}
   #   ]
   # }
   ```
@@ -145,7 +141,7 @@ defmodule WandererKills.Observability.Monitoring do
   ## Example
 
   ```elixir
-  {:ok, stats} = get_cache_stats(:killmails_cache)
+  {:ok, stats} = get_cache_stats(:wanderer_cache)
   # %{hit_rate: 0.85, size: 1000, evictions: 10, ...}
   ```
   """

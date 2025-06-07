@@ -85,9 +85,7 @@ defmodule WandererKills.TestHelpers do
   """
   @spec clear_production_caches() :: :ok
   def clear_production_caches do
-    safe_clear_cache(:killmails_cache)
-    safe_clear_cache(:system_cache)
-    safe_clear_cache(:esi_cache)
+    safe_clear_cache(:wanderer_cache)
     :ok
   end
 

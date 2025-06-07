@@ -87,7 +87,7 @@ defmodule WandererKills.Client do
 
     Logger.info("Fetched kills for multiple systems",
       requested_systems: length(system_ids),
-      successful_systems: length(results),
+      successful_systems: map_size(results),
       total_kills: total_kills
     )
 

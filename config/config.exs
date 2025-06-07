@@ -255,7 +255,9 @@ config :logger, :console,
     :total_cached_kills,
     :cache_error,
     :returned_kills,
-    :unexpected_response
+    :unexpected_response,
+    :cached_count,
+    :total_kills_sent
   ]
 
 # Import environment specific config
