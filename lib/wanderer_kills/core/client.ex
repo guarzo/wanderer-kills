@@ -76,52 +76,6 @@ defmodule WandererKills.Core.Http.Client do
   end
 
   @impl true
-  @doc """
-  Makes a POST request.
-
-  Note: This is a basic implementation. Extend as needed.
-  """
-  @spec post(url(), term(), headers(), opts()) :: response()
-  def post(url, body, headers \\ [], options \\ []) do
-    opts = Keyword.merge(options, headers: headers, json: body)
-
-    case Req.post(url, opts) do
-      {:ok, %{status: status} = resp} -> handle_status_code(status, resp)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @impl true
-  @doc """
-  Makes a PUT request.
-
-  Note: This is a basic implementation. Extend as needed.
-  """
-  @spec put(url(), term(), headers(), opts()) :: response()
-  def put(url, body, headers \\ [], options \\ []) do
-    opts = Keyword.merge(options, headers: headers, json: body)
-
-    case Req.put(url, opts) do
-      {:ok, %{status: status} = resp} -> handle_status_code(status, resp)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @impl true
-  @doc """
-  Makes a DELETE request.
-
-  Note: This is a basic implementation. Extend as needed.
-  """
-  @spec delete(url(), headers(), opts()) :: response()
-  def delete(url, headers \\ [], options \\ []) do
-    opts = Keyword.merge(options, headers: headers)
-
-    case Req.delete(url, opts) do
-      {:ok, %{status: status} = resp} -> handle_status_code(status, resp)
-      {:error, reason} -> {:error, reason}
-    end
-  end
 
   # ============================================================================
   # Main Implementation

@@ -6,6 +6,7 @@ defmodule WandererKillsWeb.Api do
   use Plug.Router
   require Logger
   import Plug.Conn
+  import WandererKillsWeb.Api.Helpers, only: [send_json_resp: 3]
 
   alias WandererKills.Observability.Monitoring
   alias WandererKills.Core.Cache
@@ -178,13 +179,8 @@ defmodule WandererKillsWeb.Api do
     send_json_resp(conn, 404, %{error: "Not found"})
   end
 
-  # Helper function to send JSON responses
-  defp send_json_resp(conn, status, data) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(data))
-  end
-
+  @spec handle_killmail_response({:ok, map()} | {:error, term()}, integer(), Plug.Conn.t()) ::
+          Plug.Conn.t()
   defp handle_killmail_response({:ok, killmail}, killmail_id, conn) do
     Logger.info("Successfully fetched killmail",
       killmail_id: killmail_id,
@@ -203,6 +199,19 @@ defmodule WandererKillsWeb.Api do
     send_json_resp(conn, 404, %{error: "Killmail not found"})
   end
 
+  defp handle_killmail_response(
+         {:error, %WandererKills.Core.Error{domain: :zkb, type: :not_found}},
+         killmail_id,
+         conn
+       ) do
+    Logger.info("Killmail not found",
+      killmail_id: killmail_id,
+      status: :not_found
+    )
+
+    send_json_resp(conn, 404, %{error: "Killmail not found"})
+  end
+
   defp handle_killmail_response({:error, reason}, killmail_id, conn) do
     Logger.error("Failed to fetch killmail",
       killmail_id: killmail_id,
@@ -213,6 +222,7 @@ defmodule WandererKillsWeb.Api do
     send_json_resp(conn, 500, %{error: "Internal server error"})
   end
 
+  @spec validate_killmail_id(String.t()) :: {:ok, integer()} | {:error, :invalid_format}
   defp validate_killmail_id(id_str) do
     case Integer.parse(id_str) do
       {id, ""} when id > 0 ->
@@ -228,6 +238,11 @@ defmodule WandererKillsWeb.Api do
     end
   end
 
+  @spec handle_system_killmails_response(
+          {:ok, list()} | {:error, term()},
+          integer(),
+          Plug.Conn.t()
+        ) :: Plug.Conn.t()
   defp handle_system_killmails_response({:ok, killmails}, system_id, conn) do
     Logger.info("Successfully fetched killmails for system",
       system_id: system_id,
@@ -248,6 +263,7 @@ defmodule WandererKillsWeb.Api do
     send_json_resp(conn, 500, %{error: "Internal server error"})
   end
 
+  @spec validate_system_id(String.t()) :: {:ok, integer()} | {:error, :invalid_format}
   defp validate_system_id(id_str) do
     case Integer.parse(id_str) do
       {id, ""} when id > 0 ->
@@ -265,8 +281,9 @@ defmodule WandererKillsWeb.Api do
 
   # Helper functions to replace Fetching.Coordinator functionality
 
+  @spec fetch_and_cache_killmail(integer()) :: {:ok, map()} | {:error, term()}
   defp fetch_and_cache_killmail(killmail_id) do
-    alias WandererKills.External.ZKB
+    alias WandererKills.Zkb.Client, as: ZKB
     alias WandererKills.Killmails.Coordinator
     alias WandererKills.Core.Cache
 
@@ -279,8 +296,9 @@ defmodule WandererKillsWeb.Api do
     end
   end
 
+  @spec fetch_killmails_for_system(integer()) :: {:ok, list()} | {:error, term()}
   defp fetch_killmails_for_system(system_id) do
-    alias WandererKills.External.ZKB
+    alias WandererKills.Zkb.Client, as: ZKB
     alias WandererKills.Killmails.Coordinator
     alias WandererKills.Core.Cache
 
@@ -303,8 +321,9 @@ defmodule WandererKillsWeb.Api do
     end
   end
 
+  @spec fetch_remote_killmails(integer()) :: {:ok, list()} | {:error, term()}
   defp fetch_remote_killmails(system_id) do
-    alias WandererKills.External.ZKB
+    alias WandererKills.Zkb.Client, as: ZKB
     alias WandererKills.Killmails.Coordinator
     alias WandererKills.Core.Cache
 
@@ -316,50 +335,14 @@ defmodule WandererKillsWeb.Api do
     with {:ok, raw_killmails} <- ZKB.fetch_system_killmails(system_id, limit, since_hours),
          {:ok, processed_killmails} <-
            Coordinator.process_killmails(raw_killmails, system_id, since_hours),
-         :ok <- cache_killmails_for_system(system_id, processed_killmails) do
+         :ok <-
+           WandererKills.Core.CacheUtils.cache_killmails_for_system(
+             system_id,
+             processed_killmails
+           ) do
       {:ok, processed_killmails}
     else
       {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp cache_killmails_for_system(system_id, killmails) when is_list(killmails) do
-    alias WandererKills.Core.Cache
-
-    try do
-      # Update fetch timestamp
-      case Cache.set_system_fetch_timestamp(system_id, DateTime.utc_now()) do
-        {:ok, :set} -> :ok
-        # Continue anyway
-        {:error, _reason} -> :ok
-      end
-
-      # Extract killmail IDs and cache individual killmails
-      killmail_ids =
-        Enum.map(killmails, fn killmail ->
-          killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, "killID")
-
-          if killmail_id do
-            # Cache the individual killmail
-            Cache.put(:killmails, killmail_id, killmail)
-            killmail_id
-          else
-            nil
-          end
-        end)
-        |> Enum.filter(&(&1 != nil))
-
-      # Add each killmail ID to system's killmail list
-      Enum.each(killmail_ids, fn killmail_id ->
-        Cache.add_system_killmail(system_id, killmail_id)
-      end)
-
-      # Add system to active list
-      Cache.add_active_system(system_id)
-
-      :ok
-    rescue
-      _error -> {:error, :cache_exception}
     end
   end
 end

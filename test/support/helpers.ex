@@ -166,18 +166,6 @@ defmodule WandererKills.TestHelpers do
   """
   @spec setup_http_mocks() :: :ok
   def setup_http_mocks do
-    # HTTP client mock temporarily disabled due to missing mock definition
-    # TODO: Re-enable when HTTP client properly implements behaviour
-    # WandererKills.Core.Http.Client.Mock
-    # |> stub(:get_with_rate_limit, &mock_url_response/2)
-    # |> stub(:handle_status_code, fn
-    #   200, %{body: body} -> {:ok, body}
-    #   200, response -> {:ok, response}
-    #   404, _response -> {:error, :not_found}
-    #   429, _response -> {:error, :rate_limited}
-    #   status, _response -> {:error, "HTTP #{status}"}
-    # end)
-
     :ok
   end
 
@@ -200,16 +188,6 @@ defmodule WandererKills.TestHelpers do
   """
   @spec expect_http_success(String.t(), map()) :: :ok
   def expect_http_success(_url_pattern, _response_body) do
-    # HTTP client mock temporarily disabled
-    # WandererKills.Core.Http.Client.Mock
-    # |> expect(:get_with_rate_limit, fn url, _opts ->
-    #   if String.contains?(url, url_pattern) do
-    #     {:ok, %{status: 200, body: response_body}}
-    #   else
-    #     {:error, :not_found}
-    #   end
-    # end)
-
     :ok
   end
 
@@ -218,16 +196,6 @@ defmodule WandererKills.TestHelpers do
   """
   @spec expect_http_rate_limit(String.t(), non_neg_integer()) :: :ok
   def expect_http_rate_limit(_url_pattern, _retry_count \\ 3) do
-    # HTTP client mock temporarily disabled
-    # WandererKills.Core.Http.Client.Mock
-    # |> expect(:get_with_rate_limit, retry_count, fn url, _opts ->
-    #   if String.contains?(url, url_pattern) do
-    #     {:error, :rate_limited}
-    #   else
-    #     {:ok, %{status: 200, body: %{}}}
-    #   end
-    # end)
-
     :ok
   end
 
@@ -236,16 +204,6 @@ defmodule WandererKills.TestHelpers do
   """
   @spec expect_http_error(String.t(), atom()) :: :ok
   def expect_http_error(_url_pattern, _error_type) do
-    # HTTP client mock temporarily disabled
-    # WandererKills.Core.Http.Client.Mock
-    # |> expect(:get_with_rate_limit, fn url, _opts ->
-    #   if String.contains?(url, url_pattern) do
-    #     {:error, error_type}
-    #   else
-    #     {:ok, %{status: 200, body: %{}}}
-    #   end
-    # end)
-
     :ok
   end
 

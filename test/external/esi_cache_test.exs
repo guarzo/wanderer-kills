@@ -16,7 +16,7 @@ defmodule WandererKills.EsiCacheTest do
   end
 
   describe "character info" do
-    test "get_character_info fetches and caches data" do
+    test "unified cache interface works for character data" do
       character_id = 123
 
       expected_data = %{
@@ -28,16 +28,16 @@ defmodule WandererKills.EsiCacheTest do
         security_status: 5.0
       }
 
-      # Store test data directly since this tests cache operations
-      assert :ok = Cache.set_character_info(character_id, expected_data)
-      assert {:ok, actual_data} = Cache.get_character_info(character_id)
+      # Store test data using unified cache interface
+      assert :ok = Cache.put_with_ttl(:characters, character_id, expected_data, 24 * 3600)
+      assert {:ok, actual_data} = Cache.get(:characters, character_id)
       assert actual_data.character_id == expected_data.character_id
       assert actual_data.name == expected_data.name
     end
   end
 
   describe "corporation info" do
-    test "get_corporation_info fetches and caches data" do
+    test "unified cache interface works for corporation data" do
       corporation_id = 456
 
       corp_data = %{
@@ -47,15 +47,15 @@ defmodule WandererKills.EsiCacheTest do
         member_count: 100
       }
 
-      assert :ok = Cache.set_corporation_info(corporation_id, corp_data)
-      assert {:ok, cached_data} = Cache.get_corporation_info(corporation_id)
+      assert :ok = Cache.put_with_ttl(:corporations, corporation_id, corp_data, 24 * 3600)
+      assert {:ok, cached_data} = Cache.get(:corporations, corporation_id)
       assert cached_data.corporation_id == corporation_id
       assert cached_data.name == "Test Corp"
     end
   end
 
   describe "alliance info" do
-    test "get_alliance_info fetches and caches data" do
+    test "unified cache interface works for alliance data" do
       alliance_id = 789
 
       alliance_data = %{
@@ -65,15 +65,15 @@ defmodule WandererKills.EsiCacheTest do
         creator_corporation_id: 456
       }
 
-      assert :ok = Cache.set_alliance_info(alliance_id, alliance_data)
-      assert {:ok, cached_data} = Cache.get_alliance_info(alliance_id)
+      assert :ok = Cache.put_with_ttl(:alliances, alliance_id, alliance_data, 24 * 3600)
+      assert {:ok, cached_data} = Cache.get(:alliances, alliance_id)
       assert cached_data.alliance_id == alliance_id
       assert cached_data.name == "Test Alliance"
     end
   end
 
   describe "type info" do
-    test "get_type_info fetches and caches data" do
+    test "unified cache interface works for type data" do
       type_id = 1234
 
       type_data = %{
@@ -83,15 +83,15 @@ defmodule WandererKills.EsiCacheTest do
         published: true
       }
 
-      assert :ok = Cache.set_type_info(type_id, type_data)
-      assert {:ok, cached_data} = Cache.get_type_info(type_id)
+      assert :ok = Cache.put_with_ttl(:ship_types, type_id, type_data, 24 * 3600)
+      assert {:ok, cached_data} = Cache.get(:ship_types, type_id)
       assert cached_data.type_id == type_id
       assert cached_data.name == "Test Type"
     end
   end
 
   describe "group info" do
-    test "get_group_info fetches and caches data" do
+    test "unified cache interface works for group data" do
       group_id = 5678
 
       group_data = %{
@@ -102,8 +102,8 @@ defmodule WandererKills.EsiCacheTest do
         types: [1234, 5678]
       }
 
-      assert :ok = Cache.set_group_info(group_id, group_data)
-      assert {:ok, cached_data} = Cache.get_group_info(group_id)
+      assert :ok = Cache.put_with_ttl(:ship_types, "group_#{group_id}", group_data, 24 * 3600)
+      assert {:ok, cached_data} = Cache.get(:ship_types, "group_#{group_id}")
       assert cached_data.group_id == group_id
       assert cached_data.name == "Test Group"
     end
@@ -112,7 +112,9 @@ defmodule WandererKills.EsiCacheTest do
   describe "clear cache" do
     test "clear removes all entries" do
       # Test clearing specific namespace
-      assert :ok = Cache.clear_namespace("esi")
+      assert :ok = Cache.clear(:characters)
+      assert :ok = Cache.clear(:corporations)
+      assert :ok = Cache.clear(:alliances)
     end
   end
 end

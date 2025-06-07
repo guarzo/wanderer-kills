@@ -51,42 +51,6 @@ config :wanderer_kills,
   killmail_store_gc_interval_ms: 60_000,
   killmail_store_max_events_per_system: 10_000,
 
-  # Flattened HTTP status code mappings (was nested in http_status_codes: %{})
-  http_status_success: 200..299,
-  http_status_not_found: 404,
-  http_status_rate_limited: 429,
-  http_status_retryable: [408, 429, 500, 502, 503, 504],
-  http_status_fatal: [
-    400,
-    401,
-    403,
-    405,
-    406,
-    407,
-    409,
-    410,
-    411,
-    412,
-    413,
-    414,
-    415,
-    416,
-    417,
-    418,
-    421,
-    422,
-    423,
-    424,
-    426,
-    428,
-    431,
-    451
-  ],
-
-  # Flattened circuit breaker configuration (was nested in circuit_breaker: %{})
-  circuit_breaker_zkb_failure_threshold: 10,
-  circuit_breaker_esi_failure_threshold: 5,
-
   # Flattened telemetry configuration (was nested in telemetry: %{})
   telemetry_enabled_metrics: [:cache, :api, :circuit, :event],
   telemetry_sampling_rate: 1.0,
@@ -253,7 +217,9 @@ config :logger, :console,
     :expired_count,
     :type_count,
     :type,
-    :entry
+    :entry,
+    :types,
+    :groups
   ]
 
 # Import environment specific config

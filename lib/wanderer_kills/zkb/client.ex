@@ -21,27 +21,48 @@ end
 
 defmodule WandererKills.Zkb.Client do
   @moduledoc """
-  API client for zKillboard.
+  Unified ZKB API client for zKillboard with telemetry and processing.
+
+  This module consolidates ZKB API interactions with telemetry, logging,
+  and processing functionality. It replaces the previous split architecture
+  with a single unified approach.
   """
 
   @behaviour WandererKills.Zkb.ClientBehaviour
 
   require Logger
-  alias WandererKills.Core.Http.Client, as: HttpClient
+  alias WandererKills.Core.Config
   alias WandererKills.Core.Error
+  alias WandererKills.Observability.Telemetry
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
   @base_url Application.compile_env(:wanderer_kills, :zkb_base_url)
 
+  @type killmail_id :: pos_integer()
+  @type system_id :: pos_integer()
+  @type killmail :: map()
+
+  # Get the HTTP client from configuration
+  defp http_client, do: Config.http_client()
+
   @doc """
-  Fetches a killmail from zKillboard.
+  Fetches a killmail from zKillboard with telemetry.
   Returns {:ok, killmail} or {:error, reason}.
   """
-  def fetch_killmail(killmail_id) do
+  @spec fetch_killmail(killmail_id()) :: {:ok, killmail()} | {:error, term()}
+  def fetch_killmail(killmail_id) when is_integer(killmail_id) and killmail_id > 0 do
+    Logger.debug("Fetching killmail from ZKB",
+      killmail_id: killmail_id,
+      operation: :fetch_killmail,
+      step: :start
+    )
+
+    Telemetry.fetch_system_start(killmail_id, 1, :zkb)
+
     url = "#{base_url()}/killID/#{killmail_id}/"
     params = build_query_params(no_items: true)
 
-    case HttpClient.get_with_rate_limit(url,
+    case http_client().get_with_rate_limit(url,
            params: params,
            headers: [{"user-agent", @user_agent}]
          ) do
@@ -49,29 +70,78 @@ defmodule WandererKills.Zkb.Client do
         case parse_response(response) do
           # ZKB API returns array with single killmail
           {:ok, [killmail]} ->
+            Telemetry.fetch_system_complete(killmail_id, :success)
+
+            Logger.debug("Successfully fetched killmail from ZKB",
+              killmail_id: killmail_id,
+              operation: :fetch_killmail,
+              step: :success
+            )
+
             {:ok, killmail}
 
           {:ok, []} ->
+            Telemetry.fetch_system_error(killmail_id, :not_found, :zkb)
             {:error, Error.zkb_error(:not_found, "Killmail not found in zKillboard", false)}
 
           # Take first if multiple
           {:ok, killmails} when is_list(killmails) ->
+            Telemetry.fetch_system_complete(killmail_id, :success)
+
+            Logger.debug("Successfully fetched killmail from ZKB",
+              killmail_id: killmail_id,
+              operation: :fetch_killmail,
+              step: :success
+            )
+
             {:ok, List.first(killmails)}
 
           other ->
+            Telemetry.fetch_system_error(killmail_id, other, :zkb)
+
+            Logger.error("Failed to fetch killmail from ZKB",
+              killmail_id: killmail_id,
+              operation: :fetch_killmail,
+              error: other,
+              step: :error
+            )
+
             other
         end
 
       {:error, reason} ->
+        Telemetry.fetch_system_error(killmail_id, reason, :zkb)
+
+        Logger.error("Failed to fetch killmail from ZKB",
+          killmail_id: killmail_id,
+          operation: :fetch_killmail,
+          error: reason,
+          step: :error
+        )
+
         {:error, reason}
     end
   end
 
+  def fetch_killmail(invalid_id) do
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid killmail ID format: #{inspect(invalid_id)}")}
+  end
+
   @doc """
-  Fetches killmails for a system from zKillboard.
+  Fetches killmails for a system from zKillboard with telemetry.
   Returns {:ok, [killmail]} or {:error, reason}.
   """
-  def fetch_system_killmails(system_id) do
+  @spec fetch_system_killmails(system_id()) :: {:ok, [killmail()]} | {:error, term()}
+  def fetch_system_killmails(system_id) when is_integer(system_id) and system_id > 0 do
+    Logger.debug("Fetching system killmails from ZKB",
+      system_id: system_id,
+      operation: :fetch_system_killmails,
+      step: :start
+    )
+
+    Telemetry.fetch_system_start(system_id, 0, :zkb)
+
     url = "#{base_url()}/systemID/#{system_id}/"
     params = build_query_params(no_items: true)
 
@@ -81,7 +151,7 @@ defmodule WandererKills.Zkb.Client do
       request_type: "historical_data"
     )
 
-    case HttpClient.get_with_rate_limit(url,
+    case http_client().get_with_rate_limit(url,
            params: params,
            headers: [{"user-agent", @user_agent}],
            # Increase to 60 seconds
@@ -91,6 +161,15 @@ defmodule WandererKills.Zkb.Client do
       {:ok, response} ->
         case parse_response(response) do
           {:ok, killmails} when is_list(killmails) ->
+            Telemetry.fetch_system_success(system_id, length(killmails), :zkb)
+
+            Logger.debug("Successfully fetched system killmails from ZKB",
+              system_id: system_id,
+              killmail_count: length(killmails),
+              operation: :fetch_system_killmails,
+              step: :success
+            )
+
             # Validate and log the format of received killmails
             validate_zkb_format(killmails, system_id)
 
@@ -104,12 +183,52 @@ defmodule WandererKills.Zkb.Client do
             {:ok, converted_killmails}
 
           other ->
+            Telemetry.fetch_system_error(system_id, other, :zkb)
+
+            Logger.error("Failed to fetch system killmails from ZKB",
+              system_id: system_id,
+              operation: :fetch_system_killmails,
+              error: other,
+              step: :error
+            )
+
             other
         end
 
       {:error, reason} ->
+        Telemetry.fetch_system_error(system_id, reason, :zkb)
+
+        Logger.error("Failed to fetch system killmails from ZKB",
+          system_id: system_id,
+          operation: :fetch_system_killmails,
+          error: reason,
+          step: :error
+        )
+
         {:error, reason}
     end
+  end
+
+  def fetch_system_killmails(invalid_id) do
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
+  end
+
+  @doc """
+  Fetches killmails for a system from zKillboard with telemetry (compatibility function).
+  The limit and since_hours parameters are currently ignored but kept for API compatibility.
+  """
+  @spec fetch_system_killmails(system_id(), pos_integer(), pos_integer()) ::
+          {:ok, [killmail()]} | {:error, term()}
+  def fetch_system_killmails(system_id, _limit, _since_hours)
+      when is_integer(system_id) and system_id > 0 do
+    # For now, delegate to the main function - in the future we could use limit/since_hours
+    fetch_system_killmails(system_id)
+  end
+
+  def fetch_system_killmails(invalid_id, _limit, _since_hours) do
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
 
   @doc """
@@ -119,7 +238,7 @@ defmodule WandererKills.Zkb.Client do
     url = "#{base_url()}/corporationID/#{corporation_id}/"
     params = build_query_params(no_items: true)
 
-    case HttpClient.get_with_rate_limit(url,
+    case http_client().get_with_rate_limit(url,
            params: params,
            headers: [{"user-agent", @user_agent}]
          ) do
@@ -135,7 +254,7 @@ defmodule WandererKills.Zkb.Client do
     url = "#{base_url()}/allianceID/#{alliance_id}/"
     params = build_query_params(no_items: true)
 
-    case HttpClient.get_with_rate_limit(url,
+    case http_client().get_with_rate_limit(url,
            params: params,
            headers: [{"user-agent", @user_agent}]
          ) do
@@ -151,7 +270,7 @@ defmodule WandererKills.Zkb.Client do
     url = "#{base_url()}/characterID/#{character_id}/"
     params = build_query_params(no_items: true)
 
-    case HttpClient.get_with_rate_limit(url,
+    case http_client().get_with_rate_limit(url,
            params: params,
            headers: [{"user-agent", @user_agent}]
          ) do
@@ -167,7 +286,7 @@ defmodule WandererKills.Zkb.Client do
   def fetch_system_killmails_esi(system_id) do
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    case HttpClient.get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
+    case http_client().get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
       {:ok, response} -> parse_response(response)
       {:error, reason} -> {:error, reason}
     end
@@ -193,23 +312,128 @@ defmodule WandererKills.Zkb.Client do
   end
 
   @doc """
-  Gets the kill count for a system.
+  Gets the kill count for a system from zKillboard with telemetry.
   Returns {:ok, count} or {:error, reason}.
   """
-  def get_system_kill_count(system_id) when is_integer(system_id) do
+  @spec get_system_kill_count(system_id()) :: {:ok, integer()} | {:error, term()}
+  def get_system_kill_count(system_id) when is_integer(system_id) and system_id > 0 do
+    Logger.debug("Fetching system kill count from ZKB",
+      system_id: system_id,
+      operation: :get_system_kill_count,
+      step: :start
+    )
+
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    case HttpClient.get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
+    case http_client().get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
       {:ok, response} ->
         case parse_response(response) do
           {:ok, data} when is_list(data) ->
-            {:ok, length(data)}
+            count = length(data)
+
+            Logger.debug("Successfully fetched system kill count from ZKB",
+              system_id: system_id,
+              kill_count: count,
+              operation: :get_system_kill_count,
+              step: :success
+            )
+
+            {:ok, count}
+
+          {:ok, _} ->
+            error_reason =
+              Error.zkb_error(
+                :unexpected_response,
+                "Expected list data for kill count but got different format",
+                false
+              )
+
+            Logger.error("Failed to fetch system kill count from ZKB",
+              system_id: system_id,
+              operation: :get_system_kill_count,
+              error: error_reason,
+              step: :error
+            )
+
+            {:error, error_reason}
+
+          {:error, reason} ->
+            Logger.error("Failed to fetch system kill count from ZKB",
+              system_id: system_id,
+              operation: :get_system_kill_count,
+              error: reason,
+              step: :error
+            )
+
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to fetch system kill count from ZKB",
+          system_id: system_id,
+          operation: :get_system_kill_count,
+          error: reason,
+          step: :error
+        )
+
+        {:error, reason}
+    end
+  end
+
+  def get_system_kill_count(invalid_id) do
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
+  end
+
+  @doc """
+  Fetches active systems from zKillboard with caching.
+  """
+  @spec fetch_active_systems(keyword()) :: {:ok, [system_id()]} | {:error, term()}
+  def fetch_active_systems(opts \\ []) do
+    force = Keyword.get(opts, :force, false)
+
+    if force do
+      do_fetch_active_systems()
+    else
+      case fetch_from_cache() do
+        {:ok, systems} -> {:ok, systems}
+        {:error, _reason} -> do_fetch_active_systems()
+      end
+    end
+  end
+
+  defp fetch_from_cache do
+    alias WandererKills.Core.Cache
+
+    case Cache.get_active_systems() do
+      {:ok, systems} when is_list(systems) ->
+        {:ok, systems}
+
+      {:error, reason} ->
+        Logger.warning("Cache error for active systems, falling back to fresh fetch",
+          operation: :fetch_active_systems,
+          step: :cache_error,
+          error: reason
+        )
+
+        do_fetch_active_systems()
+    end
+  end
+
+  defp do_fetch_active_systems do
+    url = "#{base_url()}/systems/"
+
+    case http_client().get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
+      {:ok, response} ->
+        case parse_response(response) do
+          {:ok, systems} when is_list(systems) ->
+            {:ok, systems}
 
           {:ok, _} ->
             {:error,
              Error.zkb_error(
                :unexpected_response,
-               "Expected list data for kill count but got different format",
+               "Expected list of systems but got different format",
                false
              )}
 
@@ -220,11 +444,6 @@ defmodule WandererKills.Zkb.Client do
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  def get_system_kill_count(_system_id) do
-    {:error,
-     Error.validation_error(:invalid_format, "Invalid system ID format for zKillboard API")}
   end
 
   @doc """
@@ -262,36 +481,6 @@ defmodule WandererKills.Zkb.Client do
   defp get_items_info(killmail) do
     items = Map.get(killmail, "items", [])
     {:ok, items}
-  end
-
-  @doc """
-  Fetches active systems from zKillboard.
-  Returns {:ok, [system_id]} or {:error, reason}.
-  """
-  def fetch_active_systems do
-    url = "#{base_url()}/systems/"
-
-    case HttpClient.get_with_rate_limit(url, headers: [{"user-agent", @user_agent}]) do
-      {:ok, response} ->
-        case parse_response(response) do
-          {:ok, systems} when is_list(systems) ->
-            {:ok, systems}
-
-          {:ok, _} ->
-            {:error,
-             Error.zkb_error(
-               :unexpected_response,
-               "Expected list of systems but got different format",
-               false
-             )}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
   end
 
   @doc """

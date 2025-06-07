@@ -324,59 +324,99 @@ defmodule WandererKills.Core.CSV do
   # Legacy Ship Type/Group Parsers (from Shared.CSV)
   # ============================================================================
 
+  # ============================================================================
+  # Download and Update API (from CSVHelpers)
+  # ============================================================================
+
+  @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"
+  @required_files ["invGroups.csv", "invTypes.csv"]
+
   @doc """
-  Parses a CSV row into a ship type map for EVE Online data.
-  Legacy function from Shared.CSV - prefer parse_type_row/1.
+  Complete update pipeline: download -> parse.
+
+  ## Parameters
+  - `opts` - Options passed to the download step
+
+  ## Returns
+  - `:ok` - Complete pipeline succeeded
+  - `{:error, reason}` - Pipeline failed at some step
   """
-  @spec parse_ship_type(map()) :: ship_type() | nil
-  def parse_ship_type(row) when is_map(row) do
-    try do
-      with type_id when is_binary(type_id) <- Map.get(row, "typeID"),
-           group_id when is_binary(group_id) <- Map.get(row, "groupID"),
-           name when is_binary(name) <- Map.get(row, "typeName") do
-        %{
-          type_id: String.to_integer(type_id),
-          group_id: String.to_integer(group_id),
-          name: name,
-          group_name: nil,
-          mass: parse_number_with_default(Map.get(row, "mass", "0"), :float, 0.0),
-          capacity: parse_number_with_default(Map.get(row, "capacity", "0"), :float, 0.0),
-          volume: parse_number_with_default(Map.get(row, "volume", "0"), :float, 0.0)
-        }
-      else
-        _ -> nil
-      end
-    rescue
-      ArgumentError -> nil
+  @spec update_ship_types(keyword()) :: :ok | {:error, Error.t()}
+  def update_ship_types(opts \\ []) do
+    Logger.info("Starting ship type update from CSV")
+
+    with {:ok, raw_data} <- download_csv_files(opts),
+         {:ok, _parsed_data} <- parse_ship_type_csvs(raw_data) do
+      Logger.info("Ship type update from CSV completed successfully")
+      :ok
+    else
+      {:error, reason} ->
+        Logger.error("Ship type update from CSV failed: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
-  def parse_ship_type(_), do: nil
-
   @doc """
-  Parses a CSV row into a ship group map for EVE Online data.
-  Legacy function from Shared.CSV - prefer parse_group_row/1.
+  Downloads CSV files for ship type data.
+
+  ## Parameters
+  - `opts` - Download options including `:force_download`
+
+  ## Returns
+  - `{:ok, file_paths}` - List of downloaded file paths
+  - `{:error, reason}` - Download failed
   """
-  @spec parse_ship_group(map()) :: ship_group() | nil
-  def parse_ship_group(row) when is_map(row) do
-    try do
-      with group_id when is_binary(group_id) <- Map.get(row, "groupID"),
-           name when is_binary(name) <- Map.get(row, "groupName"),
-           category_id when is_binary(category_id) <- Map.get(row, "categoryID") do
-        %{
-          group_id: String.to_integer(group_id),
-          name: name,
-          category_id: String.to_integer(category_id)
-        }
+  @spec download_csv_files(keyword()) :: {:ok, [String.t()]} | {:error, Error.t()}
+  def download_csv_files(opts \\ []) do
+    Logger.info("Downloading CSV files for ship type data")
+
+    data_dir = get_data_directory()
+    File.mkdir_p!(data_dir)
+
+    force_download = Keyword.get(opts, :force_download, false)
+
+    missing_files =
+      if force_download do
+        @required_files
       else
-        _ -> nil
+        get_missing_files(data_dir)
       end
-    rescue
-      ArgumentError -> nil
+
+    if Enum.empty?(missing_files) do
+      Logger.info("All required CSV files are present")
+      {:ok, get_file_paths(data_dir)}
+    else
+      Logger.info("Downloading #{length(missing_files)} CSV files: #{inspect(missing_files)}")
+
+      case download_files(missing_files, data_dir) do
+        :ok -> {:ok, get_file_paths(data_dir)}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
-  def parse_ship_group(_), do: nil
+  @doc """
+  Parses CSV files into ship type data.
+
+  ## Parameters
+  - `file_paths` - List of CSV file paths to parse
+
+  ## Returns
+  - `{:ok, ship_types}` - Parsed ship type data
+  - `{:error, reason}` - Parsing failed
+  """
+  @spec parse_ship_type_csvs([String.t()]) :: {:ok, [map()]} | {:error, Error.t()}
+  def parse_ship_type_csvs(file_paths) when is_list(file_paths) do
+    Logger.info("Parsing ship type data from CSV files")
+
+    case find_csv_files(file_paths) do
+      {:ok, {types_path, groups_path}} ->
+        process_csv_data(types_path, groups_path)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 
   # ============================================================================
   # Private Functions
@@ -459,4 +499,255 @@ defmodule WandererKills.Core.CSV do
       {:ok, Enum.reverse(records)}
     end
   end
+
+  # Ship type CSV download/processing helpers
+  defp get_data_directory do
+    Path.join([:code.priv_dir(:wanderer_kills), "data"])
+  end
+
+  defp get_missing_files(data_dir) do
+    @required_files
+    |> Enum.reject(fn file ->
+      File.exists?(Path.join(data_dir, file))
+    end)
+  end
+
+  defp get_file_paths(data_dir) do
+    @required_files
+    |> Enum.map(&Path.join(data_dir, &1))
+  end
+
+  defp download_files(file_names, data_dir) do
+    alias WandererKills.Core.BatchProcessor
+
+    download_fn = fn file_name -> download_single_file(file_name, data_dir) end
+
+    case BatchProcessor.process_parallel(file_names, download_fn,
+           timeout: :timer.minutes(5),
+           description: "CSV file downloads"
+         ) do
+      {:ok, _results} ->
+        Logger.info("Successfully downloaded all CSV files")
+        :ok
+
+      {:partial, _results, failures} ->
+        Logger.error("Some CSV downloads failed: #{inspect(failures)}")
+
+        {:error,
+         Error.ship_types_error(:download_failed, "Some CSV file downloads failed", true, %{
+           failures: failures
+         })}
+
+      {:error, reason} ->
+        Logger.error("Failed to download CSV files: #{inspect(reason)}")
+
+        {:error,
+         Error.ship_types_error(:download_failed, "Failed to download CSV files", true, %{
+           underlying_error: reason
+         })}
+    end
+  end
+
+  defp download_single_file(file_name, data_dir) do
+    url = "#{@eve_db_dump_url}/#{file_name}"
+    download_path = Path.join(data_dir, file_name)
+
+    Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
+
+    case WandererKills.Core.Http.ClientProvider.get().get(url, []) do
+      {:ok, %{body: body}} ->
+        case File.write(download_path, body) do
+          :ok ->
+            Logger.info("Successfully downloaded #{file_name}")
+            :ok
+
+          {:error, reason} ->
+            Logger.error("Failed to write file #{file_name}: #{inspect(reason)}")
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.error("Failed to download file #{file_name}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp find_csv_files(file_paths) do
+    types_path = Enum.find(file_paths, &String.ends_with?(&1, "invTypes.csv"))
+    groups_path = Enum.find(file_paths, &String.ends_with?(&1, "invGroups.csv"))
+
+    case {types_path, groups_path} do
+      {nil, _} ->
+        {:error,
+         Error.ship_types_error(
+           :missing_types_file,
+           "invTypes.csv file not found in provided paths"
+         )}
+
+      {_, nil} ->
+        {:error,
+         Error.ship_types_error(
+           :missing_groups_file,
+           "invGroups.csv file not found in provided paths"
+         )}
+
+      {types, groups} ->
+        {:ok, {types, groups}}
+    end
+  end
+
+  defp process_csv_data(types_path, groups_path) do
+    Logger.info("Processing CSV data from files", types: types_path, groups: groups_path)
+
+    with {:ok, types_data} <- parse_csv_file_simple(types_path),
+         {:ok, groups_data} <- parse_csv_file_simple(groups_path) do
+      ship_types = build_ship_types(types_data, groups_data)
+      Logger.info("Successfully processed #{length(ship_types)} ship types from CSV")
+      {:ok, ship_types}
+    else
+      {:error, reason} ->
+        Logger.error("Failed to process CSV data: #{inspect(reason)}")
+
+        {:error,
+         Error.ship_types_error(:csv_processing_failed, "Failed to process CSV data", false, %{
+           underlying_error: reason
+         })}
+    end
+  end
+
+  defp parse_csv_file_simple(file_path) do
+    case File.read(file_path) do
+      {:ok, content} ->
+        try do
+          # Parse CSV content using simple string splitting
+          rows =
+            content
+            |> String.split("\n")
+            |> Enum.reject(&(&1 == ""))
+            |> Enum.map(&String.split(&1, ","))
+
+          case rows do
+            [headers | data_rows] ->
+              parsed_data =
+                data_rows
+                |> Enum.map(fn row ->
+                  headers
+                  |> Enum.zip(row)
+                  |> Map.new()
+                end)
+
+              {:ok, parsed_data}
+
+            [] ->
+              {:ok, []}
+          end
+        rescue
+          error ->
+            {:error,
+             Error.csv_error(:parse_error, "Failed to parse CSV file", %{
+               file: file_path,
+               error: inspect(error)
+             })}
+        end
+
+      {:error, reason} ->
+        {:error,
+         Error.csv_error(:file_read_error, "Failed to read CSV file", %{
+           file: file_path,
+           reason: reason
+         })}
+    end
+  end
+
+  defp build_ship_types(types, groups) do
+    # Get ship group IDs from configuration
+    ship_group_ids = [6, 7, 9, 11, 16, 17, 23]
+
+    groups_map = build_groups_map(groups)
+
+    types
+    |> filter_ship_types(ship_group_ids)
+    |> map_to_ship_types(groups_map)
+    |> Enum.reject(&is_nil(&1.type_id))
+  end
+
+  @spec build_groups_map([map()]) :: map()
+  defp build_groups_map(groups) do
+    groups
+    |> Enum.reduce(%{}, fn row, acc ->
+      build_single_group_entry(row, acc)
+    end)
+  end
+
+  @spec build_single_group_entry(map(), map()) :: map()
+  defp build_single_group_entry(row, acc) do
+    group_id_str = Map.get(row, "groupID")
+    group_name = Map.get(row, "groupName")
+
+    if valid_group_entry?(group_id_str, group_name) do
+      case Integer.parse(group_id_str) do
+        {group_id, ""} -> Map.put(acc, group_id, group_name)
+        _ -> acc
+      end
+    else
+      acc
+    end
+  end
+
+  @spec valid_group_entry?(term(), term()) :: boolean()
+  defp valid_group_entry?(group_id_str, group_name) do
+    is_binary(group_id_str) and is_binary(group_name)
+  end
+
+  @spec filter_ship_types([map()], [integer()]) :: [map()]
+  defp filter_ship_types(types, ship_group_ids) do
+    Enum.filter(types, fn row ->
+      ship_type?(row, ship_group_ids)
+    end)
+  end
+
+  @spec ship_type?(map(), [integer()]) :: boolean()
+  defp ship_type?(row, ship_group_ids) do
+    group_id_str = Map.get(row, "groupID")
+
+    if is_binary(group_id_str) do
+      case Integer.parse(group_id_str) do
+        {group_id, ""} -> group_id in ship_group_ids
+        _ -> false
+      end
+    else
+      false
+    end
+  end
+
+  @spec map_to_ship_types([map()], map()) :: [map()]
+  defp map_to_ship_types(filtered_types, groups_map) do
+    Enum.map(filtered_types, fn row ->
+      create_ship_type_entry(row, groups_map)
+    end)
+  end
+
+  @spec create_ship_type_entry(map(), map()) :: map()
+  defp create_ship_type_entry(row, groups_map) do
+    type_id = parse_integer_simple(Map.get(row, "typeID"))
+    group_id = parse_integer_simple(Map.get(row, "groupID"))
+
+    %{
+      type_id: type_id,
+      name: Map.get(row, "typeName", "Unknown"),
+      group_id: group_id,
+      group_name: Map.get(groups_map, group_id, "Unknown Group")
+    }
+  end
+
+  defp parse_integer_simple(nil), do: nil
+
+  defp parse_integer_simple(str) when is_binary(str) do
+    case Integer.parse(str) do
+      {int, ""} -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_integer_simple(int) when is_integer(int), do: int
 end

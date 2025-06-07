@@ -563,10 +563,8 @@ defmodule WandererKills.Core.Cache do
   defp cleanup_expired_entries do
     current_time = Clock.now_milliseconds()
 
-    # Get all tables that might have TTL entries
-    tables_to_clean = [:killmails, :systems, :ship_types, :esi_cache]
-
-    Enum.each(tables_to_clean, fn table ->
+    # Clean up all tables that might have TTL entries
+    Enum.each(@all_tables, fn table ->
       cleanup_table_if_exists(table, current_time)
     end)
 
@@ -629,7 +627,7 @@ defmodule WandererKills.Core.Cache do
   @spec schedule_cleanup() :: reference()
   defp schedule_cleanup do
     # 5 minutes default
-    cleanup_interval = Config.get(:cache_cleanup_interval_ms, 300_000)
+    cleanup_interval = Config.cache_cleanup_interval_ms()
     Process.send_after(self(), :cleanup_expired, cleanup_interval)
   end
 
@@ -1026,172 +1024,12 @@ defmodule WandererKills.Core.Cache do
   end
 
   # ============================================================================
-  # ESI Cache Operations (for backward compatibility)
+  # Killmail Operations
   # ============================================================================
 
-  @doc """
-  Sets character information in the cache.
-  """
-  @spec set_character_info(integer(), map()) :: :ok | {:error, Error.t()}
-  def set_character_info(character_id, character_data) when is_integer(character_id) do
-    put_with_ttl(:characters, character_id, character_data, 24 * 3600)
-  end
-
-  @doc """
-  Gets character information from the cache.
-  """
-  @spec get_character_info(integer()) :: {:ok, map()} | {:error, Error.t()}
-  def get_character_info(character_id) when is_integer(character_id) do
-    get(:characters, character_id)
-  end
-
-  @doc """
-  Sets corporation information in the cache.
-  """
-  @spec set_corporation_info(integer(), map()) :: :ok | {:error, Error.t()}
-  def set_corporation_info(corporation_id, corporation_data) when is_integer(corporation_id) do
-    put_with_ttl(:corporations, corporation_id, corporation_data, 24 * 3600)
-  end
-
-  @doc """
-  Gets corporation information from the cache.
-  """
-  @spec get_corporation_info(integer()) :: {:ok, map()} | {:error, Error.t()}
-  def get_corporation_info(corporation_id) when is_integer(corporation_id) do
-    get(:corporations, corporation_id)
-  end
-
-  @doc """
-  Sets alliance information in the cache.
-  """
-  @spec set_alliance_info(integer(), map()) :: :ok | {:error, Error.t()}
-  def set_alliance_info(alliance_id, alliance_data) when is_integer(alliance_id) do
-    put_with_ttl(:alliances, alliance_id, alliance_data, 24 * 3600)
-  end
-
-  @doc """
-  Gets alliance information from the cache.
-  """
-  @spec get_alliance_info(integer()) :: {:ok, map()} | {:error, Error.t()}
-  def get_alliance_info(alliance_id) when is_integer(alliance_id) do
-    get(:alliances, alliance_id)
-  end
-
-  @doc """
-  Sets type information in the cache.
-  """
-  @spec set_type_info(integer(), map()) :: :ok | {:error, Error.t()}
-  def set_type_info(type_id, type_data) when is_integer(type_id) do
-    put_with_ttl(:ship_types, type_id, type_data, 24 * 3600)
-  end
-
-  @doc """
-  Gets type information from the cache.
-  """
-  @spec get_type_info(integer()) :: {:ok, map()} | {:error, Error.t()}
-  def get_type_info(type_id) when is_integer(type_id) do
-    get(:ship_types, type_id)
-  end
-
-  @doc """
-  Sets group information in the cache.
-  """
-  @spec set_group_info(integer(), map()) :: :ok | {:error, Error.t()}
-  def set_group_info(group_id, group_data) when is_integer(group_id) do
-    put_with_ttl(:ship_types, "group_#{group_id}", group_data, 24 * 3600)
-  end
-
-  @doc """
-  Gets group information from the cache.
-  """
-  @spec get_group_info(integer()) :: {:ok, map()} | {:error, Error.t()}
-  def get_group_info(group_id) when is_integer(group_id) do
-    get(:ship_types, "group_#{group_id}")
-  end
-
   # ============================================================================
-  # Killmail Operations (for backward compatibility)
+  # General Cache Operations
   # ============================================================================
-
-  @doc """
-  Sets a killmail in the cache.
-  """
-  @spec set_killmail(integer(), map()) :: :ok | {:error, Error.t()}
-  def set_killmail(killmail_id, killmail_data) when is_integer(killmail_id) do
-    put(@cache_table, "killmail:#{killmail_id}", killmail_data)
-  end
-
-  @doc """
-  Gets a killmail from the cache.
-  """
-  @spec get_killmail(integer()) :: {:ok, map()} | {:error, Error.t()}
-  def get_killmail(killmail_id) when is_integer(killmail_id) do
-    get(@cache_table, "killmail:#{killmail_id}")
-  end
-
-  @doc """
-  Deletes a killmail from the cache.
-  """
-  @spec delete_killmail(integer()) :: :ok | {:error, Error.t()}
-  def delete_killmail(killmail_id) when is_integer(killmail_id) do
-    delete(@cache_table, "killmail:#{killmail_id}")
-  end
-
-  @doc """
-  Gets system killmails (alias for get_killmails_for_system).
-  """
-  @spec get_system_killmails(integer()) :: {:ok, [integer()]} | {:error, Error.t()}
-  def get_system_killmails(system_id) do
-    get_killmails_for_system(system_id)
-  end
-
-  # ============================================================================
-  # General Cache Operations (for backward compatibility)
-  # ============================================================================
-
-  @doc """
-  Sets a value in the cache (general purpose).
-  """
-  @spec set(term(), term()) :: :ok | {:error, Error.t()}
-  def set(key, value) do
-    put(@cache_table, key, value)
-  end
-
-  @doc """
-  Gets a value from the cache (general purpose).
-  """
-  @spec get(term()) :: {:ok, term()} | {:error, Error.t()}
-  def get(key) do
-    get(@cache_table, key)
-  end
-
-  @doc """
-  Deletes a value from the cache (general purpose).
-  """
-  @spec del(term()) :: :ok | {:error, Error.t()}
-  def del(key) do
-    delete(@cache_table, key)
-  end
-
-  @doc """
-  Clears all entries in a namespace.
-  """
-  @spec clear_namespace(String.t()) :: :ok
-  def clear_namespace(namespace) do
-    # Use match to find all keys with the namespace prefix
-    match_spec = [
-      {{:"$1", :_, :_},
-       [{:==, {:hd, {:binary_to_list, :"$1"}}, {:const, String.to_charlist(namespace)}}], [:"$1"]}
-    ]
-
-    try do
-      keys = :ets.select(@cache_table, match_spec)
-      Enum.each(keys, fn key -> :ets.delete(@cache_table, key) end)
-      :ok
-    rescue
-      _ -> :ok
-    end
-  end
 
   @doc """
   Checks if the cache is healthy.
@@ -1210,17 +1048,6 @@ defmodule WandererKills.Core.Cache do
       end
     rescue
       _ -> false
-    end
-  end
-
-  @doc """
-  Gets cache statistics (general version).
-  """
-  @spec stats() :: {:ok, map()} | {:error, :disabled}
-  def stats() do
-    case stats(@cache_table) do
-      {:ok, stats} -> {:ok, stats}
-      {:error, _} -> {:error, :disabled}
     end
   end
 end

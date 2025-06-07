@@ -1,18 +1,14 @@
-- [ ] Refactor `WandererKills.Core.Config` into a single canonical module: remove all duplicate `lib/wanderer_kills/core/config.ex` files and update callers to use the new module.
-- [ ] Consolidate CSV parsing into `WandererKills.Core.CSVHelpers`: merge `lib/wanderer_kills/core/csv.ex`, `lib/wanderer_kills/ship_types/csv_helpers.ex` and `lib/wanderer_kills/data/sources/csv_source.ex`; update `@behaviour` and `alias` usages; delete `ship_types/csv_parser.ex`, `data/sources/` and `data/behaviours/`.
-- [ ] Remove legacy compatibility APIs from `WandererKills.Core.Cache` (e.g. `set_character_info/2`, `get_killmail/1`, `del/1`); update callers to use the primary ETS/context-based API and delete deprecated functions.
-- [ ] Prune vestigial killmail format code: delete any clauses or helpers referencing “partial” or “minimal” formats.
-- [ ] Delete `lib/wanderer_kills/data/` and its façade `lib/wanderer_kills/data.ex`; remove related behaviours (`CsvSource`, `EsiSource`, etc.) and rewire imports to domain modules directly.
-- [ ] Standardize on one killmail store: keep `lib/wanderer_kills/killmails/store.ex`, update all callers, and delete `lib/wanderer_kills/data/stores/killmail_store.ex`.
-- [ ] Delete `lib/wanderer_kills/fetching/processor.ex` and `lib/wanderer_kills/fetching/zkb_service.ex`; fold the needed logic into `Killmails.Coordinator` or ZKB client modules; remove the empty `fetching/` folder.
-- [ ] Move the `ShipTypeSource` behaviour from `lib/wanderer_kills/data/behaviours/ship_type_source.ex` into `lib/wanderer_kills/core/behaviours.ex`; update every `@behaviour` reference; delete the now-empty `lib/wanderer_kills/data/behaviours/` directory.
-- [ ] Merge single-file folders: integrate `lib/wanderer_kills/systems/fetcher.ex` into your fetching context and fold `lib/wanderer_kills/zkb/client.ex` + `client_behaviour.ex` into one ZKB module under `fetching/` or `preloader/`.
-- [ ] Reorganize directory layout by business domain: group modules under `killmails/`, `ship_types/`, `systems/`, `fetching/`, and `observability/`.
-- [ ] Run `mix xref graph` and `mix xref unused` to identify dead code (e.g. unused modules like `Core.CircuitBreaker` or unused health-check behaviours); delete or archive them; verify tests still pass.
-- [ ] Clean up test support: remove obsolete fixtures in `test/shared/` or `test/support/`; centralize repetitive mocks or factories.
-- [ ] Refactor nested `case` statements (e.g. in `Core.Client` and `ShipTypeUpdater`) into `with … do` flows for clearer error handling.
-- [ ] Replace runtime `Config.get/2` calls with `Application.compile_env/3` for compile-time config lookups.
-- [ ] Eliminate `try/rescue` around ETS access by guarding with `:ets.whereis/1` or supervising table creation.
-- [ ] Simplify your supervision tree in `Application.start/2`: remove unused child flags (`start_preloader?`, `start_redisq?`, `start_ets_supervisor`) and flatten the children list.
-- [ ] Consolidate observability modules: merge trivial health-check behaviours and monitoring modules into fewer cohesive units.
-- [ ] Annotate public API modules in `WandererKillsWeb.Api` with `@spec` and formally define your stable public interface.
+
+- [ ] “Refactor ESI fetchers (character_fetcher.ex, killmail_fetcher.ex, type_fetcher.ex) and WandererKills.ESI.Client to use a shared DataFetcher pipeline or the HttpClient behaviour directly, deleting bespoke fetcher modules if 
+their logic is subsumed by a generic solution.”
+- [ ] “Migrate the core ETS GenServer caches to Cachex: update your application supervisor to start Cachex instances for each cache namespace, remove all manual ETS table-creation and GenServer modules in `Core.Cache`, and delete the old cache supervision code.”
+- [ ] “Replace every `Core.Cache.put/3`, `put_with_ttl/4`, and `get/2` call in domain modules with `Cachex.put/4` and `Cachex.get!/3`, sourcing TTL values via `Config.cache_ttl/1` and converting seconds to milliseconds as needed.”
+- [ ] “Remove the manual cleanup scheduler and `cleanup_expired_entries/0` family of functions: delete the scheduled GenServer invocation, supporting helper functions, and their tests, relying instead on Cachex’s built-in TTL eviction.”
+- [ ] “Eliminate the `:cache_stats` ETS table and custom stats code: implement `Cachex.handle_event/2` callbacks or Telemetry handlers to capture hits/misses, and remove all ETS-based statistics modules and tests.”
+- [ ] “Consolidate per-entity ETS tables into a single Cachex instance with multiple namespaces (e.g. `:esi`, `:ship_types`, `:systems`): define namespaced caches in your config, set per-namespace TTLs, and remove individual ETS table definitions.”
+- [ ] “Standardize cache key formatting by creating a `key(type, id)` helper in each domain cache wrapper (e.g. `WandererKills.Cache.ShipTypes.key/1`) and refactor all modules to call these helpers instead of using raw tuples or integers.”
+- [ ] “Extract domain-specific cache wrappers (e.g. `WandererKills.Cache.ShipTypes`, `WandererKills.Cache.Systems`) that encapsulate Cachex operations—`get_or_set`, TTL logic, and key generation—so business logic never interacts directly with Cachex.”
+- [ ] “Update your test helpers to drop ETS-based teardown: use `Cachex.clear/1` for each namespace in `TestHelpers.clear_all_caches/0`, and adjust existing tests to reference Cachex caches instead of ETS tables.”
+- [ ] “Audit the entire codebase for any remaining direct ETS calls (`:ets.insert`, `:ets.lookup`, etc.) or manual caching logic, and refactor them to use the new Cachex-based wrappers.”
+- [ ] “Write integration tests to validate the Cachex migration preserves behavior: cover cache hits, misses, TTL expirations, and fallback functions for critical modules like ESI fetchers and ShipType updaters.”  
+

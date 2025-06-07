@@ -12,19 +12,19 @@ defmodule WandererKills.CacheTest do
   describe "killmail operations" do
     test "can store and retrieve a killmail" do
       killmail = TestHelpers.create_test_killmail(123)
-      assert :ok = Cache.set_killmail(123, killmail)
-      assert {:ok, ^killmail} = Cache.get_killmail(123)
+      assert :ok = Cache.put(:killmails, 123, killmail)
+      assert {:ok, ^killmail} = Cache.get(:killmails, 123)
     end
 
     test "returns error for non-existent killmail" do
-      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get_killmail(999)
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get(:killmails, 999)
     end
 
     test "can delete a killmail" do
       killmail = TestHelpers.create_test_killmail(123)
-      assert :ok = Cache.set_killmail(123, killmail)
-      assert :ok = Cache.delete_killmail(123)
-      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get_killmail(123)
+      assert :ok = Cache.put(:killmails, 123, killmail)
+      assert :ok = Cache.delete(:killmails, 123)
+      assert {:error, %WandererKills.Core.Error{type: :not_found}} = Cache.get(:killmails, 123)
     end
   end
 
@@ -33,8 +33,8 @@ defmodule WandererKills.CacheTest do
       killmail1 = TestHelpers.create_test_killmail(123)
       killmail2 = TestHelpers.create_test_killmail(456)
 
-      assert :ok = Cache.set_killmail(123, killmail1)
-      assert :ok = Cache.set_killmail(456, killmail2)
+      assert :ok = Cache.put(:killmails, 123, killmail1)
+      assert :ok = Cache.put(:killmails, 456, killmail2)
       assert :ok = Cache.add_system_killmail(789, 123)
       assert :ok = Cache.add_system_killmail(789, 456)
 
@@ -48,12 +48,12 @@ defmodule WandererKills.CacheTest do
 
     test "can manage system killmails" do
       killmail = TestHelpers.create_test_killmail(123)
-      assert :ok = Cache.set_killmail(123, killmail)
+      assert :ok = Cache.put(:killmails, 123, killmail)
       assert :ok = Cache.add_system_killmail(888, 123)
       assert {:ok, [123]} = Cache.get_killmails_for_system(888)
 
       # Test that we can get system killmails
-      assert {:ok, [123]} = Cache.get_system_killmails(888)
+      assert {:ok, [123]} = Cache.get_killmails_for_system(888)
     end
   end
 

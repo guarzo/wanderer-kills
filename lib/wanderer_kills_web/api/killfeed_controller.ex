@@ -10,6 +10,7 @@ defmodule WandererKillsWeb.Api.KillfeedController do
 
   require Logger
   import Plug.Conn
+  import WandererKillsWeb.Api.Helpers, only: [send_json_resp: 3]
 
   alias WandererKills.Killmails.Store
   alias WandererKills.Core.Constants
@@ -141,12 +142,5 @@ defmodule WandererKillsWeb.Api.KillfeedController do
 
   def next(conn, _params) do
     send_json_resp(conn, 400, %{error: "Missing required parameters"})
-  end
-
-  # Helper function to send JSON responses
-  defp send_json_resp(conn, status, data) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(data))
   end
 end

@@ -5,7 +5,6 @@ defmodule WandererKills.PreloaderSupervisor do
   """
 
   use Supervisor
-  alias WandererKills.Core.Config
 
   # No @impl here, since Supervisor only defines init/1 as a callback.
   def start_link(opts) do
@@ -29,23 +28,10 @@ defmodule WandererKills.PreloaderSupervisor do
     preloader_worker_spec = Supervisor.child_spec(WandererKills.Preloader.Worker, [])
     children = [preloader_worker_spec | children]
 
-    # Conditionally add RedisQ based on configuration
-    children =
-      if Config.start_redisq?() do
-        redisq_spec = %{
-          id: WandererKills.External.ZKB.RedisQ,
-          start: {WandererKills.External.ZKB.RedisQ, :start_link, []},
-          restart: :permanent,
-          type: :worker,
-          timeout: :timer.seconds(30)
-        }
+    # RedisQ module was removed during cleanup - no longer needed
+    # All RedisQ functionality is handled through the ZKB client now
 
-        [redisq_spec | children]
-      else
-        children
-      end
-
-    # Reverse to maintain proper order (preloader first, then RedisQ)
+    # Reverse to maintain proper order
     children = Enum.reverse(children)
 
     # Supervisor flags with better fault tolerance

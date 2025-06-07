@@ -164,15 +164,6 @@ defmodule WandererKills.Core.Config do
     end
   end
 
-  @doc "Gets circuit breaker configuration"
-  @spec circuit_breaker(atom()) :: pos_integer()
-  def circuit_breaker(service) do
-    case service do
-      :zkb -> get_env(:circuit_breaker_zkb_failure_threshold, 10)
-      :esi -> get_env(:circuit_breaker_esi_failure_threshold, 5)
-    end
-  end
-
   @doc "Gets telemetry configuration"
   @spec telemetry(atom()) :: term()
   def telemetry(key) do
@@ -189,11 +180,19 @@ defmodule WandererKills.Core.Config do
 
   @doc "Gets HTTP client module"
   @spec http_client() :: module()
-  def http_client, do: get_env(:http_client, WandererKills.Core.Http.Client)
+  def http_client do
+    case get_env(:http_client, "WandererKills.Core.Http.Client") do
+      module when is_atom(module) ->
+        module
+
+      module_string when is_binary(module_string) ->
+        String.to_existing_atom("Elixir.#{module_string}")
+    end
+  end
 
   @doc "Gets zKillboard client module"
   @spec zkb_client() :: module()
-  def zkb_client, do: get_env(:zkb_client, WandererKills.External.Zkb.Client)
+  def zkb_client, do: get_env(:zkb_client, WandererKills.Zkb.Client)
 
   @doc "Gets system cache recent fetch threshold"
   @spec recent_fetch_threshold() :: pos_integer()
@@ -219,25 +218,13 @@ defmodule WandererKills.Core.Config do
   @spec cache_esi_name() :: atom()
   def cache_esi_name, do: get_env(:cache_esi_name, :esi_cache)
 
-  @doc """
-  Gets a raw configuration value by key.
+  @doc "Gets clock configuration (for test time mocking)"
+  @spec clock() :: term()
+  def clock, do: get_env(:clock, nil)
 
-  This function provides compatibility with existing code that accesses
-  configuration directly. Prefer using the specific configuration functions
-  above for better type safety and documentation.
-  """
-  @spec get(atom()) :: term()
-  def get(key) when is_atom(key), do: get_env(key, nil)
-
-  @doc """
-  Gets a raw configuration value by key with a default.
-
-  This function provides compatibility with existing code that accesses
-  configuration directly. Prefer using the specific configuration functions
-  above for better type safety and documentation.
-  """
-  @spec get(atom(), term()) :: term()
-  def get(key, default) when is_atom(key), do: get_env(key, default)
+  @doc "Gets cache cleanup interval in milliseconds"
+  @spec cache_cleanup_interval_ms() :: pos_integer()
+  def cache_cleanup_interval_ms, do: get_env(:cache_cleanup_interval_ms, 300_000)
 
   # ============================================================================
   # Private Functions

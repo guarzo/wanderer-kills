@@ -63,7 +63,7 @@ defmodule WandererKills.Core.Clock do
   """
   @spec now() :: DateTime.t()
   def now do
-    case Config.get(:clock) do
+    case Config.clock() do
       nil ->
         DateTime.utc_now()
 
@@ -83,7 +83,7 @@ defmodule WandererKills.Core.Clock do
   """
   @spec now_milliseconds() :: integer()
   def now_milliseconds do
-    case Config.get(:clock) do
+    case Config.clock() do
       nil ->
         System.system_time(:millisecond)
 
@@ -277,7 +277,7 @@ defmodule WandererKills.Core.Clock do
   defp older_than_cutoff?(km_dt, cutoff_dt), do: DateTime.compare(km_dt, cutoff_dt) == :lt
 
   defp get_system_time_with_config(unit) do
-    case Config.get(:clock) do
+    case Config.clock() do
       nil ->
         System.system_time(unit)
 

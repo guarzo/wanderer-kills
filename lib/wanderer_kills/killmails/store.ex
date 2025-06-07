@@ -81,7 +81,7 @@ defmodule WandererKills.Killmails.Store do
     GenServer.call(
       __MODULE__,
       {:insert, system_id, killmail_map},
-      WandererKills.Core.Constants.timeout(:gen_server_call)
+      WandererKills.Core.Constants.gen_server_call_timeout()
     )
   end
 
@@ -101,7 +101,7 @@ defmodule WandererKills.Killmails.Store do
     GenServer.call(
       __MODULE__,
       {:fetch, client_id, system_ids},
-      WandererKills.Core.Constants.timeout(:gen_server_call)
+      WandererKills.Core.Constants.gen_server_call_timeout()
     )
   end
 
@@ -126,7 +126,7 @@ defmodule WandererKills.Killmails.Store do
     GenServer.call(
       __MODULE__,
       {:fetch_one, client_id, system_ids},
-      WandererKills.Core.Constants.timeout(:gen_server_call)
+      WandererKills.Core.Constants.gen_server_call_timeout()
     )
   end
 

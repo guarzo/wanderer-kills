@@ -33,7 +33,7 @@ defmodule WandererKills.Observability.Health do
   """
 
   require Logger
-  alias WandererKills.Observability.HealthChecks.{ApplicationHealth, CacheHealth}
+  alias WandererKills.Observability.HealthChecks
 
   @type health_component :: :application | :cache
   @type health_opts :: [
@@ -71,10 +71,32 @@ defmodule WandererKills.Observability.Health do
 
     case components do
       [:application] ->
-        ApplicationHealth.check_health(timeout: timeout)
+        case HealthChecks.check_application_health(timeout: timeout) do
+          {:ok, health} ->
+            health
+
+          {:error, _reason} ->
+            %{
+              healthy: false,
+              status: "error",
+              details: %{component: "application"},
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+        end
 
       [:cache] ->
-        CacheHealth.check_health(timeout: timeout)
+        case HealthChecks.check_cache_health(timeout: timeout) do
+          {:ok, health} ->
+            health
+
+          {:error, _reason} ->
+            %{
+              healthy: false,
+              status: "error",
+              details: %{component: "cache"},
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+        end
 
       multiple_components when is_list(multiple_components) ->
         aggregate_component_health(multiple_components, timeout)
@@ -111,10 +133,30 @@ defmodule WandererKills.Observability.Health do
 
     case components do
       [:application] ->
-        ApplicationHealth.get_metrics(timeout: timeout)
+        case HealthChecks.get_application_metrics(timeout: timeout) do
+          {:ok, metrics} ->
+            metrics
+
+          {:error, _reason} ->
+            %{
+              component: "application",
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+              metrics: %{error: "Failed to collect metrics"}
+            }
+        end
 
       [:cache] ->
-        CacheHealth.get_metrics(timeout: timeout)
+        case HealthChecks.get_cache_metrics(timeout: timeout) do
+          {:ok, metrics} ->
+            metrics
+
+          {:error, _reason} ->
+            %{
+              component: "cache",
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+              metrics: %{error: "Failed to collect metrics"}
+            }
+        end
 
       multiple_components when is_list(multiple_components) ->
         aggregate_component_metrics(multiple_components, timeout)
@@ -183,10 +225,32 @@ defmodule WandererKills.Observability.Health do
   defp check_single_component(component, timeout) do
     case component do
       :application ->
-        ApplicationHealth.check_health(timeout: timeout)
+        case HealthChecks.check_application_health(timeout: timeout) do
+          {:ok, health} ->
+            health
+
+          {:error, _reason} ->
+            %{
+              healthy: false,
+              status: "error",
+              details: %{component: "application"},
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+        end
 
       :cache ->
-        CacheHealth.check_health(timeout: timeout)
+        case HealthChecks.check_cache_health(timeout: timeout) do
+          {:ok, health} ->
+            health
+
+          {:error, _reason} ->
+            %{
+              healthy: false,
+              status: "error",
+              details: %{component: "cache"},
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+        end
 
       unknown ->
         Logger.warning("Unknown health component: #{inspect(unknown)}")
@@ -207,10 +271,30 @@ defmodule WandererKills.Observability.Health do
   defp get_single_component_metrics(component, timeout) do
     case component do
       :application ->
-        ApplicationHealth.get_metrics(timeout: timeout)
+        case HealthChecks.get_application_metrics(timeout: timeout) do
+          {:ok, metrics} ->
+            metrics
+
+          {:error, _reason} ->
+            %{
+              component: "application",
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+              metrics: %{error: "Failed to collect metrics"}
+            }
+        end
 
       :cache ->
-        CacheHealth.get_metrics(timeout: timeout)
+        case HealthChecks.get_cache_metrics(timeout: timeout) do
+          {:ok, metrics} ->
+            metrics
+
+          {:error, _reason} ->
+            %{
+              component: "cache",
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+              metrics: %{error: "Failed to collect metrics"}
+            }
+        end
 
       unknown ->
         Logger.warning("Unknown metrics component: #{inspect(unknown)}")
