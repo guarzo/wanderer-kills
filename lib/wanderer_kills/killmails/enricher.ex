@@ -218,7 +218,8 @@ defmodule WandererKills.Killmails.Enricher do
   defp add_character_name(entity, character_name) do
     entity
     |> Map.put("character_name", character_name)
-    |> Map.put("name", character_name)  # Alternative field name
+    # Alternative field name
+    |> Map.put("name", character_name)
   end
 
   defp add_corporation_info(entity) do
@@ -227,9 +228,11 @@ defmodule WandererKills.Killmails.Enricher do
 
     entity
     |> Map.put("corporation_name", corp_name)
-    |> Map.put("corp_name", corp_name)  # Alternative field name
+    # Alternative field name
+    |> Map.put("corp_name", corp_name)
     |> Map.put("corporation_ticker", corp_ticker)
-    |> Map.put("corp_ticker", corp_ticker)  # Alternative field name
+    # Alternative field name
+    |> Map.put("corp_ticker", corp_ticker)
   end
 
   defp add_alliance_info(entity) do
@@ -246,20 +249,24 @@ defmodule WandererKills.Killmails.Enricher do
 
     entity
     |> Map.put("ship_name", ship_name)
-    |> Map.put("ship_type_name", ship_name)  # Alternative field name
+    # Alternative field name
+    |> Map.put("ship_type_name", ship_name)
   end
 
   defp add_ship_name_for_attacker(attacker) do
     # For attackers, get ship name from ship type ID
     ship_type_id = Map.get(attacker, "ship_type_id")
-    ship_name = case ShipTypeInfo.get_ship_type(ship_type_id) do
-      {:ok, ship_data} -> Map.get(ship_data, "name")
-      _ -> nil
-    end
+
+    ship_name =
+      case ShipTypeInfo.get_ship_type(ship_type_id) do
+        {:ok, ship_data} -> Map.get(ship_data, "name")
+        _ -> nil
+      end
 
     attacker
     |> Map.put("ship_name", ship_name)
-    |> Map.put("ship_type_name", ship_name)  # Alternative field name
+    # Alternative field name
+    |> Map.put("ship_type_name", ship_name)
   end
 
   defp add_attacker_count(killmail) do

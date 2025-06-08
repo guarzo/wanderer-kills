@@ -57,8 +57,13 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Verify the output matches the expected format
       required_root_fields = [
-        "killmail_id", "kill_time", "solar_system_id",
-        "victim", "attackers", "zkb", "attacker_count"
+        "killmail_id",
+        "kill_time",
+        "solar_system_id",
+        "victim",
+        "attackers",
+        "zkb",
+        "attacker_count"
       ]
 
       for field <- required_root_fields do
@@ -67,12 +72,22 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Verify victim structure
       victim = flattened["victim"]
+
       required_victim_fields = [
-        "character_id", "character_name", "name",
-        "corporation_id", "corporation_name", "corp_name",
-        "corporation_ticker", "corp_ticker",
-        "alliance_id", "alliance_name", "alliance_ticker",
-        "ship_type_id", "ship_name", "ship_type_name",
+        "character_id",
+        "character_name",
+        "name",
+        "corporation_id",
+        "corporation_name",
+        "corp_name",
+        "corporation_ticker",
+        "corp_ticker",
+        "alliance_id",
+        "alliance_name",
+        "alliance_ticker",
+        "ship_type_id",
+        "ship_name",
+        "ship_type_name",
         "damage_taken"
       ]
 
@@ -82,13 +97,26 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Verify attacker structure
       attacker = hd(flattened["attackers"])
+
       required_attacker_fields = [
-        "character_id", "character_name", "name",
-        "corporation_id", "corporation_name", "corp_name",
-        "corporation_ticker", "corp_ticker",
-        "alliance_id", "alliance_name", "alliance_ticker",
-        "ship_type_id", "ship_name", "ship_type_name",
-        "final_blow", "damage_done", "security_status", "weapon_type_id"
+        "character_id",
+        "character_name",
+        "name",
+        "corporation_id",
+        "corporation_name",
+        "corp_name",
+        "corporation_ticker",
+        "corp_ticker",
+        "alliance_id",
+        "alliance_name",
+        "alliance_ticker",
+        "ship_type_id",
+        "ship_name",
+        "ship_type_name",
+        "final_blow",
+        "damage_done",
+        "security_status",
+        "weapon_type_id"
       ]
 
       for field <- required_attacker_fields do
@@ -109,15 +137,19 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Test flattened name fields are added
       assert victim["character_name"] == "John Doe"
-      assert victim["name"] == "John Doe"  # Alternative field name
+      # Alternative field name
+      assert victim["name"] == "John Doe"
       assert victim["corporation_name"] == "Corp Name"
-      assert victim["corp_name"] == "Corp Name"  # Alternative field name
+      # Alternative field name
+      assert victim["corp_name"] == "Corp Name"
       assert victim["corporation_ticker"] == "[CORP]"
-      assert victim["corp_ticker"] == "[CORP]"  # Alternative field name
+      # Alternative field name
+      assert victim["corp_ticker"] == "[CORP]"
       assert victim["alliance_name"] == "Alliance Name"
       assert victim["alliance_ticker"] == "[ALLY]"
       assert victim["ship_name"] == "Rifter"
-      assert victim["ship_type_name"] == "Rifter"  # Alternative field name
+      # Alternative field name
+      assert victim["ship_type_name"] == "Rifter"
     end
 
     test "validates flattened attacker data structure" do
@@ -136,11 +168,14 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Test flattened name fields are added
       assert attacker["character_name"] == "Jane Doe"
-      assert attacker["name"] == "Jane Doe"  # Alternative field name
+      # Alternative field name
+      assert attacker["name"] == "Jane Doe"
       assert attacker["corporation_name"] == "Attacker Corp"
-      assert attacker["corp_name"] == "Attacker Corp"  # Alternative field name
+      # Alternative field name
+      assert attacker["corp_name"] == "Attacker Corp"
       assert attacker["corporation_ticker"] == "[ATK]"
-      assert attacker["corp_ticker"] == "[ATK]"  # Alternative field name
+      # Alternative field name
+      assert attacker["corp_ticker"] == "[ATK]"
       assert attacker["alliance_name"] == "Attacker Alliance"
       assert attacker["alliance_ticker"] == "[ATKR]"
     end
@@ -159,23 +194,24 @@ defmodule WandererKills.Killmails.EnricherTest do
     end
 
     test "handles multiple attackers correctly" do
-      multi_attacker_killmail = %{@enriched_killmail |
-        "attackers" => [
-          @enriched_killmail["attackers"] |> hd(),
-          %{
-            "character_id" => 999_999_999,
-            "corporation_id" => 888_888_888,
-            "alliance_id" => 777_777_777,
-            "ship_type_id" => 123,
-            "final_blow" => false,
-            "damage_done" => 500,
-            "security_status" => 2.0,
-            "weapon_type_id" => 456,
-            "character" => %{"name" => "Third Attacker"},
-            "corporation" => %{"name" => "Third Corp", "ticker" => "[3RD]"},
-            "alliance" => %{"name" => "Third Alliance", "ticker" => "[3RD]"}
-          }
-        ]
+      multi_attacker_killmail = %{
+        @enriched_killmail
+        | "attackers" => [
+            @enriched_killmail["attackers"] |> hd(),
+            %{
+              "character_id" => 999_999_999,
+              "corporation_id" => 888_888_888,
+              "alliance_id" => 777_777_777,
+              "ship_type_id" => 123,
+              "final_blow" => false,
+              "damage_done" => 500,
+              "security_status" => 2.0,
+              "weapon_type_id" => 456,
+              "character" => %{"name" => "Third Attacker"},
+              "corporation" => %{"name" => "Third Corp", "ticker" => "[3RD]"},
+              "alliance" => %{"name" => "Third Alliance", "ticker" => "[3RD]"}
+            }
+          ]
       }
 
       flattened = simulate_flattened_killmail(multi_attacker_killmail)
@@ -234,7 +270,8 @@ defmodule WandererKills.Killmails.EnricherTest do
   defp add_character_name(entity, character_name) do
     entity
     |> Map.put("character_name", character_name)
-    |> Map.put("name", character_name)  # Alternative field name
+    # Alternative field name
+    |> Map.put("name", character_name)
   end
 
   defp add_corporation_info(entity) do
@@ -243,9 +280,11 @@ defmodule WandererKills.Killmails.EnricherTest do
 
     entity
     |> Map.put("corporation_name", corp_name)
-    |> Map.put("corp_name", corp_name)  # Alternative field name
+    # Alternative field name
+    |> Map.put("corp_name", corp_name)
     |> Map.put("corporation_ticker", corp_ticker)
-    |> Map.put("corp_ticker", corp_ticker)  # Alternative field name
+    # Alternative field name
+    |> Map.put("corp_ticker", corp_ticker)
   end
 
   defp add_alliance_info(entity) do
@@ -262,7 +301,8 @@ defmodule WandererKills.Killmails.EnricherTest do
 
     entity
     |> Map.put("ship_name", ship_name)
-    |> Map.put("ship_type_name", ship_name)  # Alternative field name
+    # Alternative field name
+    |> Map.put("ship_type_name", ship_name)
   end
 
   defp add_ship_name_for_attacker(attacker) do
@@ -270,7 +310,8 @@ defmodule WandererKills.Killmails.EnricherTest do
     # so we'll just add nil values to match the expected structure
     attacker
     |> Map.put("ship_name", nil)
-    |> Map.put("ship_type_name", nil)  # Alternative field name
+    # Alternative field name
+    |> Map.put("ship_type_name", nil)
   end
 
   defp add_attacker_count(killmail) do

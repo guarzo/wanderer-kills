@@ -188,8 +188,6 @@ defmodule WandererKills.RedisQ do
     %{stats | errors: stats.errors + 1}
   end
 
-  defp update_stats(stats, _other), do: stats
-
   # Track active systems
   defp track_system_activity(stats, system_id) when is_integer(system_id) do
     %{stats | systems_active: MapSet.put(stats.systems_active, system_id)}

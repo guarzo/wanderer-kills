@@ -172,52 +172,8 @@ defmodule WandererKills.Preloader do
     def init(opts) do
       max_concurrency = Keyword.get(opts, :max_concurrency, @default_max_concurrency)
 
-      # Temporarily load a single system for testing and logging
-      # Jita system ID for testing
-      test_system_id = 30_000_142
-
-      Logger.debug("Preloader starting - adding test system for validation",
-        system_id: test_system_id,
-        purpose: :foundation_testing
-      )
-
-      # Add the test system to active systems
-      case Helper.system_add_active(test_system_id) do
-        {:ok, :added} ->
-          Logger.debug("Successfully added test system",
-            system_id: test_system_id,
-            status: :success
-          )
-
-          # Spawn a quick preload for the test system
-          spawn_test_preload_task(test_system_id)
-
-        {:ok, :already_exists} ->
-          Logger.info("Test system already in active list",
-            system_id: test_system_id,
-            status: :already_exists
-          )
-
-          # Still spawn a test task
-          spawn_test_preload_task(test_system_id)
-
-        {:error, reason} ->
-          Logger.warning("Failed to add test system",
-            system_id: test_system_id,
-            error: reason
-          )
-      end
-
-      # Check for any existing active systems
-      case Helper.system_get_active_systems() do
-        {:ok, systems} when is_list(systems) ->
-          Logger.info("Preloader initialized with #{length(systems)} active systems")
-          {:ok, %{max_concurrency: max_concurrency}}
-
-        {:error, reason} ->
-          Logger.error("Failed to initialize preloader: #{inspect(reason)}")
-          {:ok, %{max_concurrency: max_concurrency}}
-      end
+      Logger.info("Preloader initialized - waiting for subscribers")
+      {:ok, %{max_concurrency: max_concurrency}}
     end
 
     @impl true
@@ -267,29 +223,6 @@ defmodule WandererKills.Preloader do
       # Monitor the task to handle failures
       Process.monitor(task.pid)
       task
-    end
-
-    # Private helper to spawn test preload task
-    defp spawn_test_preload_task(system_id) do
-      spawn_link(fn ->
-        Logger.debug("Running test preload for system", system_id: system_id)
-
-        # Simple test - just check if we can access the system
-        case Helper.system_get(system_id) do
-          {:ok, _data} ->
-            Logger.info("Test preload successful",
-              system_id: system_id,
-              status: :success
-            )
-
-          {:error, reason} ->
-            Logger.debug("Test preload completed with cache miss",
-              system_id: system_id,
-              reason: reason,
-              status: :cache_miss
-            )
-        end
-      end)
     end
 
     # Perform a preload pass

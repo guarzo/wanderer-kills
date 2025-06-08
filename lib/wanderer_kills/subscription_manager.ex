@@ -177,54 +177,10 @@ defmodule WandererKills.SubscriptionManager do
       state.subscriptions
       |> Enum.filter(fn {_id, sub} -> system_id in sub.system_ids end)
 
-    if not Enum.empty?(interested_subscriptions) do
-      # Log detailed summary of what we're broadcasting
-      if length(kills) > 0 do
-        killmail_ids = Enum.map(kills, & &1["killmail_id"])
-
-        kill_times =
-          Enum.map(kills, fn kill ->
-            kill["kill_time"] || kill["killmail_time"] || "unknown"
-          end)
-
-        enriched_count =
-          Enum.count(kills, fn kill ->
-            has_names =
-              kill["victim"]["character_name"] != nil or
-                kill["attackers"] |> Enum.any?(&(&1["character_name"] != nil))
-
-            has_names
-          end)
-
-        subscriber_ids =
-          Enum.map(interested_subscriptions, fn {_id, sub} -> sub.subscriber_id end)
-
-        Logger.info("🚀 REAL-TIME BROADCAST: Sending kills to subscribers",
-          system_id: system_id,
-          kill_count: length(kills),
-          killmail_ids: killmail_ids,
-          enriched_count: enriched_count,
-          unenriched_count: length(kills) - enriched_count,
-          kill_time_range: "#{List.first(kill_times)} to #{List.last(kill_times)}",
-          subscriber_count: length(interested_subscriptions),
-          subscriber_ids: subscriber_ids,
-          via_pubsub: true,
-          via_webhook: true
-        )
-
-        # Log sample kill data for first kill
-        sample_kill = List.first(kills)
-
-        Logger.info("🚀 REAL-TIME SAMPLE KILL DATA",
-          killmail_id: sample_kill["killmail_id"],
-          victim_character: sample_kill["victim"]["character_name"],
-          victim_corp: sample_kill["victim"]["corporation_name"],
-          attacker_count: length(sample_kill["attackers"] || []),
-          solar_system_id: sample_kill["solar_system_id"],
-          total_value: sample_kill["total_value"],
-          npc_kill: sample_kill["npc"]
-        )
-      end
+    if Enum.empty?(interested_subscriptions) do
+      log_no_subscribers_if_kills_exist(kills, system_id)
+    else
+      log_broadcast_details(kills, system_id, interested_subscriptions)
 
       # Broadcast via PubSub
       broadcast_pubsub_update(state.pubsub_name, system_id, kills, :detailed_kill_update)
@@ -233,13 +189,6 @@ defmodule WandererKills.SubscriptionManager do
       Task.start(fn ->
         send_webhook_notifications(interested_subscriptions, system_id, kills, :kill_update)
       end)
-    else
-      if length(kills) > 0 do
-        Logger.debug("No subscribers for kill update",
-          system_id: system_id,
-          kill_count: length(kills)
-        )
-      end
     end
 
     {:noreply, state}
@@ -487,80 +436,36 @@ defmodule WandererKills.SubscriptionManager do
       limit: limit
     )
 
-    # Try cached enriched kills first - if we have any, use up to 25 and skip ZKB
-    kills =
-      case get_cached_enriched_kills(system_id, 25) do
-        enriched_kills when enriched_kills != [] ->
-          Logger.info("🔍 PRELOAD DEBUG: Using cached enriched kills",
-            system_id: system_id,
-            cached_count: length(enriched_kills)
-          )
+    kills = get_kills_for_preload(system_id, limit, since_hours)
+    send_preload_kills_to_subscriber(subscription, system_id, kills)
+  end
 
-          enriched_kills
-
-        [] ->
-          # No cached kills - fetch and enrich fresh kills from ZKB (max 5 to avoid too many ESI calls)
-          Logger.info("🔍 PRELOAD DEBUG: No cached kills, fetching from ZKB",
-            system_id: system_id,
-            target_limit: limit
-          )
-
-          fetch_and_enrich_kills(system_id, limit, since_hours)
-      end
-
-    # Send kills to subscriber if we have any
-    if length(kills) > 0 do
-      # Log detailed summary of what we're sending
-      killmail_ids = Enum.map(kills, & &1["killmail_id"])
-
-      kill_times =
-        Enum.map(kills, fn kill ->
-          kill["kill_time"] || kill["killmail_time"] || "unknown"
-        end)
-
-      enriched_count =
-        Enum.count(kills, fn kill ->
-          has_names =
-            kill["victim"]["character_name"] != nil or
-              kill["attackers"] |> Enum.any?(&(&1["character_name"] != nil))
-
-          has_names
-        end)
-
-      Logger.info("📦 PRELOAD SUMMARY: Sending kills to subscriber",
-        subscriber_id: subscription.subscriber_id,
-        system_id: system_id,
-        kill_count: length(kills),
-        killmail_ids: killmail_ids,
-        enriched_count: enriched_count,
-        unenriched_count: length(kills) - enriched_count,
-        kill_time_range: "#{List.first(kill_times)} to #{List.last(kill_times)}",
-        via_pubsub: true,
-        via_webhook: subscription.callback_url != nil
-      )
-
-      # Log sample kill data
-      if length(kills) > 0 do
-        sample_kill = List.first(kills)
-
-        Logger.info("📦 PRELOAD SAMPLE KILL DATA",
-          killmail_id: sample_kill["killmail_id"],
-          victim_character: sample_kill["victim"]["character_name"],
-          victim_corp: sample_kill["victim"]["corporation_name"],
-          attacker_count: length(sample_kill["attackers"] || []),
-          solar_system_id: sample_kill["solar_system_id"],
-          total_value: sample_kill["total_value"]
+  # Helper function to get kills for preload (cached or fresh)
+  defp get_kills_for_preload(system_id, limit, since_hours) do
+    case get_cached_enriched_kills(system_id, 25) do
+      enriched_kills when enriched_kills != [] ->
+        Logger.info("🔍 PRELOAD DEBUG: Using cached enriched kills",
+          system_id: system_id,
+          cached_count: length(enriched_kills)
         )
-      end
 
-      # Send via PubSub
-      broadcast_pubsub_update(WandererKills.PubSub, system_id, kills, :preload_kill_update)
+        enriched_kills
 
-      # Send via webhook if configured
-      if subscription.callback_url do
-        send_webhook_notification(subscription, system_id, kills, :preload_kill_update)
-      end
+      [] ->
+        Logger.info("🔍 PRELOAD DEBUG: No cached kills, fetching from ZKB",
+          system_id: system_id,
+          target_limit: limit
+        )
 
+        fetch_and_enrich_kills(system_id, limit, since_hours)
+    end
+  end
+
+  # Helper function to send preload kills to subscriber
+  defp send_preload_kills_to_subscriber(subscription, system_id, kills) do
+    if length(kills) > 0 do
+      log_preload_summary(subscription, system_id, kills)
+      broadcast_preload_kills(subscription, system_id, kills)
       length(kills)
     else
       Logger.info("🔍 PRELOAD DEBUG: No kills found for system",
@@ -569,6 +474,117 @@ defmodule WandererKills.SubscriptionManager do
       )
 
       0
+    end
+  end
+
+  # Helper function to log broadcast details (fixing nesting issue)
+  defp log_broadcast_details(kills, system_id, interested_subscriptions) do
+    if length(kills) > 0 do
+      killmail_ids = Enum.map(kills, & &1["killmail_id"])
+      kill_times = extract_kill_times(kills)
+      enriched_count = count_enriched_kills(kills)
+      subscriber_ids = Enum.map(interested_subscriptions, fn {_id, sub} -> sub.subscriber_id end)
+
+      Logger.info("🚀 REAL-TIME BROADCAST: Sending kills to subscribers",
+        system_id: system_id,
+        kill_count: length(kills),
+        killmail_ids: killmail_ids,
+        enriched_count: enriched_count,
+        unenriched_count: length(kills) - enriched_count,
+        kill_time_range: "#{List.first(kill_times)} to #{List.last(kill_times)}",
+        subscriber_count: length(interested_subscriptions),
+        subscriber_ids: subscriber_ids,
+        via_pubsub: true,
+        via_webhook: true
+      )
+
+      log_sample_kill_data(kills)
+    end
+  end
+
+  # Helper function to log sample kill data
+  defp log_sample_kill_data(kills) do
+    sample_kill = List.first(kills)
+
+    Logger.info("🚀 REAL-TIME SAMPLE KILL DATA",
+      killmail_id: sample_kill["killmail_id"],
+      victim_character: sample_kill["victim"]["character_name"],
+      victim_corp: sample_kill["victim"]["corporation_name"],
+      attacker_count: length(sample_kill["attackers"] || []),
+      solar_system_id: sample_kill["solar_system_id"],
+      total_value: sample_kill["total_value"],
+      npc_kill: sample_kill["npc"]
+    )
+  end
+
+  # Helper function to extract kill times
+  defp extract_kill_times(kills) do
+    Enum.map(kills, fn kill ->
+      kill["kill_time"] || kill["killmail_time"] || "unknown"
+    end)
+  end
+
+  # Helper function to count enriched kills
+  defp count_enriched_kills(kills) do
+    Enum.count(kills, fn kill ->
+      kill["victim"]["character_name"] != nil or
+        kill["attackers"] |> Enum.any?(&(&1["character_name"] != nil))
+    end)
+  end
+
+  # Helper function to log when no subscribers exist
+  defp log_no_subscribers_if_kills_exist(kills, system_id) do
+    if length(kills) > 0 do
+      Logger.debug("No subscribers for kill update",
+        system_id: system_id,
+        kill_count: length(kills)
+      )
+    end
+  end
+
+  # Helper function to log preload summary
+  defp log_preload_summary(subscription, system_id, kills) do
+    killmail_ids = Enum.map(kills, & &1["killmail_id"])
+    kill_times = extract_kill_times(kills)
+    enriched_count = count_enriched_kills(kills)
+
+    Logger.info("📦 PRELOAD SUMMARY: Sending kills to subscriber",
+      subscriber_id: subscription.subscriber_id,
+      system_id: system_id,
+      kill_count: length(kills),
+      killmail_ids: killmail_ids,
+      enriched_count: enriched_count,
+      unenriched_count: length(kills) - enriched_count,
+      kill_time_range: "#{List.first(kill_times)} to #{List.last(kill_times)}",
+      via_pubsub: true,
+      via_webhook: subscription.callback_url != nil
+    )
+
+    log_preload_sample_kill(kills)
+  end
+
+  # Helper function to log preload sample kill
+  defp log_preload_sample_kill(kills) do
+    sample_kill = List.first(kills)
+
+    Logger.info("📦 PRELOAD SAMPLE KILL DATA",
+      killmail_id: sample_kill["killmail_id"],
+      victim_character: sample_kill["victim"]["character_name"],
+      victim_corp: sample_kill["victim"]["corporation_name"],
+      attacker_count: length(sample_kill["attackers"] || []),
+      solar_system_id: sample_kill["solar_system_id"],
+      total_value: sample_kill["total_value"]
+    )
+  end
+
+  # Helper function to broadcast preload kills
+  defp broadcast_preload_kills(subscription, system_id, kills) do
+    # Send via PubSub
+    broadcast_pubsub_update(WandererKills.PubSub, system_id, kills, :preload_kill_update)
+
+    # Send via webhook if configured
+    if subscription.callback_url do
+      send_webhook_notification(subscription, system_id, kills, :preload_kill_update)
     end
   end
 
@@ -678,52 +694,23 @@ defmodule WandererKills.SubscriptionManager do
     end
   end
 
-  # Filter recent kills and take only the requested limit
-  defp filter_recent_kills(kills, cutoff_time, limit) do
-    Logger.info("🔍 PRELOAD DEBUG: Filtering recent kills",
-      total_kills: length(kills),
-      cutoff_time: DateTime.to_iso8601(cutoff_time),
-      limit: limit
-    )
-
-    # Sample first kill to see what fields are available
-    if length(kills) > 0 do
-      sample_kill = List.first(kills)
-
-      Logger.info("🔍 PRELOAD DEBUG: Sample ZKB kill structure",
-        killmail_id: Map.get(sample_kill, "killmail_id"),
-        available_fields: Map.keys(sample_kill),
-        zkb_fields: Map.keys(Map.get(sample_kill, "zkb", %{}))
-      )
-    end
-
-    recent_kills =
-      kills
-      |> Enum.filter(&is_kill_recent?(&1, cutoff_time))
-
-    Logger.info("🔍 PRELOAD DEBUG: After time filtering",
-      recent_kills_count: length(recent_kills),
-      original_count: length(kills)
-    )
-
-    recent_kills |> Enum.take(limit)
-  end
-
   # Check if a kill is recent enough for preload
-  defp is_kill_recent?(kill, cutoff_time) do
+  defp kill_recent?(kill, cutoff_time) do
     case WandererKills.Infrastructure.Clock.get_killmail_time(kill) do
       {:ok, kill_time} ->
         is_recent = DateTime.compare(kill_time, cutoff_time) != :lt
 
-        if !is_recent do
+        if is_recent do
+          true
+        else
           Logger.info("🔍 PRELOAD DEBUG: Kill filtered as too old",
             killmail_id: Map.get(kill, "killmail_id"),
             kill_time: DateTime.to_iso8601(kill_time),
             cutoff_time: DateTime.to_iso8601(cutoff_time)
           )
-        end
 
-        is_recent
+          false
+        end
 
       {:error, reason} ->
         Logger.info("🔍 PRELOAD DEBUG: Kill filtered due to missing time data",
@@ -763,7 +750,7 @@ defmodule WandererKills.SubscriptionManager do
       case WandererKills.ESI.Client.get_killmail_raw(killmail_id, zkb_hash) do
         {:ok, full_killmail} ->
           # Use existing time filtering logic
-          if is_kill_recent?(full_killmail, cutoff) do
+          if kill_recent?(full_killmail, cutoff) do
             Logger.info("🔍 PRELOAD DEBUG: Kill #{killmail_id} is recent, enriching")
 
             # Parse and enrich the kill

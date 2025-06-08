@@ -3,6 +3,12 @@
 :ets.new(:system_cache_test, [:named_table, :public, :set])
 :ets.new(:esi_cache_test, [:named_table, :public, :set])
 
+# Ensure mox is available
+Application.ensure_all_started(:mox)
+
+# Start ExUnit first
+ExUnit.start()
+
 # Define mocks
 Mox.defmock(WandererKills.Http.Client.Mock,
   for: WandererKills.Behaviours.HttpClient
@@ -12,9 +18,6 @@ Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Killmails.ZkbClien
 
 # Mock for ESI client
 Mox.defmock(EsiClientMock, for: WandererKills.Behaviours.ESIClient)
-
-# Start ExUnit
-ExUnit.start()
 
 # Start the application for testing
 Application.ensure_all_started(:wanderer_kills)
