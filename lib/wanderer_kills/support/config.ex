@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.Config do
+defmodule WandererKills.Config do
   @moduledoc """
   Centralized configuration management for WandererKills.
 
@@ -244,16 +244,7 @@ defmodule WandererKills.Infrastructure.Config do
 
   @doc "Gets RedisQ configuration"
   @spec redisq() :: map()
-  def redisq do
-    get_env(:redisq, %{
-      task_timeout_ms: 10_000,
-      fast_interval_ms: 1_000,
-      idle_interval_ms: 5_000,
-      initial_backoff_ms: 1_000,
-      max_backoff_ms: 30_000,
-      backoff_factor: 2
-    })
-  end
+  def redisq, do: config().redisq
 
   @doc "Gets parser configuration"
   @spec parser() :: map()
@@ -275,65 +266,18 @@ defmodule WandererKills.Infrastructure.Config do
   @spec app() :: map()
   def app, do: config().app
 
-  # ============================================================================
-  # Constants API
-  # ============================================================================
-
-  @doc """
-  Gets GenServer call timeout in milliseconds.
-
-  This is a true constant used for GenServer.call timeouts.
-  For HTTP request timeouts, use `Config.timeouts().default_request_ms`.
-  """
-  @spec gen_server_call_timeout() :: integer()
+  # Core constant accessors
+  @doc "Gets the GenServer call timeout"
+  @spec gen_server_call_timeout() :: pos_integer()
   def gen_server_call_timeout, do: @gen_server_call_timeout
 
-  @doc """
-  Gets retry base delay in milliseconds.
+  @doc "Gets validation limits"
+  @spec validation(:max_killmail_id | :max_system_id | :max_character_id) :: pos_integer()
+  def validation(:max_killmail_id), do: @max_killmail_id
+  def validation(:max_system_id), do: @max_system_id
+  def validation(:max_character_id), do: @max_character_id
 
-  This is an algorithmic constant for exponential backoff calculations.
-  """
-  @spec retry_base_delay() :: integer()
-  def retry_base_delay, do: @default_base_delay
-
-  @doc """
-  Gets maximum retry delay in milliseconds.
-
-  This is an algorithmic constant for exponential backoff calculations.
-  """
-  @spec retry_max_delay() :: integer()
-  def retry_max_delay, do: @max_backoff_delay
-
-  @doc """
-  Gets retry backoff factor.
-
-  This is an algorithmic constant for exponential backoff calculations.
-  """
-  @spec retry_backoff_factor() :: integer()
-  def retry_backoff_factor, do: @backoff_factor
-
-  @doc """
-  Gets validation limits.
-  """
-  @spec validation(atom()) :: integer()
-  def validation(type) do
-    case type do
-      :max_killmail_id -> @max_killmail_id
-      :max_system_id -> @max_system_id
-      :max_character_id -> @max_character_id
-    end
-  end
-
-  # Non-deprecated utility functions
-  @doc "Checks if preloader should start"
-  @spec start_preloader?() :: boolean()
-  def start_preloader?, do: get_env(:start_preloader, true)
-
-  @doc "Checks if RedisQ should start"
-  @spec start_redisq?() :: boolean()
-  def start_redisq?, do: get_env(:start_redisq, true)
-
-  # Private helper function
+  # Private helper for getting environment values
   defp get_env(key, default) do
     Application.get_env(:wanderer_kills, key, default)
   end

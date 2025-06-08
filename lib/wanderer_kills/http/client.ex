@@ -47,7 +47,8 @@ defmodule WandererKills.Http.Client do
 
   require Logger
   alias WandererKills.Infrastructure.Error.{ConnectionError, TimeoutError, RateLimitError}
-  alias WandererKills.Infrastructure.{Config, Error, Retry}
+  alias WandererKills.Config
+  alias WandererKills.Infrastructure.{Error, Retry}
   alias WandererKills.Http.ClientProvider
   alias WandererKills.Observability.Telemetry
 
@@ -58,7 +59,7 @@ defmodule WandererKills.Http.Client do
 
   # Get the configured HTTP client implementation
   defp http_client do
-    WandererKills.Infrastructure.Config.app().http_client
+    WandererKills.Config.app().http_client
   end
 
   # Real HTTP implementation using Req

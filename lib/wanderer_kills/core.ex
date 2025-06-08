@@ -23,10 +23,10 @@ defmodule WandererKills.Core do
   - `WandererKills.Core.CacheUtils` → `WandererKills.Cache.Utils`
 
   ### Infrastructure Modules
-  - `WandererKills.Core.Config` → `WandererKills.Infrastructure.Config`
+  - `WandererKills.Core.Config` → `WandererKills.Config`
   - `WandererKills.Core.Retry` → `WandererKills.Infrastructure.Retry`
   - `WandererKills.Core.Clock` → `WandererKills.Infrastructure.Clock`
-  - `WandererKills.Core.Constants` → `WandererKills.Infrastructure.Config`
+  - `WandererKills.Core.Constants` → `WandererKills.Config`
   - `WandererKills.Core.Behaviours` → `WandererKills.Infrastructure.Behaviours`
   - `WandererKills.Core.Error` → `WandererKills.Infrastructure.Error`
   """
@@ -92,21 +92,21 @@ defmodule WandererKills.Core do
   # Infrastructure Module Aliases
   defmodule Config do
     @moduledoc false
-    defdelegate config(), to: WandererKills.Infrastructure.Config
-    defdelegate cache(), to: WandererKills.Infrastructure.Config
-    defdelegate retry(), to: WandererKills.Infrastructure.Config
-    defdelegate batch(), to: WandererKills.Infrastructure.Config
-    defdelegate timeouts(), to: WandererKills.Infrastructure.Config
-    defdelegate http_status(), to: WandererKills.Infrastructure.Config
-    defdelegate services(), to: WandererKills.Infrastructure.Config
-    defdelegate redisq(), to: WandererKills.Infrastructure.Config
-    defdelegate parser(), to: WandererKills.Infrastructure.Config
-    defdelegate enricher(), to: WandererKills.Infrastructure.Config
-    defdelegate killmail_store(), to: WandererKills.Infrastructure.Config
-    defdelegate telemetry(), to: WandererKills.Infrastructure.Config
-    defdelegate app(), to: WandererKills.Infrastructure.Config
+    defdelegate config(), to: WandererKills.Config
+    defdelegate cache(), to: WandererKills.Config
+    defdelegate retry(), to: WandererKills.Config
+    defdelegate batch(), to: WandererKills.Config
+    defdelegate timeouts(), to: WandererKills.Config
+    defdelegate http_status(), to: WandererKills.Config
+    defdelegate services(), to: WandererKills.Config
+    defdelegate redisq(), to: WandererKills.Config
+    defdelegate parser(), to: WandererKills.Config
+    defdelegate enricher(), to: WandererKills.Config
+    defdelegate killmail_store(), to: WandererKills.Config
+    defdelegate telemetry(), to: WandererKills.Config
+    defdelegate app(), to: WandererKills.Config
 
-    def start_preloader?, do: WandererKills.Infrastructure.Config.start_preloader?()
+    def start_preloader?, do: WandererKills.Config.start_preloader?()
   end
 
   defmodule Retry do
@@ -129,11 +129,11 @@ defmodule WandererKills.Core do
 
   defmodule Constants do
     @moduledoc false
-    defdelegate gen_server_call_timeout(), to: WandererKills.Infrastructure.Config
-    defdelegate retry_base_delay(), to: WandererKills.Infrastructure.Config
-    defdelegate retry_max_delay(), to: WandererKills.Infrastructure.Config
-    defdelegate retry_backoff_factor(), to: WandererKills.Infrastructure.Config
-    defdelegate validation(type), to: WandererKills.Infrastructure.Config
+    defdelegate gen_server_call_timeout(), to: WandererKills.Config
+    defdelegate retry_base_delay(), to: WandererKills.Config
+    defdelegate retry_max_delay(), to: WandererKills.Config
+    defdelegate retry_backoff_factor(), to: WandererKills.Config
+    defdelegate validation(type), to: WandererKills.Config
   end
 
   defmodule Error do

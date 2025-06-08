@@ -42,7 +42,7 @@ defmodule WandererKills.Infrastructure.BatchProcessor do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Config
 
   @type task_result :: {:ok, term()} | {:error, term()}
   @type batch_result :: {:ok, [term()]} | {:partial, [term()], [term()]} | {:error, term()}

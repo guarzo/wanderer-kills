@@ -17,7 +17,7 @@ defmodule WandererKills.Http.ClientProvider do
   ```
   """
 
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Config
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 

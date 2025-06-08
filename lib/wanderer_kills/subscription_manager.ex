@@ -11,6 +11,7 @@ defmodule WandererKills.SubscriptionManager do
   use GenServer
   require Logger
   alias WandererKills.Types
+  alias WandererKills.Cache.{Helper, SystemCache, KillmailCache}
 
   @type subscription_id :: String.t()
   @type subscriber_id :: String.t()
@@ -442,22 +443,12 @@ defmodule WandererKills.SubscriptionManager do
 
   # Helper function to get kills for preload (cached or fresh)
   defp get_kills_for_preload(system_id, limit, since_hours) do
-    case get_cached_enriched_kills(system_id, 25) do
-      enriched_kills when enriched_kills != [] ->
-        Logger.info("🔍 PRELOAD DEBUG: Using cached enriched kills",
-          system_id: system_id,
-          cached_count: length(enriched_kills)
-        )
+    case SystemCache.get_killmails(system_id) do
+      {:ok, killmail_ids} when is_list(killmail_ids) ->
+        fetch_enriched_killmails(killmail_ids, limit)
 
-        enriched_kills
-
-      [] ->
-        Logger.info("🔍 PRELOAD DEBUG: No cached kills, fetching from ZKB",
-          system_id: system_id,
-          target_limit: limit
-        )
-
-        fetch_and_enrich_kills(system_id, limit, since_hours)
+      {:error, _reason} ->
+        []
     end
   end
 
@@ -590,7 +581,7 @@ defmodule WandererKills.SubscriptionManager do
 
   # Helper function to get cached enriched killmails for a system
   defp get_cached_enriched_kills(system_id, limit) do
-    case WandererKills.Cache.Helper.system_get_killmails(system_id) do
+    case SystemCache.get_killmails(system_id) do
       {:ok, killmail_ids} when is_list(killmail_ids) ->
         fetch_enriched_killmails(killmail_ids, limit)
 
@@ -609,7 +600,7 @@ defmodule WandererKills.SubscriptionManager do
 
   # Helper function to fetch a single enriched killmail from cache
   defp get_single_enriched_killmail(killmail_id) do
-    case WandererKills.Cache.Helper.killmail_get(killmail_id) do
+    case KillmailCache.get(killmail_id) do
       {:ok, enriched_killmail} -> enriched_killmail
       {:error, _reason} -> nil
     end
@@ -747,7 +738,7 @@ defmodule WandererKills.SubscriptionManager do
       Logger.info("🔍 PRELOAD DEBUG: Processing kill #{killmail_id}")
 
       # First fetch the full killmail from ESI to get timestamp
-      case WandererKills.ESI.Client.get_killmail_raw(killmail_id, zkb_hash) do
+      case WandererKills.ESI.DataFetcher.get_killmail_raw(killmail_id, zkb_hash) do
         {:ok, full_killmail} ->
           # Use existing time filtering logic
           if kill_recent?(full_killmail, cutoff) do

@@ -13,7 +13,7 @@ defmodule WandererKills.Infrastructure.Retry do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Config
 
   @type retry_opts :: [
           max_retries: non_neg_integer(),

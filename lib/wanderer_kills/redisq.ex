@@ -13,10 +13,10 @@ defmodule WandererKills.RedisQ do
   require Logger
 
   alias WandererKills.Killmails.Coordinator
-  alias WandererKills.ESI.Client, as: EsiClient
+  alias WandererKills.ESI.DataFetcher, as: EsiClient
   alias WandererKills.Infrastructure.Clock
   alias WandererKills.Http.Client, as: HttpClient
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Config
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 

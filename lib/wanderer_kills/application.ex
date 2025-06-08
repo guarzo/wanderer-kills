@@ -15,7 +15,7 @@ defmodule WandererKills.Application do
 
   use Application
   require Logger
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Config
   import Cachex.Spec
 
   @impl true

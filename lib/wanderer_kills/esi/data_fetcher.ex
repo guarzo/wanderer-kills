@@ -1,15 +1,22 @@
 defmodule WandererKills.ESI.DataFetcher do
   @moduledoc """
-  Unified ESI data fetcher that consolidates all ESI API interactions.
+  Unified ESI (EVE Swagger Interface) API client.
 
-  This module replaces the individual fetcher modules (CharacterFetcher, TypeFetcher,
-  KillmailFetcher) with a single, clean implementation that handles all ESI data types.
+  This module provides data fetching capabilities for EVE Online's ESI API.
+  It handles caching, concurrent requests, error handling, and rate limiting
+  for all ESI operations including characters, corporations, alliances,
+  ship types, systems, and killmails.
+
+  This module serves as both the main interface for ESI operations and
+  the implementation, consolidating what was previously split between
+  ESI.Client and ESI.DataFetcher.
   """
 
   require Logger
-  alias WandererKills.Behaviours.{DataFetcher, ESIClient}
+  alias WandererKills.Config
   alias WandererKills.Cache.Helper
-  alias WandererKills.Infrastructure.{Config, Error}
+  alias WandererKills.Infrastructure.{Error, BatchProcessor}
+  alias WandererKills.Behaviours.ESIClient
 
   @behaviour ESIClient
   @behaviour DataFetcher
@@ -175,7 +182,23 @@ defmodule WandererKills.ESI.DataFetcher do
   def update_ship_groups(group_ids \\ @ship_group_ids) when is_list(group_ids) do
     Logger.info("Updating ship groups from ESI", group_ids: group_ids)
 
-    results = Enum.map(group_ids, &get_group/1)
+    results =
+      group_ids
+      |> Task.async_stream(
+        &get_group/1,
+        max_concurrency: Config.batch().concurrency_esi,
+        timeout: Config.timeouts().esi_request_ms
+      )
+      |> Enum.to_list()
+      |> Enum.map(fn
+        {:ok, result} ->
+          result
+
+        {:exit, reason} ->
+          {:error,
+           Error.esi_error(:timeout, "Ship group update timeout", false, %{reason: reason})}
+      end)
+
     errors = Enum.filter(results, &match?({:error, _}, &1))
 
     if length(errors) > 0 do
@@ -230,7 +253,21 @@ defmodule WandererKills.ESI.DataFetcher do
   defp fetch_groups(group_ids) do
     Logger.debug("Fetching groups from ESI", group_ids: group_ids)
 
-    results = Enum.map(group_ids, &get_group/1)
+    results =
+      group_ids
+      |> Task.async_stream(
+        &get_group/1,
+        max_concurrency: Config.batch().concurrency_esi,
+        timeout: Config.timeouts().esi_request_ms
+      )
+      |> Enum.to_list()
+      |> Enum.map(fn
+        {:ok, result} ->
+          result
+
+        {:exit, reason} ->
+          {:error, Error.esi_error(:timeout, "Group fetch timeout", false, %{reason: reason})}
+      end)
 
     errors = Enum.filter(results, &match?({:error, _}, &1))
     successes = Enum.filter(results, &match?({:ok, _}, &1))
@@ -258,7 +295,21 @@ defmodule WandererKills.ESI.DataFetcher do
 
     Logger.debug("Fetching types", type_count: length(type_ids))
 
-    results = Enum.map(type_ids, &get_type/1)
+    results =
+      type_ids
+      |> Task.async_stream(
+        &get_type/1,
+        max_concurrency: Config.batch().concurrency_esi,
+        timeout: Config.timeouts().esi_request_ms
+      )
+      |> Enum.to_list()
+      |> Enum.map(fn
+        {:ok, result} ->
+          result
+
+        {:exit, reason} ->
+          {:error, Error.esi_error(:timeout, "Type fetch timeout", false, %{reason: reason})}
+      end)
 
     errors = Enum.filter(results, &match?({:error, _}, &1))
     successes = Enum.filter(results, &match?({:ok, _}, &1))
@@ -471,5 +522,36 @@ defmodule WandererKills.ESI.DataFetcher do
       timeout: Config.timeouts().esi_request_ms,
       recv_timeout: Config.timeouts().esi_request_ms
     ]
+  end
+
+  @doc """
+  Gets ESI base URL from configuration.
+  """
+  def base_url, do: Config.services().esi_base_url
+
+  @doc """
+  Returns the source name for this ESI client.
+  """
+  def source_name, do: "ESI"
+
+  @doc """
+  General update function that delegates to update_ship_groups.
+
+  This provides compatibility for modules that expect a general update function.
+
+  ## Options
+  - `opts` - Keyword list of options
+    - `group_ids` - List of group IDs to fetch (optional)
+
+  ## Examples
+      iex> WandererKills.ESI.DataFetcher.update()
+      :ok
+
+      iex> WandererKills.ESI.DataFetcher.update(group_ids: [23, 16])
+      :ok
+  """
+  def update(opts \\ []) do
+    group_ids = Keyword.get(opts, :group_ids)
+    update_ship_groups(group_ids)
   end
 end

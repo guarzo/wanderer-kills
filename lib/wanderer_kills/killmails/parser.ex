@@ -334,7 +334,7 @@ defmodule WandererKills.Killmails.Parser do
 
       {:error, %WandererKills.Infrastructure.Error{type: :not_found}} ->
         # Fetch full killmail data from ESI
-        case WandererKills.ESI.Client.get_killmail_raw(killmail_id, hash) do
+        case WandererKills.ESI.DataFetcher.get_killmail_raw(killmail_id, hash) do
           {:ok, esi_data} when is_map(esi_data) ->
             # Cache the result
             Helper.killmail_put(killmail_id, esi_data)

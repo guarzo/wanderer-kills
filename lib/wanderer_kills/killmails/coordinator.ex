@@ -281,7 +281,7 @@ defmodule WandererKills.Killmails.Coordinator do
       step: :start
     })
 
-    case WandererKills.ESI.Client.get_killmail_raw(id, hash) do
+    case WandererKills.ESI.DataFetcher.get_killmail_raw(id, hash) do
       {:ok, full} ->
         Logger.debug("Successfully fetched full killmail from ESI", %{
           killmail_id: id,
