@@ -135,7 +135,7 @@ defmodule WandererKills.ShipTypes.Updater do
   """
   @spec update_ship_types() :: :ok | {:error, term()}
   def update_ship_types do
-    Logger.info("Starting ship type update with fallback strategy")
+    Logger.debug("Starting ship type update with fallback strategy")
 
     case update_with_csv() do
       :ok ->
@@ -190,11 +190,11 @@ defmodule WandererKills.ShipTypes.Updater do
   """
   @spec update_with_csv() :: :ok | {:error, term()}
   def update_with_csv do
-    Logger.info("Attempting ship type update from CSV")
+    Logger.debug("Attempting ship type update from CSV")
 
     case CSV.update_ship_types() do
       :ok ->
-        Logger.info("CSV ship type update completed successfully")
+        Logger.debug("CSV ship type update completed successfully")
         :ok
 
       {:error, reason} ->

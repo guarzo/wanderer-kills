@@ -2,7 +2,7 @@ import Config
 
 # Configure the logger for development
 config :logger,
-  level: :debug,
+  level: :info,
   format: "$time $metadata[$level] $message\n",
   metadata: :all
 
@@ -14,6 +14,6 @@ config :logger, :console,
 # File backend for debugging
 config :logger, :file,
   path: "/app/logs/wanderer_kills_debug.log",
-  level: :debug,
+  level: :info,
   format: "$time $metadata[$level] $message\n",
   metadata: :all

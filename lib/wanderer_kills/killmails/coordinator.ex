@@ -91,7 +91,7 @@ defmodule WandererKills.Killmails.Coordinator do
   @spec parse_full_and_store(killmail(), killmail(), DateTime.t()) ::
           {:ok, killmail()} | {:ok, :kill_older} | {:error, Error.t()}
   def parse_full_and_store(full, %{"zkb" => zkb}, cutoff) when is_map(full) do
-    Logger.info("Starting to parse and store killmail", %{
+    Logger.debug("Starting to parse and store killmail", %{
       killmail_id: full["killmail_id"],
       operation: :parse_full_and_store,
       step: :start
@@ -204,7 +204,7 @@ defmodule WandererKills.Killmails.Coordinator do
         killmail_id = enriched["killmail_id"]
         :ok = Store.put(killmail_id, system_id, enriched)
 
-        Logger.info("Successfully enriched and stored killmail", %{
+        Logger.debug("Successfully enriched and stored killmail", %{
           killmail_id: killmail_id,
           system_id: system_id,
           operation: :process_killmail,
@@ -275,7 +275,7 @@ defmodule WandererKills.Killmails.Coordinator do
   @spec parse_partial(raw_killmail(), DateTime.t()) ::
           {:ok, killmail()} | {:ok, :kill_skipped} | :older | {:error, Error.t()}
   def parse_partial(%{"killID" => id, "zkb" => %{"hash" => hash}} = partial, cutoff) do
-    Logger.info("Starting to parse partial killmail", %{
+    Logger.debug("Starting to parse partial killmail", %{
       killmail_id: id,
       operation: :parse_partial,
       step: :start

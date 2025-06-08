@@ -33,12 +33,12 @@ defmodule WandererKills.ShipTypes.Info do
   """
   @spec warm_cache() :: :ok | {:error, term()}
   def warm_cache do
-    Logger.info("Warming ship type cache with CSV data")
+    Logger.debug("Warming ship type cache with CSV data")
 
     # Use the updater which handles downloading missing CSV files
     case WandererKills.ShipTypes.Updater.update_with_csv() do
       :ok ->
-        Logger.info("Successfully warmed cache with CSV data")
+        Logger.debug("Successfully warmed cache with CSV data")
         :ok
 
       result ->

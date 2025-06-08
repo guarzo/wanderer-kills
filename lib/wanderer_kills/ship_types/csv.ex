@@ -336,11 +336,11 @@ defmodule WandererKills.ShipTypes.CSV do
   """
   @spec update_ship_types(keyword()) :: :ok | {:error, Error.t()}
   def update_ship_types(opts \\ []) do
-    Logger.info("Starting ship type update from CSV")
+    Logger.debug("Starting ship type update from CSV")
 
     with {:ok, raw_data} <- download_csv_files(opts),
          {:ok, _parsed_data} <- parse_ship_type_csvs(raw_data) do
-      Logger.info("Ship type update from CSV completed successfully")
+      Logger.debug("Ship type update from CSV completed successfully")
       :ok
     else
       {:error, reason} ->
@@ -361,7 +361,7 @@ defmodule WandererKills.ShipTypes.CSV do
   """
   @spec download_csv_files(keyword()) :: {:ok, [String.t()]} | {:error, Error.t()}
   def download_csv_files(opts \\ []) do
-    Logger.info("Downloading CSV files for ship type data")
+    Logger.debug("Downloading CSV files for ship type data")
 
     data_dir = get_data_directory()
     File.mkdir_p!(data_dir)
@@ -376,7 +376,7 @@ defmodule WandererKills.ShipTypes.CSV do
       end
 
     if Enum.empty?(missing_files) do
-      Logger.info("All required CSV files are present")
+      Logger.debug("All required CSV files are present")
       {:ok, get_file_paths(data_dir)}
     else
       Logger.info("Downloading #{length(missing_files)} CSV files: #{inspect(missing_files)}")
@@ -400,7 +400,7 @@ defmodule WandererKills.ShipTypes.CSV do
   """
   @spec parse_ship_type_csvs([String.t()]) :: {:ok, [map()]} | {:error, Error.t()}
   def parse_ship_type_csvs(file_paths) when is_list(file_paths) do
-    Logger.info("Parsing ship type data from CSV files")
+    Logger.debug("Parsing ship type data from CSV files")
 
     case find_csv_files(file_paths) do
       {:ok, {types_path, groups_path}} ->
@@ -586,12 +586,12 @@ defmodule WandererKills.ShipTypes.CSV do
   end
 
   defp process_csv_data(types_path, groups_path) do
-    Logger.info("Processing CSV data from files", types: types_path, groups: groups_path)
+    Logger.debug("Processing CSV data from files", types: types_path, groups: groups_path)
 
     with {:ok, types_data} <- parse_csv_file_simple(types_path),
          {:ok, groups_data} <- parse_csv_file_simple(groups_path) do
       ship_types = build_ship_types(types_data, groups_data)
-      Logger.info("Successfully processed #{length(ship_types)} ship types from CSV")
+      Logger.debug("Successfully processed #{length(ship_types)} ship types from CSV")
       {:ok, ship_types}
     else
       {:error, reason} ->

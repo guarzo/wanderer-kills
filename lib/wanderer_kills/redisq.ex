@@ -22,7 +22,7 @@ defmodule WandererKills.RedisQ do
 
   defmodule State do
     @moduledoc false
-    defstruct [:queue_id, :backoff_ms]
+    defstruct [:queue_id, :backoff_ms, :stats]
   end
 
   #
@@ -80,23 +80,67 @@ defmodule WandererKills.RedisQ do
     queue_id = build_queue_id()
     initial_backoff = Config.redisq().initial_backoff_ms
 
+    # Initialize statistics tracking
+    stats = %{
+      kills_received: 0,
+      kills_older: 0,
+      kills_skipped: 0,
+      legacy_kills: 0,
+      errors: 0,
+      no_kills_count: 0,
+      last_reset: DateTime.utc_now(),
+      systems_active: MapSet.new()
+    }
+
     Logger.info("[RedisQ] Initialized with queue ID: #{queue_id}")
     # Schedule the very first poll after the idle interval
     schedule_poll(Config.redisq().idle_interval_ms)
+    # Schedule the first summary log
+    schedule_summary_log()
 
-    state = %State{queue_id: queue_id, backoff_ms: initial_backoff}
+    state = %State{queue_id: queue_id, backoff_ms: initial_backoff, stats: stats}
     {:ok, state}
   end
 
   @impl true
-  def handle_info(:poll_kills, %State{queue_id: qid, backoff_ms: backoff} = state) do
+  def handle_info(:poll_kills, %State{queue_id: qid, backoff_ms: backoff, stats: stats} = state) do
     Logger.debug("[RedisQ] Polling RedisQ (queue ID: #{qid})")
     result = do_poll(qid)
+
+    # Update statistics based on result
+    new_stats = update_stats(stats, result)
 
     {delay_ms, new_backoff} = next_schedule(result, backoff)
     schedule_poll(delay_ms)
 
-    {:noreply, %State{state | backoff_ms: new_backoff}}
+    {:noreply, %State{state | backoff_ms: new_backoff, stats: new_stats}}
+  end
+
+  @impl true
+  def handle_info(:log_summary, %State{stats: stats} = state) do
+    log_summary(stats)
+
+    # Reset stats and schedule next summary
+    reset_stats = %{
+      stats
+      | kills_received: 0,
+        kills_older: 0,
+        kills_skipped: 0,
+        legacy_kills: 0,
+        errors: 0,
+        no_kills_count: 0,
+        last_reset: DateTime.utc_now(),
+        systems_active: MapSet.new()
+    }
+
+    schedule_summary_log()
+    {:noreply, %State{state | stats: reset_stats}}
+  end
+
+  @impl true
+  def handle_info({:track_system, system_id}, %State{stats: stats} = state) do
+    new_stats = track_system_activity(stats, system_id)
+    {:noreply, %State{state | stats: new_stats}}
   end
 
   @impl true
@@ -116,6 +160,62 @@ defmodule WandererKills.RedisQ do
   # Schedules the next :poll_kills message in `ms` milliseconds.
   defp schedule_poll(ms) do
     Process.send_after(self(), :poll_kills, ms)
+  end
+
+  # Schedules the next :log_summary message in 60 seconds.
+  defp schedule_summary_log do
+    Process.send_after(self(), :log_summary, 60_000)
+  end
+
+  # Updates statistics based on poll result
+  defp update_stats(stats, {:ok, :kill_received}) do
+    %{stats | kills_received: stats.kills_received + 1}
+  end
+
+  defp update_stats(stats, {:ok, :kill_older}) do
+    %{stats | kills_older: stats.kills_older + 1}
+  end
+
+  defp update_stats(stats, {:ok, :kill_skipped}) do
+    %{stats | kills_skipped: stats.kills_skipped + 1}
+  end
+
+  defp update_stats(stats, {:ok, :no_kills}) do
+    %{stats | no_kills_count: stats.no_kills_count + 1}
+  end
+
+  defp update_stats(stats, {:error, _reason}) do
+    %{stats | errors: stats.errors + 1}
+  end
+
+  defp update_stats(stats, _other), do: stats
+
+  # Track active systems
+  defp track_system_activity(stats, system_id) when is_integer(system_id) do
+    %{stats | systems_active: MapSet.put(stats.systems_active, system_id)}
+  end
+
+  defp track_system_activity(stats, _), do: stats
+
+  # Log summary of activity over the past minute
+  defp log_summary(stats) do
+    duration = DateTime.diff(DateTime.utc_now(), stats.last_reset, :second)
+
+    total_activity =
+      stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
+
+    if total_activity > 0 or stats.errors > 0 do
+      Logger.info("📊 REDISQ SUMMARY (#{duration}s):",
+        kills_processed: stats.kills_received,
+        kills_older: stats.kills_older,
+        kills_skipped: stats.kills_skipped,
+        legacy_kills: stats.legacy_kills,
+        no_kills_polls: stats.no_kills_count,
+        errors: stats.errors,
+        active_systems: MapSet.size(stats.systems_active),
+        total_polls: total_activity + stats.no_kills_count + stats.errors
+      )
+    end
   end
 
   # Perform the actual HTTP GET + parsing and return one of:
@@ -138,17 +238,14 @@ defmodule WandererKills.RedisQ do
 
       # New‐format: "package" → %{ "killID" => _, "killmail" => killmail, "zkb" => zkb }
       {:ok, %{body: %{"package" => %{"killID" => _id, "killmail" => killmail, "zkb" => zkb}}}} ->
-        Logger.info("[RedisQ] New‐format killmail received.")
         process_kill(killmail, zkb)
 
       # Alternate new‐format (sometimes `killID` is absent, but `killmail`+`zkb` exist)
       {:ok, %{body: %{"package" => %{"killmail" => killmail, "zkb" => zkb}}}} ->
-        Logger.info("[RedisQ] New‐format killmail (no killID) received.")
         process_kill(killmail, zkb)
 
       # Legacy format: { "killID" => id, "zkb" => zkb }
       {:ok, %{body: %{"killID" => id, "zkb" => zkb}}} ->
-        Logger.info("[RedisQ] Legacy‐format killmail ID=#{id}.  Fetching full payload…")
         process_legacy_kill(id, zkb)
 
       # Anything else is unexpected
@@ -327,23 +424,14 @@ defmodule WandererKills.RedisQ do
     killmail_id = Map.get(enriched_killmail, "killmail_id")
 
     if system_id do
-      Logger.debug("[RedisQ] Broadcasting enriched killmail",
-        system_id: system_id,
-        killmail_id: killmail_id,
-        has_character_name: get_in(enriched_killmail, ["victim", "character_name"]) != nil,
-        has_corp_name: get_in(enriched_killmail, ["victim", "corporation_name"]) != nil
-      )
+      # Track system activity for statistics
+      send(self(), {:track_system, system_id})
 
       # Broadcast detailed kill update
       WandererKills.SubscriptionManager.broadcast_kill_update(system_id, [enriched_killmail])
 
       # Also broadcast kill count update (increment by 1)
       WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, 1)
-
-      Logger.debug("[RedisQ] Broadcasted enriched kill update",
-        system_id: system_id,
-        killmail_id: killmail_id
-      )
     else
       Logger.warning("[RedisQ] Cannot broadcast kill update - missing solar_system_id",
         killmail_id: killmail_id

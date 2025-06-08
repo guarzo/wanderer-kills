@@ -176,7 +176,7 @@ defmodule WandererKills.Preloader do
       # Jita system ID for testing
       test_system_id = 30_000_142
 
-      Logger.info("Preloader starting - adding test system for validation",
+      Logger.debug("Preloader starting - adding test system for validation",
         system_id: test_system_id,
         purpose: :foundation_testing
       )
@@ -184,7 +184,7 @@ defmodule WandererKills.Preloader do
       # Add the test system to active systems
       case Helper.system_add_active(test_system_id) do
         {:ok, :added} ->
-          Logger.info("Successfully added test system",
+          Logger.debug("Successfully added test system",
             system_id: test_system_id,
             status: :success
           )
@@ -272,7 +272,7 @@ defmodule WandererKills.Preloader do
     # Private helper to spawn test preload task
     defp spawn_test_preload_task(system_id) do
       spawn_link(fn ->
-        Logger.info("Running test preload for system", system_id: system_id)
+        Logger.debug("Running test preload for system", system_id: system_id)
 
         # Simple test - just check if we can access the system
         case Helper.system_get(system_id) do
@@ -283,7 +283,7 @@ defmodule WandererKills.Preloader do
             )
 
           {:error, reason} ->
-            Logger.info("Test preload completed with cache miss",
+            Logger.debug("Test preload completed with cache miss",
               system_id: system_id,
               reason: reason,
               status: :cache_miss
