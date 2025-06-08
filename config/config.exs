@@ -2,90 +2,73 @@ import Config
 
 config :wanderer_kills,
   port: String.to_integer(System.get_env("PORT") || "4004"),
+
   # Cache configuration
-  cache: %{
-    killmails: [name: :killmails_cache, ttl: :timer.hours(24)],
-    system: [name: :system_cache, ttl: :timer.hours(1)],
-    esi: [name: :esi_cache, ttl: :timer.hours(48)]
-  },
-  # System cache thresholds
-  recent_fetch_threshold_ms: 300_000,
+  cache_killmails_ttl: 3600,
+  cache_system_ttl: 1800,
+  cache_esi_ttl: 3600,
+  cache_esi_killmail_ttl: 86_400,
+  cache_system_recent_fetch_threshold: 5,
+
   # Parser configuration
-  parser: %{
-    cutoff_seconds: 3_600,
-    summary_interval_ms: 60_000
-  },
+  parser_cutoff_seconds: 3_600,
+  parser_summary_interval_ms: 60_000,
+
   # Enricher configuration
-  enricher: %{
-    max_concurrency: 10,
-    task_timeout_ms: 30_000,
-    min_attackers_for_parallel: 3
-  },
-  # Concurrency configuration for batch operations
-  concurrency: %{
-    max_concurrent: 10,
-    batch_size: 50,
-    timeout_ms: 30_000
-  },
-  # ESI API configuration
-  esi: %{
-    base_url: "https://esi.evetech.net/latest"
-  },
-  # zKillboard API configuration
-  zkb: %{
-    base_url: "https://zkillboard.com/api"
-  },
+  enricher_max_concurrency: 10,
+  enricher_task_timeout_ms: 30_000,
+  enricher_min_attackers_for_parallel: 3,
+
+  # Batch processing configuration
+  concurrency_batch_size: 100,
+
+  # Service URLs
+  esi_base_url: "https://esi.evetech.net/latest",
+  zkb_base_url: "https://zkillboard.com/api",
+
   # HTTP client configuration
   http_client: WandererKills.Http.Client,
+
+  # Request timeout configuration (missing from original config)
+  esi_request_timeout_ms: 30_000,
+  zkb_request_timeout_ms: 15_000,
+  http_request_timeout_ms: 10_000,
+  default_request_timeout_ms: 10_000,
+
+  # Batch concurrency configuration (missing from original config)
+  esi_batch_concurrency: 10,
+  zkb_batch_concurrency: 5,
+  default_batch_concurrency: 5,
+
   # Retry configuration
-  retry: [
-    max_retries: 3,
-    base_backoff: 1000,
-    max_backoff: 30_000
-  ],
+  retry_http_max_retries: 3,
+  retry_http_base_delay: 1000,
+  retry_http_max_delay: 30_000,
+  retry_redisq_max_retries: 5,
+  retry_redisq_base_delay: 500,
+
   # RedisQ stream configuration
-  redisq: %{
-    base_url: "https://zkillredisq.stream/listen.php",
-    fast_interval_ms: 1_000,
-    idle_interval_ms: 5_000,
-    initial_backoff_ms: 1_000,
-    max_backoff_ms: 30_000,
-    backoff_factor: 2,
-    task_timeout_ms: 10_000
-  },
-  # HTTP status code mappings
-  http_status_codes: %{
-    success: 200..299,
-    not_found: 404,
-    rate_limited: 429,
-    retryable: [408, 429, 500, 502, 503, 504],
-    fatal: [
-      400,
-      401,
-      403,
-      405,
-      406,
-      407,
-      409,
-      410,
-      411,
-      412,
-      413,
-      414,
-      415,
-      416,
-      417,
-      418,
-      421,
-      422,
-      423,
-      424,
-      426,
-      428,
-      431,
-      451
-    ]
-  }
+  redisq_base_url: "https://zkillredisq.stream/listen.php",
+  redisq_fast_interval_ms: 1_000,
+  redisq_idle_interval_ms: 5_000,
+  redisq_initial_backoff_ms: 1_000,
+  redisq_max_backoff_ms: 30_000,
+  redisq_backoff_factor: 2,
+  redisq_task_timeout_ms: 10_000,
+
+  # Killmail store configuration
+  killmail_store_gc_interval_ms: 60_000,
+  killmail_store_max_events_per_system: 10_000,
+
+  # Telemetry configuration
+  telemetry_enabled_metrics: [:cache, :api, :circuit, :event],
+  telemetry_sampling_rate: 1.0,
+  # 7 days in seconds
+  telemetry_retention_period: 604_800,
+
+  # Service startup configuration
+  start_preloader: true,
+  start_redisq: true
 
 # Cachex default configuration
 config :cachex, :default_ttl, :timer.hours(24)
@@ -100,68 +83,185 @@ config :logger,
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [
+    # Standard Elixir metadata
     :request_id,
     :application,
     :module,
     :function,
     :line,
-    # Application-specific metadata
+
+    # Core application metadata
     :system_id,
     :killmail_id,
     :operation,
     :step,
     :status,
     :error,
-    :killmail_count,
-    :provided_id,
-    :cache_key,
     :duration,
     :source,
     :reason,
-    :attempt,
+
+    # HTTP and API metadata
     :url,
     :response_time,
+    :method,
+    :service,
+    :endpoint,
+
+    # EVE Online entity metadata
     :character_id,
     :corporation_id,
     :alliance_id,
     :type_id,
+    :solar_system_id,
+    :ship_type_id,
+
+    # Cache metadata
+    :cache,
+    :cache_key,
     :cache_type,
-    :id,
-    :limit,
-    :since_hours,
-    :force,
+    :ttl,
+
+    # Processing metadata
+    :killmail_count,
+    :count,
+    :result,
+    :data_source,
+
+    # Retry and timeout metadata
+    :attempt,
     :max_attempts,
     :remaining_attempts,
     :delay_ms,
-    :message,
-    :timestamp,
-    :system_count,
-    :stat,
-    :new_value,
-    :state,
-    :hash,
-    :kill_time,
-    :cutoff,
-    :solar_system_id,
-    :solar_system_name,
-    :ship_type_id,
-    :options,
-    :failed_count,
-    :failed_ids,
-    :count,
-    :result,
-    :kind,
-    :duration_ms,
+    :timeout,
+    :request_type,
+    :raw_count,
+    :parsed_count,
+    :enriched_count,
+    :since_hours,
+    :provided_id,
+    :types,
+    :groups,
     :file,
     :path,
-    :value,
-    :ttl,
-    :default_ttl,
-    :cache_value,
-    :from,
+    :pass_type,
+    :hours,
+    :limit,
     :max_concurrency,
-    :timeout
+    :purpose,
+    :format,
+    :percentage,
+    :description,
+    :unit,
+    :value,
+    :count,
+    :total,
+    :processed,
+    :skipped,
+    :error,
+    :total_killmails_analyzed,
+    :format_distribution,
+    :system_distribution,
+    :ship_distribution,
+    :character_distribution,
+    :corporation_distribution,
+    :alliance_distribution,
+    :ship_type_distribution,
+    :purpose,
+    :sample_index,
+    :sample_size,
+    :sample_type,
+    :sample_value,
+    :sample_unit,
+    :sample_value,
+    :sample_structure,
+    :data_type,
+    :raw_keys,
+    :has_full_data,
+    :needs_esi_fetch,
+    :byte_size,
+    :tasks,
+    :group_ids,
+    :error_count,
+    :total_groups,
+    :success_count,
+    :type_count,
+    :cutoff_time,
+    :killmail_sample,
+    :required_fields,
+    :missing_fields,
+    :available_keys,
+    :killmail_sample,
+    :raw_structure,
+    :parsed_structure,
+    :enriched_structure,
+    :killmail_id,
+    :system_id,
+    :ship_type_id,
+    :character_id,
+    :killmail_keys,
+    :kill_count,
+    :hash,
+    :has_solar_system_id,
+    :has_kill_count,
+    :has_hash,
+    :has_killmail_id,
+    :has_system_id,
+    :has_ship_type_id,
+    :has_character_id,
+    :has_victim,
+    :has_attackers,
+    :has_zkb,
+    :killmail_keys,
+    :parser_type,
+    :killmail_hash,
+    :raw_structure,
+    :recommendation,
+    :structure,
+    :kill_time,
+    :cutoff,
+    :subscriber_id,
+    :system_ids,
+    :callback_url,
+    :subscription_id,
+    :status,
+    :error,
+    :system_count,
+    :has_callback,
+    :error_count,
+    :success_count,
+    :total_subscriptions,
+    :active_subscriptions,
+    :removed_count,
+    :requested_systems,
+    :successful_systems,
+    :failed_systems,
+    :total_systems,
+    :system_ids,
+    :callback_url,
+    :subscription_id,
+    :status,
+    :kills_count,
+    :pubsub_name,
+    :pubsub_topic,
+    :pubsub_message,
+    :pubsub_metadata,
+    :pubsub_payload,
+    :pubsub_headers,
+    :pubsub_timestamp,
+    :total_kills,
+    :filtered_kills,
+    :subscriber_count,
+    :total_cached_kills,
+    :cache_error,
+    :returned_kills,
+    :unexpected_response,
+    :cached_count,
+    :total_kills_sent
   ]
 
 # Import environment specific config
 import_config "#{config_env()}.exs"
+
+# Phoenix PubSub configuration
+config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG

@@ -1,55 +1,46 @@
+# Start test-specific cache instances
+:ets.new(:killmails_cache_test, [:named_table, :public, :set])
+:ets.new(:system_cache_test, [:named_table, :public, :set])
+:ets.new(:esi_cache_test, [:named_table, :public, :set])
+
+# Ensure mox is available
+Application.ensure_all_started(:mox)
+
+# Start ExUnit first
 ExUnit.start()
 
-# Configure cache names for test environment to use the same names as the application
-# but with test-specific instances
-Application.put_env(:wanderer_kills, :killmails_cache_name, :wanderer_test_killmails_cache)
-Application.put_env(:wanderer_kills, :system_cache_name, :wanderer_test_system_cache)
-Application.put_env(:wanderer_kills, :esi_cache_name, :wanderer_test_esi_cache)
+# Define mocks
+Mox.defmock(WandererKills.Http.Client.Mock,
+  for: WandererKills.Behaviours.HttpClient
+)
 
-# Start test-specific cache instances
-{:ok, _} = Cachex.start_link(:wanderer_test_killmails_cache)
-{:ok, _} = Cachex.start_link(:wanderer_test_system_cache)
-{:ok, _} = Cachex.start_link(:wanderer_test_esi_cache)
+Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Killmails.ZkbClientBehaviour)
 
-# Start the application for testing - this will start its own production caches
+# Mock for ESI client
+Mox.defmock(EsiClientMock, for: WandererKills.Behaviours.ESIClient)
+
+# Start the application for testing
 Application.ensure_all_started(:wanderer_kills)
 
-# Define the mock zkb client behavior
-defmodule WandererKills.Zkb.ClientBehaviour do
-  @moduledoc """
-  Behaviour for zKillboard API client.
-  """
+# Create a test case module that provides common setup for all tests
+defmodule WandererKills.TestCase do
+  use ExUnit.CaseTemplate
 
-  @type killmail_id :: pos_integer()
-  @type system_id :: pos_integer()
-  @type killmail :: map()
-
-  @callback fetch_killmail(killmail_id()) :: {:ok, killmail()} | {:error, term()}
-  @callback fetch_system_killmails(system_id()) :: {:ok, [killmail()]} | {:error, term()}
-  @callback fetch_system_killmails_esi(system_id()) :: {:ok, [killmail()]} | {:error, term()}
-  @callback enrich_killmail(killmail()) :: {:ok, killmail()} | {:error, term()}
-  @callback get_system_kill_count(system_id()) :: {:ok, non_neg_integer()} | {:error, term()}
+  setup do
+    # Clear any existing processes and caches
+    WandererKills.TestHelpers.clear_all_caches()
+    :ok
+  end
 end
 
-# Set global mode for all mocks - this makes mocks available to all processes
-Mox.defmock(WandererKills.Http.Client.Mock, for: WandererKills.Http.ClientBehaviour)
-Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Zkb.ClientBehaviour)
+# Set up global mocks - do not stub with real implementation to allow proper mocking in tests
+# Mox.stub_with(WandererKills.Http.Client.Mock, WandererKills.Http.Client)
+# Mox.stub_with(WandererKills.Zkb.Client.Mock, WandererKills.Killmails.ZkbClient)
 
-Application.put_env(:mox, :global_for, [
-  WandererKills.Http.Client.Mock,
-  WandererKills.Zkb.Client.Mock
-])
+# Configure ExUnit to run tests sequentially
+ExUnit.configure(parallel: false)
 
-# Set up mocks for all tests
-WandererKills.TestHelpers.setup_mocks()
-
-# Mock enrichment module for tests
-defmodule WandererKills.MockEnricher do
-  def enrich_killmail(killmail), do: {:ok, killmail}
-end
-
-Application.put_env(:wanderer_kills, :enricher, WandererKills.MockEnricher)
-Application.put_env(:wanderer_kills, :http_client, WandererKills.MockHttpClient)
-Application.put_env(:wanderer_kills, :zkb_client, WandererKills.Zkb.Client.Mock)
+# Set the enricher for tests
+ExUnit.configure(enricher: WandererKills.MockEnricher)
 
 # Note: Cache clearing functionality is now available via WandererKills.TestHelpers.clear_all_caches()

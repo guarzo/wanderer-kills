@@ -26,5 +26,11 @@
       "networkArgs": ["--add-host=host.docker.internal:host-gateway"]
     }
   },
-  "forwardPorts": [4004]
+  "forwardPorts": [4004],
+  "portsAttributes": {
+    "4004": {
+      "label": "Wanderer Kills API",
+      "onAutoForward": "notify"
+    }
+  }
 }

@@ -5,74 +5,115 @@ defmodule WandererKills.Application do
   OTP Application entry point for WandererKills.
 
   Supervises:
-    1. A `Task.Supervisor` for background jobs
-    2. The cache supervisor tree
-    3. The preloader supervisor tree
+    1. A Task.Supervisor for background jobs
+    2. Cachex instances for different cache namespaces
+    3. The preloader supervisor tree (conditionally)
     4. The HTTP endpoint (Plug.Cowboy)
-    5. A GenServer or process that reports parser stats
+    5. Observability/monitoring processes
     6. The Telemetry.Poller for periodic measurements
   """
 
   use Application
   require Logger
+  alias WandererKills.Infrastructure.Config
+  import Cachex.Spec
 
   @impl true
   def start(_type, _args) do
-    # 1) Attach telemetry handlers before starting measurements
-    WandererKills.Infrastructure.Telemetry.attach_handlers()
+    # 1) Initialize ETS for our KillStore
+    WandererKills.KillStore.init_tables!()
 
-    # 2) Build the supervision tree
-    base_children = [
-      {Task.Supervisor, name: WandererKills.TaskSupervisor},
-      WandererKills.Cache.Supervisor,
-      WandererKills.Infrastructure.Monitoring,
-      {Plug.Cowboy,
-       scheme: :http,
-       plug: WandererKills.Web.Api,
-       options: [port: Application.fetch_env!(:wanderer_kills, :port)]},
-      WandererKills.Parser.Stats,
-      {:telemetry_poller,
-       measurements: [
-         {WandererKills.Infrastructure.Telemetry, :count_http_requests, []},
-         {WandererKills.Infrastructure.Telemetry, :count_cache_operations, []},
-         {WandererKills.Infrastructure.Telemetry, :count_fetch_operations, []}
-       ],
-       period: :timer.seconds(10)}
-    ]
+    # 2) Attach telemetry handlers
+    WandererKills.Observability.Telemetry.attach_handlers()
 
-    # Conditionally add PreloaderSupervisor based on configuration
+    # 3) Build children list
     children =
-      if Application.get_env(:wanderer_kills, :start_preloader, true) do
-        [WandererKills.PreloaderSupervisor | base_children]
-      else
-        base_children
-      end
+      ([
+         {Task.Supervisor, name: WandererKills.TaskSupervisor},
+         {Phoenix.PubSub, name: WandererKills.PubSub},
+         {WandererKills.SubscriptionManager, [pubsub_name: WandererKills.PubSub]}
+       ] ++
+         cache_children() ++
+         [
+           WandererKills.Observability.Monitoring,
+           {Plug.Cowboy,
+            scheme: :http,
+            plug: WandererKillsWeb.Api,
+            options: [port: Config.app().port, ip: {0, 0, 0, 0}]},
+           {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
+         ])
+      |> maybe_preloader()
+      |> maybe_redisq()
 
+    # 4) Start the supervisor
     opts = [strategy: :one_for_one, name: WandererKills.Supervisor]
 
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
-        # Once the supervisor is running, start a one‐off ship‐type update.
         start_ship_type_update()
         {:ok, pid}
 
-      {:error, _} = error ->
+      error ->
         error
+    end
+  end
+
+  # Create a single Cachex instance with namespace support
+  defp cache_children do
+    # Use a reasonable default TTL - we'll set specific TTLs per key when needed
+    default_ttl_ms = Config.cache().esi_ttl * 1_000
+
+    opts = [
+      default_ttl: default_ttl_ms,
+      expiration:
+        expiration(
+          interval: :timer.seconds(60),
+          default: default_ttl_ms,
+          lazy: true
+        )
+    ]
+
+    [
+      {Cachex, [:wanderer_cache, opts]}
+    ]
+  end
+
+  defp telemetry_measurements do
+    [
+      {WandererKills.Observability.Monitoring, :measure_http_requests, []},
+      {WandererKills.Observability.Monitoring, :measure_cache_operations, []},
+      {WandererKills.Observability.Monitoring, :measure_fetch_operations, []},
+      {WandererKills.Observability.Monitoring, :measure_system_resources, []}
+    ]
+  end
+
+  defp maybe_preloader(children) do
+    if Config.start_preloader?() do
+      children ++ [WandererKills.Preloader.Supervisor]
+    else
+      children
+    end
+  end
+
+  defp maybe_redisq(children) do
+    if Config.start_redisq?() do
+      children ++ [WandererKills.RedisQ]
+    else
+      children
     end
   end
 
   @spec start_ship_type_update() :: :ok
   defp start_ship_type_update do
     Task.start(fn ->
-      # First warm the cache with CSV data
-      WandererKills.Data.ShipTypeInfo.warm_cache()
+      WandererKills.ShipTypes.Info.warm_cache()
 
-      # Then update with fresh ESI data
-      result = WandererKills.Data.ShipTypeUpdater.update_ship_types()
+      case WandererKills.ShipTypes.Updater.update_ship_types() do
+        {:error, reason} ->
+          Logger.error("Failed to update ship types: #{inspect(reason)}")
 
-      # Log if it was an error.
-      if match?({:error, _}, result) do
-        Logger.error("Failed to update ship types: #{inspect(result)}")
+        _ ->
+          :ok
       end
     end)
 

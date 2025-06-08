@@ -1,14 +1,14 @@
-FROM elixir:otp-27
+FROM elixir:1.18.3-otp-27-slim
 
-RUN apt install -yq curl gnupg
+# Install development and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    sudo \
-    curl \
-    make \
-    git \
-    bash \
     build-essential \
+    git \
+    curl \
     ca-certificates \
+    sudo \
+    make \
+    bash \
     jq \
     vim \
     net-tools \
@@ -16,8 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt --fix-broken install
-
-RUN mix local.hex --force
+# Setup Elixir tools
+RUN mix local.hex --force && mix local.rebar --force
 
 WORKDIR /app
