@@ -225,18 +225,6 @@ defmodule WandererKills.Client do
         )
 
         count
-
-      {:error, reason} ->
-        Logger.warning("Failed to get system kill count from cache, trying ZKB",
-          system_id: system_id,
-          cache_error: reason
-        )
-
-        # Fallback to ZKB count
-        case ZkbClient.get_system_kill_count(system_id) do
-          {:ok, count} -> count
-          {:error, _reason} -> 0
-        end
     end
   end
 

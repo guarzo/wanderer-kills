@@ -1,7 +1,7 @@
 import Config
 
 config :wanderer_kills,
-  port: String.to_integer(System.get_env("PORT") || "4004"),
+  port: 4004,
 
   # Cache configuration
   cache_killmails_ttl: 3600,
@@ -69,6 +69,14 @@ config :wanderer_kills,
   # Service startup configuration
   start_preloader: true,
   start_redisq: true
+
+# Configure the Phoenix endpoint
+config :wanderer_kills, WandererKillsWeb.Endpoint,
+  http: [port: 4004],
+  secret_key_base: "wanderer_kills_secret_key_base_development_only",
+  server: true,
+  live_view: [signing_salt: "wanderer_kills_live_view_salt"],
+  pubsub_server: WandererKills.PubSub
 
 # Cachex default configuration
 config :cachex, :default_ttl, :timer.hours(24)

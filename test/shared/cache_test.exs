@@ -74,11 +74,11 @@ defmodule WandererKills.CacheTest do
     test "can set and check system fetch timestamp" do
       timestamp = DateTime.utc_now()
       assert {:ok, :set} = Helper.system_set_fetch_timestamp(789, timestamp)
-      assert {:ok, true} = Helper.system_recently_fetched?(789)
+      assert true = Helper.system_recently_fetched?(789)
     end
 
     test "returns false for system with no fetch timestamp" do
-      assert {:ok, false} = Helper.system_recently_fetched?(999)
+      refute Helper.system_recently_fetched?(999)
     end
   end
 end

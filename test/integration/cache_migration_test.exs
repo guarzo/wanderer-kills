@@ -141,8 +141,11 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       # Verify timestamp is retrieved correctly
       assert {:ok, retrieved_timestamp} = Helper.system_get_fetch_timestamp(system_id)
 
+      # Convert integer timestamp back to DateTime for comparison
+      retrieved_datetime = DateTime.from_unix!(retrieved_timestamp)
+
       # Allow small time difference due to serialization
-      time_diff = DateTime.diff(timestamp, retrieved_timestamp, :millisecond)
+      time_diff = DateTime.diff(timestamp, retrieved_datetime, :millisecond)
       assert abs(time_diff) < 1000
     end
 
@@ -150,13 +153,13 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       system_id = 30_000_145
 
       # Should not be recently fetched initially
-      assert {:ok, false} = Helper.system_recently_fetched?(system_id)
+      refute Helper.system_recently_fetched?(system_id)
 
       # Set current timestamp
-      assert {:ok, _} = Helper.system_set_fetch_timestamp(system_id, DateTime.utc_now())
+      assert {:ok, _} = Helper.system_set_fetch_timestamp(system_id, System.system_time(:second))
 
       # Should now be recently fetched (within default threshold)
-      assert {:ok, true} = Helper.system_recently_fetched?(system_id)
+      assert true = Helper.system_recently_fetched?(system_id)
 
       # Test with custom threshold
       assert {:ok, true} = Helper.system_recently_fetched?(system_id, 60)

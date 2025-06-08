@@ -1,0 +1,97 @@
+defmodule WandererKillsWeb.HealthController do
+  @moduledoc """
+  Health check and monitoring endpoints.
+
+  Provides simple health checks, detailed status information,
+  and metrics for monitoring systems.
+  """
+
+  use WandererKillsWeb, :controller
+
+  alias WandererKills.Observability.Monitoring
+
+  @doc """
+  Simple ping endpoint for basic health checks.
+  """
+  def ping(conn, _params) do
+    conn
+    |> put_resp_content_type("text/plain")
+    |> send_resp(200, "pong")
+  end
+
+  @doc """
+  Detailed health check with component status.
+  """
+  def health(conn, _params) do
+    case Monitoring.check_health() do
+      {:ok, health_status} ->
+        _status_code = if health_status.healthy, do: 200, else: 503
+        response = Map.put(health_status, :timestamp, DateTime.utc_now() |> DateTime.to_iso8601())
+        json(conn, response)
+
+      {:error, reason} ->
+        response = %{
+          error: "Health check failed",
+          reason: inspect(reason),
+          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+        }
+
+        conn
+        |> put_status(503)
+        |> json(response)
+    end
+  end
+
+  @doc """
+  Status endpoint with detailed service information.
+  """
+  def status(conn, _params) do
+    subscriptions = WandererKills.SubscriptionManager.list_subscriptions()
+
+    response = %{
+      cache_stats: %{
+        status: "operational"
+      },
+      active_subscriptions: length(subscriptions),
+      websocket_connected: get_websocket_status(),
+      last_kill_received: get_last_kill_time(),
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    json(conn, response)
+  end
+
+  @doc """
+  Metrics endpoint for monitoring systems.
+  """
+  def metrics(conn, _params) do
+    case Monitoring.get_metrics() do
+      {:ok, metrics} ->
+        json(conn, metrics)
+
+      {:error, reason} ->
+        response = %{
+          error: "Metrics collection failed",
+          reason: inspect(reason)
+        }
+
+        conn
+        |> put_status(500)
+        |> json(response)
+    end
+  end
+
+  # Private helper functions
+
+  defp get_websocket_status do
+    # This would integrate with your WebSocket supervision tree
+    # For now, return basic status
+    Process.whereis(WandererKillsWeb.Endpoint) != nil
+  end
+
+  defp get_last_kill_time do
+    # This would integrate with your kill tracking system
+    # For now, return nil
+    nil
+  end
+end

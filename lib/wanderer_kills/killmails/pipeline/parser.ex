@@ -1,4 +1,4 @@
-defmodule WandererKills.Killmails.Parser do
+defmodule WandererKills.Killmails.Pipeline.Parser do
   @moduledoc """
   Core killmail parsing functionality with a focused API.
 
@@ -37,8 +37,8 @@ defmodule WandererKills.Killmails.Parser do
   require Logger
 
   alias WandererKills.Cache.Helper
-  alias WandererKills.Infrastructure.Error
-  alias WandererKills.Killmails.Enricher
+  alias WandererKills.Support.Error
+  alias WandererKills.Killmails.Pipeline.Enricher
   alias WandererKills.Observability.Monitoring
 
   @type killmail :: map()
@@ -81,7 +81,7 @@ defmodule WandererKills.Killmails.Parser do
       Monitoring.increment_stored()
       {:ok, enriched}
     else
-      {:error, %WandererKills.Infrastructure.Error{type: :kill_too_old}} ->
+      {:error, %WandererKills.Support.Error{type: :kill_too_old}} ->
         Monitoring.increment_skipped()
         {:ok, :kill_older}
 
@@ -332,7 +332,7 @@ defmodule WandererKills.Killmails.Parser do
       {:ok, full_data} ->
         {:ok, full_data}
 
-      {:error, %WandererKills.Infrastructure.Error{type: :not_found}} ->
+      {:error, %WandererKills.Support.Error{type: :not_found}} ->
         # Fetch full killmail data from ESI
         case WandererKills.ESI.DataFetcher.get_killmail_raw(killmail_id, hash) do
           {:ok, esi_data} when is_map(esi_data) ->

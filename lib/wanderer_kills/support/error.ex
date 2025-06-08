@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.Error do
+defmodule WandererKills.Support.Error do
   @moduledoc """
   Centralized error handling for WandererKills.
 

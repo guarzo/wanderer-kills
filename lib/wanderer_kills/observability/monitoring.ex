@@ -43,7 +43,7 @@ defmodule WandererKills.Observability.Monitoring do
 
   use GenServer
   require Logger
-  alias WandererKills.Infrastructure.Clock
+  alias WandererKills.Support.Clock
 
   @cache_names [:wanderer_cache]
   @health_check_interval :timer.minutes(5)

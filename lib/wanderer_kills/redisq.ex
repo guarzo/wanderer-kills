@@ -12,9 +12,9 @@ defmodule WandererKills.RedisQ do
   use GenServer
   require Logger
 
-  alias WandererKills.Killmails.Coordinator
+  alias WandererKills.Killmails.Pipeline.Coordinator
   alias WandererKills.ESI.DataFetcher, as: EsiClient
-  alias WandererKills.Infrastructure.Clock
+  alias WandererKills.Support.Clock
   alias WandererKills.Http.Client, as: HttpClient
   alias WandererKills.Config
 

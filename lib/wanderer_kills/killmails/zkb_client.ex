@@ -31,7 +31,7 @@ defmodule WandererKills.Killmails.ZkbClient do
   @behaviour WandererKills.Killmails.ZkbClientBehaviour
 
   require Logger
-  alias WandererKills.Infrastructure.{Config, Error}
+  alias WandererKills.Support.Error
   alias WandererKills.Http.{Client, ClientProvider}
   alias WandererKills.Observability.Telemetry
 
@@ -61,7 +61,7 @@ defmodule WandererKills.Killmails.ZkbClient do
       ClientProvider.build_request_opts(
         params: [no_items: true],
         headers: ClientProvider.eve_api_headers(),
-        timeout: Config.timeouts().zkb_request_ms
+        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
       )
 
     request_opts = Keyword.put(request_opts, :operation, :fetch_killmail)
@@ -250,7 +250,7 @@ defmodule WandererKills.Killmails.ZkbClient do
       ClientProvider.build_request_opts(
         params: [no_items: true],
         headers: ClientProvider.eve_api_headers(),
-        timeout: Config.timeouts().zkb_request_ms
+        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
       )
 
     request_opts = Keyword.put(request_opts, :operation, :"fetch_#{entity_type}_killmails")
@@ -271,7 +271,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     request_opts =
       ClientProvider.build_request_opts(
         headers: ClientProvider.eve_api_headers(),
-        timeout: Config.timeouts().zkb_request_ms
+        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
       )
 
     request_opts = Keyword.put(request_opts, :operation, :fetch_system_killmails_esi)
@@ -318,7 +318,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     request_opts =
       ClientProvider.build_request_opts(
         headers: ClientProvider.eve_api_headers(),
-        timeout: Config.timeouts().zkb_request_ms
+        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
       )
 
     request_opts = Keyword.put(request_opts, :operation, :get_system_kill_count)
@@ -395,7 +395,6 @@ defmodule WandererKills.Killmails.ZkbClient do
     else
       case fetch_from_cache() do
         {:ok, systems} -> {:ok, systems}
-        {:error, _reason} -> do_fetch_active_systems()
       end
     end
   end
@@ -406,15 +405,6 @@ defmodule WandererKills.Killmails.ZkbClient do
     case Helper.system_get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         {:ok, systems}
-
-      {:error, reason} ->
-        Logger.warning("Cache error for active systems, falling back to fresh fetch",
-          operation: :fetch_active_systems,
-          step: :cache_error,
-          error: reason
-        )
-
-        do_fetch_active_systems()
     end
   end
 
@@ -424,7 +414,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     request_opts =
       ClientProvider.build_request_opts(
         headers: ClientProvider.eve_api_headers(),
-        timeout: Config.timeouts().zkb_request_ms
+        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
       )
 
     request_opts = Keyword.put(request_opts, :operation, :fetch_active_systems)

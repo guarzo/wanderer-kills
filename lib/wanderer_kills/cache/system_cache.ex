@@ -58,7 +58,7 @@ defmodule WandererKills.Cache.SystemCache do
   @doc """
   Check if a system is active.
   """
-  def is_active?(system_id) do
+  def active?(system_id) do
     case Helper.get("systems", "active:#{system_id}") do
       {:ok, nil} -> {:ok, false}
       {:ok, _timestamp} -> {:ok, true}
@@ -70,7 +70,7 @@ defmodule WandererKills.Cache.SystemCache do
   Add a system to the active systems list.
   """
   def add_active(system_id) do
-    case is_active?(system_id) do
+    case active?(system_id) do
       {:ok, true} ->
         {:ok, :already_exists}
 

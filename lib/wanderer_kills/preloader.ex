@@ -136,16 +136,7 @@ defmodule WandererKills.Preloader do
       )
 
       case Helper.system_add_active(system_id) do
-        {:ok, :added} ->
-          Logger.info("Successfully added system to active list",
-            system_id: system_id,
-            operation: :add_system,
-            status: :success
-          )
-
-          :ok
-
-        {:ok, :already_exists} ->
+        {:ok, true} ->
           Logger.info("System already in active list",
             system_id: system_id,
             operation: :add_system,
@@ -154,15 +145,14 @@ defmodule WandererKills.Preloader do
 
           :ok
 
-        {:error, reason} ->
-          Logger.error("Failed to add system to active list",
+        {:ok, _} ->
+          Logger.info("Successfully added system to active list",
             system_id: system_id,
             operation: :add_system,
-            error: reason,
-            status: :error
+            status: :success
           )
 
-          {:error, reason}
+          :ok
       end
     end
 
@@ -187,10 +177,6 @@ defmodule WandererKills.Preloader do
             # Add any system-specific processing here
           end
 
-          {:noreply, state}
-
-        {:error, reason} ->
-          Logger.error("Failed to get active systems: #{inspect(reason)}")
           {:noreply, state}
       end
     end
@@ -264,10 +250,6 @@ defmodule WandererKills.Preloader do
         {:ok, []} ->
           Logger.info("No active systems to preload")
           {:error, :no_active_systems}
-
-        {:error, reason} ->
-          Logger.error("Failed to get active systems for preload", reason: reason)
-          {:error, reason}
       end
     end
 

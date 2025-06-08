@@ -208,6 +208,193 @@ defmodule WandererKills.Cache.Helper do
     end
   end
 
+  @doc """
+  Gets the kill count for a system.
+  """
+  def system_get_kill_count(system_id) do
+    case get("systems", "kill_count:#{system_id}") do
+      {:ok, nil} -> {:ok, 0}
+      {:ok, count} when is_integer(count) -> {:ok, count}
+      # Clean up corrupted data
+      {:ok, _invalid} -> {:ok, 0}
+      {:error, _reason} -> {:ok, 0}
+    end
+  end
+
+  @doc """
+  Sets the kill count for a system.
+  """
+  def system_put_kill_count(system_id, count) when is_integer(count) do
+    put("systems", "kill_count:#{system_id}", count)
+  end
+
+  @doc """
+  Increments the kill count for a system.
+  """
+  def system_increment_kill_count(system_id) do
+    case system_get_kill_count(system_id) do
+      {:ok, current_count} ->
+        new_count = current_count + 1
+        system_put_kill_count(system_id, new_count)
+        {:ok, new_count}
+    end
+  end
+
+  @doc """
+  Gets active systems list.
+  """
+  def system_get_active_systems do
+    case get("systems", "active_list") do
+      {:ok, nil} -> {:ok, []}
+      {:ok, systems} when is_list(systems) -> {:ok, systems}
+      # Clean up corrupted data
+      {:ok, _invalid} -> {:ok, []}
+      {:error, _reason} -> {:ok, []}
+    end
+  end
+
+  @doc """
+  Adds a system to the active systems list.
+  """
+  def system_add_active(system_id) do
+    case system_get_active_systems() do
+      {:ok, systems} ->
+        if system_id in systems do
+          {:ok, true}
+        else
+          new_systems = [system_id | systems]
+          put("systems", "active_list", new_systems)
+        end
+    end
+  end
+
+  @doc """
+  Checks if a system was recently fetched.
+  """
+  def system_recently_fetched?(system_id) do
+    case get("systems", "last_fetch:#{system_id}") do
+      {:ok, nil} ->
+        false
+
+      {:ok, timestamp} when is_integer(timestamp) ->
+        current_time = System.system_time(:second)
+        # Convert minutes to seconds
+        threshold = Config.cache().recent_fetch_threshold * 60
+        current_time - timestamp < threshold
+
+      {:ok, _invalid} ->
+        false
+
+      {:error, _reason} ->
+        false
+    end
+  end
+
+  @doc """
+  Marks a system as recently fetched.
+  """
+  def system_mark_fetched(system_id) do
+    timestamp = System.system_time(:second)
+    put("systems", "last_fetch:#{system_id}", timestamp)
+  end
+
+  @doc """
+  Caches killmails for a system.
+  """
+  def cache_killmails_for_system(system_id, killmails) when is_list(killmails) do
+    put("systems", "cached_killmails:#{system_id}", killmails)
+  end
+
+  @doc """
+  Gets killmail by ID from cache.
+  """
+  def killmail_get(killmail_id) do
+    case get("killmails", "data:#{killmail_id}") do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, data} -> {:ok, data}
+      error -> error
+    end
+  end
+
+  @doc """
+  Puts killmail data in cache.
+  """
+  def killmail_put(killmail_id, killmail_data) do
+    put("killmails", "data:#{killmail_id}", killmail_data)
+  end
+
+  @doc """
+  Gets or sets a killmail using a fallback function.
+  """
+  def killmail_get_or_set(killmail_id, fallback_fn) do
+    get_or_set("killmails", "data:#{killmail_id}", fallback_fn)
+  end
+
+  @doc """
+  Deletes a killmail from cache.
+  """
+  def killmail_delete(killmail_id) do
+    delete("killmails", "data:#{killmail_id}")
+  end
+
+  @doc """
+  Checks if a system is in the active systems list.
+  """
+  def system_is_active?(system_id) do
+    case system_get_active_systems() do
+      {:ok, systems} ->
+        {:ok, system_id in systems}
+    end
+  end
+
+  @doc """
+  Gets the last fetch timestamp for a system.
+  """
+  def system_get_fetch_timestamp(system_id) do
+    case get("systems", "last_fetch:#{system_id}") do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, timestamp} when is_integer(timestamp) -> {:ok, timestamp}
+      {:ok, _invalid} -> {:error, :invalid_data}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Sets the last fetch timestamp for a system.
+  """
+  def system_set_fetch_timestamp(system_id, %DateTime{} = timestamp) do
+    system_set_fetch_timestamp(system_id, DateTime.to_unix(timestamp))
+  end
+
+  def system_set_fetch_timestamp(system_id, timestamp) when is_integer(timestamp) do
+    case put("systems", "last_fetch:#{system_id}", timestamp) do
+      {:ok, _} -> {:ok, :set}
+      error -> error
+    end
+  end
+
+  @doc """
+  Checks if a system was recently fetched within a custom threshold.
+  """
+  def system_recently_fetched?(system_id, threshold_minutes) do
+    case get("systems", "last_fetch:#{system_id}") do
+      {:ok, nil} ->
+        {:ok, false}
+
+      {:ok, timestamp} when is_integer(timestamp) ->
+        current_time = System.system_time(:second)
+        threshold_seconds = threshold_minutes * 60
+        recently_fetched = current_time - timestamp < threshold_seconds
+        {:ok, recently_fetched}
+
+      {:ok, _invalid} ->
+        {:ok, false}
+
+      {:error, _reason} ->
+        {:ok, false}
+    end
+  end
+
   # ============================================================================
   # Private Functions
   # ============================================================================

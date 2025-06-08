@@ -1,4 +1,4 @@
-defmodule WandererKills.Behaviours.HttpClient do
+defmodule WandererKills.Http.ClientBehaviour do
   @moduledoc """
   Behaviour for HTTP client implementations.
 
@@ -6,7 +6,7 @@ defmodule WandererKills.Behaviours.HttpClient do
   external service clients. Currently only GET operations are used.
   """
 
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Support.Error
 
   @type url :: String.t()
   @type headers :: [{String.t(), String.t()}]

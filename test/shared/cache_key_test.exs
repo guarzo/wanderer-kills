@@ -27,7 +27,7 @@ defmodule WandererKills.CacheKeyTest do
 
     test "system keys follow expected pattern" do
       # Test system-related cache operations
-      assert {:ok, :added} = Helper.system_add_active(456)
+      assert {:ok, _} = Helper.system_add_active(456)
       # Note: get_active_systems() has streaming issues in test environment
 
       # No killmails initially
@@ -58,7 +58,7 @@ defmodule WandererKills.CacheKeyTest do
       case Helper.character_get(123) do
         {:ok, ^character_data} -> :ok
         # Acceptable in test environment
-        {:error, %WandererKills.Infrastructure.Error{type: :not_found}} -> :ok
+        {:error, %WandererKills.Support.Error{type: :not_found}} -> :ok
         {:error, _} -> :ok
       end
     end
@@ -87,9 +87,9 @@ defmodule WandererKills.CacheKeyTest do
       # Ensure cache is completely clear for this specific system
       TestHelpers.clear_all_caches()
 
-      assert {:ok, false} = Helper.system_recently_fetched?(system_id)
+      refute Helper.system_recently_fetched?(system_id)
       assert {:ok, :set} = Helper.system_set_fetch_timestamp(system_id, timestamp)
-      assert {:ok, true} = Helper.system_recently_fetched?(system_id)
+      assert true = Helper.system_recently_fetched?(system_id)
     end
   end
 

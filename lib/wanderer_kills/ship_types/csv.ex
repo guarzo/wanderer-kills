@@ -31,8 +31,8 @@ defmodule WandererKills.ShipTypes.CSV do
 
   require Logger
   alias NimbleCSV.RFC4180, as: CSVParser
-  alias WandererKills.Infrastructure.BatchProcessor
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Support.BatchProcessor
+  alias WandererKills.Support.Error
 
   @type parse_result :: {:ok, term()} | {:error, Error.t()}
   @type parser_function :: (map() -> term() | nil)

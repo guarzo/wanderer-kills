@@ -15,11 +15,7 @@ defmodule WandererKills.ESI.DataFetcher do
   require Logger
   alias WandererKills.Config
   alias WandererKills.Cache.Helper
-  alias WandererKills.Infrastructure.{Error, BatchProcessor}
-  alias WandererKills.Behaviours.ESIClient
-
-  @behaviour ESIClient
-  @behaviour DataFetcher
+  alias WandererKills.Support.Error
 
   # Default ship group IDs that contain ship types
   @ship_group_ids [6, 7, 9, 11, 16, 17, 23]
@@ -28,67 +24,56 @@ defmodule WandererKills.ESI.DataFetcher do
   # ESIClient Implementation
   # ============================================================================
 
-  @impl ESIClient
   def get_character(character_id) when is_integer(character_id) do
     Helper.character_get_or_set(character_id, fn ->
       fetch_from_api(:character, character_id)
     end)
   end
 
-  @impl ESIClient
   def get_character_batch(character_ids) when is_list(character_ids) do
     fetch_batch(:character, character_ids)
   end
 
-  @impl ESIClient
   def get_corporation(corporation_id) when is_integer(corporation_id) do
     Helper.corporation_get_or_set(corporation_id, fn ->
       fetch_from_api(:corporation, corporation_id)
     end)
   end
 
-  @impl ESIClient
   def get_corporation_batch(corporation_ids) when is_list(corporation_ids) do
     fetch_batch(:corporation, corporation_ids)
   end
 
-  @impl ESIClient
   def get_alliance(alliance_id) when is_integer(alliance_id) do
     Helper.alliance_get_or_set(alliance_id, fn ->
       fetch_from_api(:alliance, alliance_id)
     end)
   end
 
-  @impl ESIClient
   def get_alliance_batch(alliance_ids) when is_list(alliance_ids) do
     fetch_batch(:alliance, alliance_ids)
   end
 
-  @impl ESIClient
   def get_type(type_id) when is_integer(type_id) do
     Helper.ship_type_get_or_set(type_id, fn ->
       fetch_from_api(:type, type_id)
     end)
   end
 
-  @impl ESIClient
   def get_type_batch(type_ids) when is_list(type_ids) do
     fetch_batch(:type, type_ids)
   end
 
-  @impl ESIClient
   def get_group(group_id) when is_integer(group_id) do
     Helper.get_or_set("groups", to_string(group_id), fn ->
       fetch_from_api(:group, group_id)
     end)
   end
 
-  @impl ESIClient
   def get_group_batch(group_ids) when is_list(group_ids) do
     fetch_batch(:group, group_ids)
   end
 
-  @impl ESIClient
   def get_system(system_id) when is_integer(system_id) do
     result = fetch_from_api(:system, system_id)
     {:ok, result}
@@ -97,7 +82,6 @@ defmodule WandererKills.ESI.DataFetcher do
       {:error, error}
   end
 
-  @impl ESIClient
   def get_system_batch(system_ids) when is_list(system_ids) do
     fetch_batch(:system, system_ids)
   end
@@ -106,7 +90,6 @@ defmodule WandererKills.ESI.DataFetcher do
   # DataFetcher Implementation
   # ============================================================================
 
-  @impl DataFetcher
   def fetch({:character, character_id}), do: get_character(character_id)
   def fetch({:corporation, corporation_id}), do: get_corporation(corporation_id)
   def fetch({:alliance, alliance_id}), do: get_alliance(alliance_id)
@@ -116,12 +99,10 @@ defmodule WandererKills.ESI.DataFetcher do
   def fetch({:killmail, killmail_id, killmail_hash}), do: get_killmail(killmail_id, killmail_hash)
   def fetch(_), do: {:error, Error.esi_error(:unsupported, "Unsupported fetch operation")}
 
-  @impl DataFetcher
   def fetch_many(fetch_args) when is_list(fetch_args) do
     Enum.map(fetch_args, &fetch/1)
   end
 
-  @impl DataFetcher
   def supports?({:character, _}), do: true
   def supports?({:corporation, _}), do: true
   def supports?({:alliance, _}), do: true

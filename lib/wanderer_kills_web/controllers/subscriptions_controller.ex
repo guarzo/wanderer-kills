@@ -10,6 +10,8 @@ defmodule WandererKillsWeb.SubscriptionsController do
   require Logger
   alias WandererKills.Client
 
+  def init(opts), do: opts
+
   @doc """
   Creates a new kill subscription.
 

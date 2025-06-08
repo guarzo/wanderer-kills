@@ -45,15 +45,11 @@ defmodule WandererKills.Config do
   # Timeout Configuration (Use Config module for runtime-configurable timeouts)
   @gen_server_call_timeout 5_000
 
-  # Retry Configuration (Use Config module for runtime-configurable retry settings)
-  @default_base_delay 1_000
-  @max_backoff_delay 60_000
-  @backoff_factor 2
-
   # Validation Limits
   @max_killmail_id 999_999_999_999
   @max_system_id 32_000_000
   @max_character_id 999_999_999_999
+  @max_subscribed_systems 100
 
   defstruct [
     # Cache settings
@@ -134,7 +130,7 @@ defmodule WandererKills.Config do
     # Application settings
     app: %{
       port: 4004,
-      http_client: "WandererKills.Http.Client",
+      http_client: WandererKills.Http.Client,
       zkb_client: WandererKills.Killmails.ZkbClient
     }
   ]
@@ -211,7 +207,7 @@ defmodule WandererKills.Config do
       },
       app: %{
         port: get_env(:port, 4004),
-        http_client: get_env(:http_client, "WandererKills.Http.Client"),
+        http_client: get_env(:http_client, WandererKills.Http.Client),
         zkb_client: get_env(:zkb_client, WandererKills.Killmails.ZkbClient)
       }
     }
@@ -272,10 +268,42 @@ defmodule WandererKills.Config do
   def gen_server_call_timeout, do: @gen_server_call_timeout
 
   @doc "Gets validation limits"
-  @spec validation(:max_killmail_id | :max_system_id | :max_character_id) :: pos_integer()
+  @spec validation(
+          :max_killmail_id
+          | :max_system_id
+          | :max_character_id
+          | :max_subscribed_systems
+        ) :: pos_integer()
   def validation(:max_killmail_id), do: @max_killmail_id
   def validation(:max_system_id), do: @max_system_id
   def validation(:max_character_id), do: @max_character_id
+  def validation(:max_subscribed_systems), do: @max_subscribed_systems
+
+  # Retry constants (delegated to Retry module)
+  @doc "Gets default base delay for retry operations"
+  @spec retry_base_delay() :: non_neg_integer()
+  def retry_base_delay, do: WandererKills.Support.Retry.default_base_delay()
+
+  @doc "Gets maximum backoff delay for retry operations"
+  @spec retry_max_delay() :: non_neg_integer()
+  def retry_max_delay, do: WandererKills.Support.Retry.max_backoff_delay()
+
+  @doc "Gets backoff factor for exponential backoff"
+  @spec retry_backoff_factor() :: number()
+  def retry_backoff_factor, do: WandererKills.Support.Retry.backoff_factor()
+
+  # Service startup configuration functions
+  @doc "Whether to start the preloader service"
+  @spec start_preloader?() :: boolean()
+  def start_preloader? do
+    get_env(:start_preloader, true)
+  end
+
+  @doc "Whether to start the RedisQ consumer service"
+  @spec start_redisq?() :: boolean()
+  def start_redisq? do
+    get_env(:start_redisq, true)
+  end
 
   # Private helper for getting environment values
   defp get_env(key, default) do

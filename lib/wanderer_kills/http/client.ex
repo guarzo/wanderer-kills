@@ -25,7 +25,7 @@ defmodule WandererKills.Http.Client do
 
   ## Error Handling
 
-  The module defines several custom error types (in `WandererKills.Infrastructure.Error`):
+  The module defines several custom error types (in `WandererKills.Support.Error`):
     - `ConnectionError` - Raised when a connection fails
     - `TimeoutError` - Raised when a request times out
     - `RateLimitError` - Raised when rate limit is exceeded
@@ -43,12 +43,10 @@ defmodule WandererKills.Http.Client do
     - Metadata: `%{method: "GET", url: url, error: reason}` on failure
   """
 
-  @behaviour WandererKills.Behaviours.HttpClient
-
   require Logger
-  alias WandererKills.Infrastructure.Error.{ConnectionError, TimeoutError, RateLimitError}
+  alias WandererKills.Support.Error.{ConnectionError, TimeoutError, RateLimitError}
   alias WandererKills.Config
-  alias WandererKills.Infrastructure.{Error, Retry}
+  alias WandererKills.Support.{Error, Retry}
   alias WandererKills.Http.ClientProvider
   alias WandererKills.Observability.Telemetry
 
@@ -73,7 +71,6 @@ defmodule WandererKills.Http.Client do
   # HttpClient Behaviour Implementation
   # ============================================================================
 
-  @impl true
   @doc """
   Makes a GET request.
 
@@ -84,8 +81,6 @@ defmodule WandererKills.Http.Client do
     opts = Keyword.merge(options, headers: headers)
     get_with_rate_limit(url, opts)
   end
-
-  @impl true
 
   # ============================================================================
   # Main Implementation

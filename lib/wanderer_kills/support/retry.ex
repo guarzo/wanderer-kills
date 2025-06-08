@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.Retry do
+defmodule WandererKills.Support.Retry do
   @moduledoc """
   Provides retry functionality with exponential backoff for any operation.
 
@@ -14,6 +14,23 @@ defmodule WandererKills.Infrastructure.Retry do
 
   require Logger
   alias WandererKills.Config
+
+  # Retry Configuration Constants
+  @default_base_delay 1_000
+  @max_backoff_delay 60_000
+  @backoff_factor 2
+
+  @doc "Default base delay for retry operations"
+  @spec default_base_delay() :: non_neg_integer()
+  def default_base_delay, do: @default_base_delay
+
+  @doc "Maximum backoff delay for retry operations"
+  @spec max_backoff_delay() :: non_neg_integer()
+  def max_backoff_delay, do: @max_backoff_delay
+
+  @doc "Backoff factor for exponential backoff"
+  @spec backoff_factor() :: number()
+  def backoff_factor, do: @backoff_factor
 
   @type retry_opts :: [
           max_retries: non_neg_integer(),
@@ -48,9 +65,9 @@ defmodule WandererKills.Infrastructure.Retry do
 
     rescue_only =
       Keyword.get(opts, :rescue_only, [
-        WandererKills.Infrastructure.Error.ConnectionError,
-        WandererKills.Infrastructure.Error.TimeoutError,
-        WandererKills.Infrastructure.Error.RateLimitError,
+        WandererKills.Support.Error.ConnectionError,
+        WandererKills.Support.Error.TimeoutError,
+        WandererKills.Support.Error.RateLimitError,
         # Add common retryable exceptions
         RuntimeError,
         ArgumentError
@@ -104,9 +121,9 @@ defmodule WandererKills.Infrastructure.Retry do
   """
   @spec retriable_http_error?(term()) :: boolean()
   def retriable_http_error?(:rate_limited), do: true
-  def retriable_http_error?(%WandererKills.Infrastructure.Error.RateLimitError{}), do: true
-  def retriable_http_error?(%WandererKills.Infrastructure.Error.TimeoutError{}), do: true
-  def retriable_http_error?(%WandererKills.Infrastructure.Error.ConnectionError{}), do: true
+  def retriable_http_error?(%WandererKills.Support.Error.RateLimitError{}), do: true
+  def retriable_http_error?(%WandererKills.Support.Error.TimeoutError{}), do: true
+  def retriable_http_error?(%WandererKills.Support.Error.ConnectionError{}), do: true
   def retriable_http_error?(_), do: false
 
   @doc """
@@ -131,9 +148,9 @@ defmodule WandererKills.Infrastructure.Retry do
     default_opts = [
       operation_name: "HTTP request",
       rescue_only: [
-        WandererKills.Infrastructure.Error.ConnectionError,
-        WandererKills.Infrastructure.Error.TimeoutError,
-        WandererKills.Infrastructure.Error.RateLimitError
+        WandererKills.Support.Error.ConnectionError,
+        WandererKills.Support.Error.TimeoutError,
+        WandererKills.Support.Error.RateLimitError
       ]
     ]
 

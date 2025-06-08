@@ -1,4 +1,4 @@
-defmodule WandererKills.Behaviours.DataFetcher do
+defmodule WandererKills.ESI.DataFetcherBehaviour do
   @moduledoc """
   Behaviour for data fetching implementations.
 
@@ -6,7 +6,7 @@ defmodule WandererKills.Behaviours.DataFetcher do
   and other external data sources.
   """
 
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Support.Error
 
   @type fetch_args :: term()
   @type fetch_result :: {:ok, term()} | {:error, Error.t()}

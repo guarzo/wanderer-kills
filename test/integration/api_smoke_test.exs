@@ -1,13 +1,10 @@
 defmodule WandererKills.ApiSmokeTest do
   use ExUnit.Case, async: false
-  import Plug.Test
-
-  @opts WandererKillsWeb.Api.init([])
+  use WandererKillsWeb.ConnCase
 
   test "GET /ping returns pong" do
-    conn = conn(:get, "/ping")
-    response = WandererKillsWeb.Api.call(conn, @opts)
-    assert response.status == 200
-    assert response.resp_body == "pong"
+    conn = build_conn() |> get("/ping")
+    assert conn.status == 200
+    assert conn.resp_body == "pong"
   end
 end

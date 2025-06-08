@@ -4,13 +4,14 @@
 
 - [ ] 🔍 "Refactor `lib/wanderer_kills/cache/helper.ex` to extract reusable patterns across character, corporation, alliance, ship type, and system cache operations into a `defmacro __using__` or helper module to reduce boilerplate."
 - [ ] ✂️ "Delete duplicated `parse_time/1` logic from both `Clock` and `Killmail` utilities if present; centralize time parsing into a single Clock helper."
-- [ ] 🧹 "Remove `WandererKills.Infrastructure.Clock.system_time/1` or replace usages with `System.system_time/1` unless mocking is a future concern."
+- [x] 🧹 "Remove `WandererKills.Infrastructure.Clock.system_time/1` or replace usages with `System.system_time/1` unless mocking is a future concern."
 
 ## 🧱 Architectural & Structural Improvements
 
-- [ ] 📁 "Move `lib/wanderer_kills/infrastructure/config.ex` to `lib/wanderer_kills/config.ex` or `lib/wanderer_kills/support/config.ex` to align with Elixir idioms and reduce overly deep nesting."
-- [ ] 🧳 "Merge `esi/data_fetcher.ex` and `esi/client.ex` into one file to reduce indirection. These currently act as thin wrappers over one another."
+- [x] 📁 "Move `lib/wanderer_kills/infrastructure/config.ex` to `lib/wanderer_kills/config.ex` or `lib/wanderer_kills/support/config.ex` to align with Elixir idioms and reduce overly deep nesting."
+- [x] 🧳 "Merge `esi/data_fetcher.ex` and `esi/client.ex` into one file to reduce indirection. These currently act as thin wrappers over one another."
 - [ ] 🗃️ "Rename `lib/wanderer_kills/core.ex` to `wanderer_kills.ex` if it’s intended as the primary public API. Otherwise, move exported functions to appropriate domains."
+- [x] 🏗️ "Migrate from Plug.Router to Phoenix Router for better organization, pipelines, and consistency with WebSocket endpoint architecture."
 - [ ] 🧩 "Unify HTTP client fallback logic between `Http.ClientProvider`, `Http.Client`, and `Http.Util`. Currently, fallback/override logic is spread across 3 layers."
 
 ## 🧼 Simplification of Logic
@@ -20,15 +21,15 @@
 
 ## ⚙️ Refactoring Config Access
 
-- [ ] 🧭 "Replace all `Config.cache().x`, `Config.retry().y` calls with a simple `Application.get_env(:wanderer_kills, ...)` alias if you're not using runtime reloads."
-- [ ] 🧱 "Move retry delay/backoff constants (base delay, factor, etc.) to `Retry` module constants rather than defining in both `Config` and `Retry`."
+- [x] 🧭 "Replace all `Config.cache().x`, `Config.retry().y` calls with a simple `Application.get_env(:wanderer_kills, ...)` alias if you're not using runtime reloads."
+- [x] 🧱 "Move retry delay/backoff constants (base delay, factor, etc.) to `Retry` module constants rather than defining in both `Config` and `Retry`."
 
 ## 🗃️ File & Module Reorganization
 
-- [ ] 🧹 "Move all `behaviours/` files under their associated domain folders (e.g., move `behaviours/data_fetcher.ex` into `esi/`, `killmails/`, etc.) to reduce orphaned interface files."
+- [x] 🧹 "Move all `behaviours/` files under their associated domain folders (e.g., move `behaviours/data_fetcher.ex` into `esi/`, `killmails/`, etc.) to reduce orphaned interface files."
 - [ ] 🧳 "Move `application.ex`, `core.ex`, and `kill_store.ex` into a dedicated `lib/wanderer_kills/app/` directory or refactor into `WandererKills.Application`, `WandererKills.Core`, etc. to reduce root module sprawl."
-- [ ] 🔄 "Consolidate `lib/wanderer_kills/killmails/parser.ex`, `enricher.ex`, `coordinator.ex`, etc. into a single `killmails/pipeline/` subfolder to reflect linear data pipeline."
-- [ ] 🧹 "Review single-file directories like `infrastructure/` and flatten where appropriate (e.g., merge with root or `support/`); deep nesting is unnecessary for small submodules."
+- [x] 🔄 "Consolidate `lib/wanderer_kills/killmails/parser.ex`, `enricher.ex`, `coordinator.ex`, etc. into a single `killmails/pipeline/` subfolder to reflect linear data pipeline."
+- [x] 🧹 "Review single-file directories like `infrastructure/` and flatten where appropriate (e.g., merge with root or `support/`); deep nesting is unnecessary for small submodules."
 
 ## 📊 Testing Improvements
 

@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.Clock do
+defmodule WandererKills.Support.Clock do
   @moduledoc """
   Unified time and clock utilities for WandererKills.
 
@@ -52,14 +52,6 @@ defmodule WandererKills.Infrastructure.Clock do
   @spec now_milliseconds() :: integer()
   def now_milliseconds do
     System.system_time(:millisecond)
-  end
-
-  @doc """
-  Returns the current system time in the specified `unit`.
-  """
-  @spec system_time(System.time_unit()) :: integer()
-  def system_time(unit) do
-    System.system_time(unit)
   end
 
   @doc """

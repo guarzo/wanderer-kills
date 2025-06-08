@@ -1,4 +1,4 @@
-defmodule WandererKills.Killmails.Enricher do
+defmodule WandererKills.Killmails.Pipeline.Enricher do
   @moduledoc """
   Enriches killmails with additional information.
 

@@ -16,7 +16,7 @@ defmodule WandererKills.Core do
   - `WandererKills.Core.Http.Util` → **REMOVED** (functionality moved to `WandererKills.Http.Client`)
 
   ### Processing Modules
-  - `WandererKills.Core.BatchProcessor` → `WandererKills.Infrastructure.BatchProcessor`
+  - `WandererKills.Core.BatchProcessor` → `WandererKills.Support.BatchProcessor`
   - `WandererKills.Core.CSV` → `WandererKills.ShipTypes.CSV`
 
   ### Cache Modules
@@ -24,11 +24,11 @@ defmodule WandererKills.Core do
 
   ### Infrastructure Modules
   - `WandererKills.Core.Config` → `WandererKills.Config`
-  - `WandererKills.Core.Retry` → `WandererKills.Infrastructure.Retry`
-  - `WandererKills.Core.Clock` → `WandererKills.Infrastructure.Clock`
+  - `WandererKills.Core.Retry` → `WandererKills.Support.Retry`
+  - `WandererKills.Core.Clock` → `WandererKills.Support.Clock`
   - `WandererKills.Core.Constants` → `WandererKills.Config`
-  - `WandererKills.Core.Behaviours` → `WandererKills.Infrastructure.Behaviours`
-  - `WandererKills.Core.Error` → `WandererKills.Infrastructure.Error`
+  - `WandererKills.Core.Behaviours` → `WandererKills.Support.Behaviours`
+  - `WandererKills.Core.Error` → `WandererKills.Support.Error`
   """
 
   # HTTP Module Aliases (consolidated)
@@ -77,9 +77,9 @@ defmodule WandererKills.Core do
   defmodule BatchProcessor do
     @moduledoc false
     defdelegate process_parallel(items, process_fn, opts \\ []),
-      to: WandererKills.Infrastructure.BatchProcessor
+      to: WandererKills.Support.BatchProcessor
 
-    defdelegate await_tasks(tasks, opts \\ []), to: WandererKills.Infrastructure.BatchProcessor
+    defdelegate await_tasks(tasks, opts \\ []), to: WandererKills.Support.BatchProcessor
   end
 
   defmodule CSV do
@@ -111,20 +111,19 @@ defmodule WandererKills.Core do
 
   defmodule Retry do
     @moduledoc false
-    defdelegate retry_with_backoff(fun, opts \\ []), to: WandererKills.Infrastructure.Retry
-    defdelegate retriable_http_error?(reason), to: WandererKills.Infrastructure.Retry
-    defdelegate retriable_error?(reason), to: WandererKills.Infrastructure.Retry
-    defdelegate retry_http_operation(fun, opts \\ []), to: WandererKills.Infrastructure.Retry
+    defdelegate retry_with_backoff(fun, opts \\ []), to: WandererKills.Support.Retry
+    defdelegate retriable_http_error?(reason), to: WandererKills.Support.Retry
+    defdelegate retriable_error?(reason), to: WandererKills.Support.Retry
+    defdelegate retry_http_operation(fun, opts \\ []), to: WandererKills.Support.Retry
   end
 
   defmodule Clock do
     @moduledoc false
-    defdelegate now(), to: WandererKills.Infrastructure.Clock
-    defdelegate system_time(unit), to: WandererKills.Infrastructure.Clock
-    defdelegate now_iso8601(), to: WandererKills.Infrastructure.Clock
-    defdelegate now_milliseconds(), to: WandererKills.Infrastructure.Clock
-    defdelegate hours_ago(hours), to: WandererKills.Infrastructure.Clock
-    defdelegate seconds_ago(seconds), to: WandererKills.Infrastructure.Clock
+    defdelegate now(), to: WandererKills.Support.Clock
+    defdelegate now_iso8601(), to: WandererKills.Support.Clock
+    defdelegate now_milliseconds(), to: WandererKills.Support.Clock
+    defdelegate hours_ago(hours), to: WandererKills.Support.Clock
+    defdelegate seconds_ago(seconds), to: WandererKills.Support.Clock
   end
 
   defmodule Constants do
@@ -139,33 +138,33 @@ defmodule WandererKills.Core do
   defmodule Error do
     @moduledoc false
     defdelegate esi_error(type, message, retryable \\ false, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate zkb_error(type, message, retryable \\ false, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate http_error(type, message, retryable \\ false, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate validation_error(type, message, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate parsing_error(type, message, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate cache_error(type, message, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate killmail_error(type, message, retryable \\ false, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate enrichment_error(type, message, retryable \\ false, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate ship_types_error(type, message, retryable \\ false, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
 
     defdelegate not_found_error(message, details \\ nil),
-      to: WandererKills.Infrastructure.Error
+      to: WandererKills.Support.Error
   end
 end

@@ -6,6 +6,7 @@ defmodule WandererKillsWeb.KillsController do
   and kill counts as specified in the WandererKills API interface.
   """
 
+  use Phoenix.Controller, namespace: WandererKillsWeb
   import WandererKillsWeb.Api.Helpers
   require Logger
   alias WandererKills.Client

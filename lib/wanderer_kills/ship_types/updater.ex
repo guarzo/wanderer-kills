@@ -35,7 +35,7 @@ defmodule WandererKills.ShipTypes.Updater do
 
   require Logger
   alias WandererKills.ESI.DataFetcher, as: EsiSource
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Support.Error
   alias WandererKills.ShipTypes.CSV
 
   # ============================================================================

@@ -1,4 +1,4 @@
-defmodule WandererKills.Killmails.Coordinator do
+defmodule WandererKills.Killmails.Pipeline.Coordinator do
   @moduledoc """
   Main parser coordinator that handles the parsing pipeline.
 
@@ -55,8 +55,8 @@ defmodule WandererKills.Killmails.Coordinator do
   """
 
   require Logger
-  alias WandererKills.Infrastructure.Error
-  alias WandererKills.Killmails.Parser
+  alias WandererKills.Support.Error
+  alias WandererKills.Killmails.Pipeline.Parser
   alias WandererKills.Killmails.Store
 
   @type killmail :: map()
@@ -237,7 +237,7 @@ defmodule WandererKills.Killmails.Coordinator do
 
   @spec enrich_killmail(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
   defp enrich_killmail(killmail) do
-    WandererKills.Killmails.Enricher.enrich_killmail(killmail)
+    WandererKills.Killmails.Pipeline.Enricher.enrich_killmail(killmail)
   end
 
   @doc """
@@ -383,7 +383,7 @@ defmodule WandererKills.Killmails.Coordinator do
 
     case Parser.parse_partial_killmail(raw_killmail, cutoff_time) do
       {:ok, parsed} when enrich ->
-        case WandererKills.Killmails.Enricher.enrich_killmail(parsed) do
+        case WandererKills.Killmails.Pipeline.Enricher.enrich_killmail(parsed) do
           {:ok, enriched} -> {:ok, enriched}
           # Fall back to basic data
           {:error, _reason} -> {:ok, parsed}
@@ -489,7 +489,7 @@ defmodule WandererKills.Killmails.Coordinator do
     enriched =
       parsed_killmails
       |> Enum.map(fn killmail ->
-        case WandererKills.Killmails.Enricher.enrich_killmail(killmail) do
+        case WandererKills.Killmails.Pipeline.Enricher.enrich_killmail(killmail) do
           {:ok, enriched} ->
             enriched
 

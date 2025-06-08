@@ -1,11 +1,11 @@
-defmodule WandererKills.Behaviours.ESIClient do
+defmodule WandererKills.ESI.ClientBehaviour do
   @moduledoc """
   Behaviour for ESI (EVE Swagger Interface) client implementations.
 
   This behaviour standardizes interactions with the EVE Online ESI API.
   """
 
-  alias WandererKills.Infrastructure.Error
+  alias WandererKills.Support.Error
 
   @type entity_id :: pos_integer()
   @type entity_data :: map()

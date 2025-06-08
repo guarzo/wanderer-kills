@@ -36,10 +36,7 @@ defmodule WandererKills.Application do
          cache_children() ++
          [
            WandererKills.Observability.Monitoring,
-           {Plug.Cowboy,
-            scheme: :http,
-            plug: WandererKillsWeb.Api,
-            options: [port: Config.app().port, ip: {0, 0, 0, 0}]},
+           WandererKillsWeb.Endpoint,
            {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
          ])
       |> maybe_preloader()

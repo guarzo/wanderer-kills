@@ -17,6 +17,7 @@ defmodule WandererKills.MixProject do
       # Coverage configuration
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
+        test: :test,
         coveralls: :test,
         "coveralls.detail": :test,
         "coveralls.post": :test,
@@ -44,7 +45,9 @@ defmodule WandererKills.MixProject do
 
   defp deps do
     [
-      # HTTP server and routing
+      # Phoenix framework
+      {:phoenix, "~> 1.7.14"},
+      {:phoenix_html, "~> 4.1"},
       {:plug_cowboy, "~> 2.7"},
 
       # JSON parsing
@@ -87,7 +90,6 @@ defmodule WandererKills.MixProject do
 
   defp aliases do
     [
-      test: ["test"],
       check: [
         "format --check-formatted",
         "credo --strict",

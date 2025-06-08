@@ -1,4 +1,4 @@
-defmodule WandererKills.Infrastructure.BatchProcessor do
+defmodule WandererKills.Support.BatchProcessor do
   @moduledoc """
   Unified batch processing module for handling parallel operations.
 
