@@ -256,19 +256,13 @@ defmodule WandererKills.Cache.SystemCache do
 
     # Extract killmail IDs and cache individual killmails
     killmail_ids =
-      killmails
-      |> Enum.map(fn killmail ->
-        killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, "killID")
-
-        if killmail_id do
-          # Cache the individual killmail
-          Helper.put("killmails", to_string(killmail_id), killmail)
-          killmail_id
-        else
-          nil
-        end
-      end)
-      |> Enum.filter(&(&1 != nil))
+      for killmail <- killmails,
+          killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, "killID"),
+          not is_nil(killmail_id) do
+        # Cache the individual killmail
+        Helper.put("killmails", to_string(killmail_id), killmail)
+        killmail_id
+      end
 
     # Add each killmail ID to system's killmail list
     Enum.each(killmail_ids, fn killmail_id ->

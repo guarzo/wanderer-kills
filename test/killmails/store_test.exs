@@ -1,7 +1,7 @@
 defmodule WandererKills.Killmails.StoreTest do
   use WandererKills.TestCase
 
-  alias WandererKills.KillStore
+  alias WandererKills.App.KillStore
   alias WandererKills.TestHelpers
 
   @system_id_1 30_000_142

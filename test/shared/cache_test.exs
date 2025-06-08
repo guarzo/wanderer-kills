@@ -43,8 +43,8 @@ defmodule WandererKills.CacheTest do
       assert 456 in killmail_ids
     end
 
-    test "returns error for system with no killmails" do
-      assert {:error, _} = Helper.system_get_killmails(999)
+    test "returns empty list for system with no killmails" do
+      assert {:ok, []} = Helper.system_get_killmails(999)
     end
 
     test "can manage system killmails" do

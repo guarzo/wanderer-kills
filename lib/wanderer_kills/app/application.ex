@@ -1,6 +1,6 @@
 # lib/wanderer_kills/application.ex
 
-defmodule WandererKills.Application do
+defmodule WandererKills.App.Application do
   @moduledoc """
   OTP Application entry point for WandererKills.
 
@@ -21,7 +21,7 @@ defmodule WandererKills.Application do
   @impl true
   def start(_type, _args) do
     # 1) Initialize ETS for our KillStore
-    WandererKills.KillStore.init_tables!()
+    WandererKills.App.KillStore.init_tables!()
 
     # 2) Attach telemetry handlers
     WandererKills.Observability.Telemetry.attach_handlers()

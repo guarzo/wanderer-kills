@@ -12,6 +12,7 @@ defmodule WandererKills.SubscriptionManager do
   require Logger
   alias WandererKills.Types
   alias WandererKills.Cache.{SystemCache, KillmailCache}
+  alias WandererKills.Support.PubSubTopics
 
   @type subscription_id :: String.t()
   @type subscriber_id :: String.t()
@@ -353,14 +354,14 @@ defmodule WandererKills.SubscriptionManager do
     })
 
     # System-specific updates
-    Phoenix.PubSub.broadcast(pubsub_name, "zkb:system:#{system_id}", %{
+    Phoenix.PubSub.broadcast(pubsub_name, PubSubTopics.system_topic(system_id), %{
       type: type,
       solar_system_id: system_id,
       kills: kills,
       timestamp: timestamp
     })
 
-    Phoenix.PubSub.broadcast(pubsub_name, "zkb:system:#{system_id}:detailed", %{
+    Phoenix.PubSub.broadcast(pubsub_name, PubSubTopics.system_detailed_topic(system_id), %{
       type: type,
       solar_system_id: system_id,
       kills: kills,
@@ -380,7 +381,7 @@ defmodule WandererKills.SubscriptionManager do
     })
 
     # System-specific updates
-    Phoenix.PubSub.broadcast(pubsub_name, "zkb:system:#{system_id}", %{
+    Phoenix.PubSub.broadcast(pubsub_name, PubSubTopics.system_topic(system_id), %{
       type: :kill_count_update,
       solar_system_id: system_id,
       kills: count,

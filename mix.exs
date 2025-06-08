@@ -35,7 +35,7 @@ defmodule WandererKills.MixProject do
         :logger,
         :telemetry_poller
       ],
-      mod: {WandererKills.Application, []}
+      mod: {WandererKills.App.Application, []}
     ]
   end
 

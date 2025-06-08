@@ -30,6 +30,11 @@ defmodule WandererKills.Cache.Helper do
   define_entity_cache("ship_types", :ship_type)
   define_entity_cache("systems", :system)
 
+  # Define system-specific cache operations using the new macros
+  # Note: system_add_killmail is manually defined below for better concurrency
+  define_system_cache(:kill_count, count_type: true, default_value: 0)
+  define_system_cache(:last_fetch, timestamp_type: true)
+
   @doc """
   Get a value from the cache using a namespaced key.
 
@@ -166,41 +171,119 @@ defmodule WandererKills.Cache.Helper do
   end
 
   @doc """
-  System-specific complex cache operations.
+  Gets killmails for a system.
   """
   def system_get_killmails(system_id) do
     case get("systems", "killmails:#{system_id}") do
-      {:ok, nil} ->
-        {:error, :not_found}
-
-      {:ok, killmail_ids} when is_list(killmail_ids) ->
-        {:ok, killmail_ids}
-
-      {:ok, _invalid_data} ->
-        # Clean up corrupted data
-        delete("systems", "killmails:#{system_id}")
-        {:error, :invalid_data}
-
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, nil} -> {:ok, []}
+      {:ok, killmails} when is_list(killmails) -> {:ok, killmails}
+      {:ok, _invalid} -> {:ok, []}
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  def system_put_killmails(system_id, killmail_ids) when is_list(killmail_ids) do
-    put("systems", "killmails:#{system_id}", killmail_ids)
+  @doc """
+  Puts killmails for a system.
+  """
+  def system_put_killmails(system_id, killmails) when is_list(killmails) do
+    put("systems", "killmails:#{system_id}", killmails)
   end
 
+  @doc """
+  Gets cached killmails for a system (enriched killmail data).
+  """
+  def system_get_cached_killmails(system_id) do
+    case get("systems", "cached_killmails:#{system_id}") do
+      {:ok, nil} -> {:ok, []}
+      {:ok, killmails} when is_list(killmails) -> {:ok, killmails}
+      {:ok, _invalid} -> {:ok, []}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Puts cached killmails for a system (enriched killmail data).
+  """
+  def system_put_cached_killmails(system_id, killmails) when is_list(killmails) do
+    put("systems", "cached_killmails:#{system_id}", killmails)
+  end
+
+  @doc """
+  Alias for system_last_fetch_recent?/1 for backward compatibility - returns boolean directly.
+  """
+  def system_recently_fetched?(system_id) do
+    case system_last_fetch_recent?(system_id) do
+      {:ok, result} -> result
+    end
+  end
+
+  @doc """
+  Alias for system_last_fetch_recent?/2 for backward compatibility - returns {:ok, boolean}.
+  """
+  def system_recently_fetched?(system_id, within_seconds) do
+    system_last_fetch_recent?(system_id, within_seconds)
+  end
+
+  @doc """
+  Alias for system_mark_last_fetch/1 for backward compatibility.
+  """
+  def system_set_fetch_timestamp(system_id, timestamp) do
+    # Convert DateTime to integer seconds if needed
+    timestamp_seconds =
+      case timestamp do
+        %DateTime{} -> DateTime.to_unix(timestamp)
+        unix_seconds when is_integer(unix_seconds) -> unix_seconds
+        # fallback to current time
+        _ -> System.system_time(:second)
+      end
+
+    case put("systems", "last_fetch:#{system_id}", timestamp_seconds) do
+      {:ok, true} -> {:ok, :set}
+      error -> error
+    end
+  end
+
+  @doc """
+  Alias for system_get_last_fetch/1 for backward compatibility.
+  Returns error when timestamp doesn't exist (unlike the macro version).
+  """
+  def system_get_fetch_timestamp(system_id) do
+    case get("systems", "last_fetch:#{system_id}") do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, timestamp} when is_integer(timestamp) -> {:ok, timestamp}
+      {:ok, _invalid} -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Checks if a system is active.
+  """
+  def system_is_active?(system_id) do
+    case get("systems", "active:#{system_id}") do
+      {:ok, nil} -> {:ok, false}
+      {:ok, _timestamp} -> {:ok, true}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Adds a killmail to a system's killmail list.
+
+  Uses read-modify-write pattern for consistency with existing test expectations.
+  """
   def system_add_killmail(system_id, killmail_id) do
     case system_get_killmails(system_id) do
-      {:ok, existing_ids} ->
-        if killmail_id in existing_ids do
+      {:ok, existing_killmails} ->
+        if killmail_id in existing_killmails do
           {:ok, true}
         else
-          new_ids = [killmail_id | existing_ids]
-          system_put_killmails(system_id, new_ids)
+          new_killmails = [killmail_id | existing_killmails]
+          system_put_killmails(system_id, new_killmails)
         end
 
       {:error, :not_found} ->
+        # No killmails exist yet, create new list
         system_put_killmails(system_id, [killmail_id])
 
       {:error, reason} ->
@@ -208,101 +291,58 @@ defmodule WandererKills.Cache.Helper do
     end
   end
 
-  @doc """
-  Gets the kill count for a system.
-  """
-  def system_get_kill_count(system_id) do
-    case get("systems", "kill_count:#{system_id}") do
-      {:ok, nil} -> {:ok, 0}
-      {:ok, count} when is_integer(count) -> {:ok, count}
-      # Clean up corrupted data
-      {:ok, _invalid} -> {:ok, 0}
-      {:error, _reason} -> {:ok, 0}
-    end
-  end
-
-  @doc """
-  Sets the kill count for a system.
-  """
-  def system_put_kill_count(system_id, count) when is_integer(count) do
-    put("systems", "kill_count:#{system_id}", count)
-  end
-
-  @doc """
-  Increments the kill count for a system.
-  """
-  def system_increment_kill_count(system_id) do
-    case system_get_kill_count(system_id) do
-      {:ok, current_count} ->
-        new_count = current_count + 1
-        system_put_kill_count(system_id, new_count)
-        {:ok, new_count}
-    end
-  end
-
-  @doc """
-  Gets active systems list.
-  """
-  def system_get_active_systems do
-    case get("systems", "active_list") do
-      {:ok, nil} -> {:ok, []}
-      {:ok, systems} when is_list(systems) -> {:ok, systems}
-      # Clean up corrupted data
-      {:ok, _invalid} -> {:ok, []}
-      {:error, _reason} -> {:ok, []}
-    end
-  end
+  # System-specific functions that use the macro-generated cache operations
 
   @doc """
   Adds a system to the active systems list.
   """
   def system_add_active(system_id) do
-    case system_get_active_systems() do
-      {:ok, systems} ->
-        if system_id in systems do
-          {:ok, true}
-        else
-          new_systems = [system_id | systems]
-          put("systems", "active_list", new_systems)
-        end
-    end
-  end
-
-  @doc """
-  Checks if a system was recently fetched.
-  """
-  def system_recently_fetched?(system_id) do
-    case get("systems", "last_fetch:#{system_id}") do
-      {:ok, nil} ->
-        false
-
-      {:ok, timestamp} when is_integer(timestamp) ->
-        current_time = System.system_time(:second)
-        # Convert minutes to seconds
-        threshold = Config.cache().recent_fetch_threshold * 60
-        current_time - timestamp < threshold
-
-      {:ok, _invalid} ->
-        false
-
-      {:error, _reason} ->
-        false
-    end
-  end
-
-  @doc """
-  Marks a system as recently fetched.
-  """
-  def system_mark_fetched(system_id) do
     timestamp = System.system_time(:second)
-    put("systems", "last_fetch:#{system_id}", timestamp)
+    put("systems", "active:#{system_id}", timestamp)
   end
 
   @doc """
-  Caches killmails for a system.
+  Gets all active systems.
   """
-  def cache_killmails_for_system(system_id, killmails) when is_list(killmails) do
-    put("systems", "cached_killmails:#{system_id}", killmails)
+  def system_get_active_systems do
+    try do
+      # Use Cachex.keys to get all keys, then filter for active systems
+      case Cachex.keys(@cache_name) do
+        {:ok, keys} ->
+          system_ids =
+            keys
+            |> Enum.filter(fn key ->
+              # Filter for keys that match "systems:active:*" pattern
+              String.starts_with?(key, "systems:active:")
+            end)
+            |> Enum.map(&extract_system_id_from_active_key/1)
+            |> Enum.reject(&is_nil/1)
+            |> Enum.sort()
+
+          {:ok, system_ids}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    rescue
+      error ->
+        {:error, error}
+    end
+  end
+
+  # Helper function to extract system ID from cache key
+  defp extract_system_id_from_active_key(key) do
+    # Extract system_id from "systems:active:12345" format
+    case String.split(key, ":") do
+      ["systems", "active", system_id_str] ->
+        case Integer.parse(system_id_str) do
+          {system_id, ""} -> system_id
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
   end
 
   @doc """
@@ -335,64 +375,6 @@ defmodule WandererKills.Cache.Helper do
   """
   def killmail_delete(killmail_id) do
     delete("killmails", "data:#{killmail_id}")
-  end
-
-  @doc """
-  Checks if a system is in the active systems list.
-  """
-  def system_is_active?(system_id) do
-    case system_get_active_systems() do
-      {:ok, systems} ->
-        {:ok, system_id in systems}
-    end
-  end
-
-  @doc """
-  Gets the last fetch timestamp for a system.
-  """
-  def system_get_fetch_timestamp(system_id) do
-    case get("systems", "last_fetch:#{system_id}") do
-      {:ok, nil} -> {:error, :not_found}
-      {:ok, timestamp} when is_integer(timestamp) -> {:ok, timestamp}
-      {:ok, _invalid} -> {:error, :invalid_data}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc """
-  Sets the last fetch timestamp for a system.
-  """
-  def system_set_fetch_timestamp(system_id, %DateTime{} = timestamp) do
-    system_set_fetch_timestamp(system_id, DateTime.to_unix(timestamp))
-  end
-
-  def system_set_fetch_timestamp(system_id, timestamp) when is_integer(timestamp) do
-    case put("systems", "last_fetch:#{system_id}", timestamp) do
-      {:ok, _} -> {:ok, :set}
-      error -> error
-    end
-  end
-
-  @doc """
-  Checks if a system was recently fetched within a custom threshold.
-  """
-  def system_recently_fetched?(system_id, threshold_minutes) do
-    case get("systems", "last_fetch:#{system_id}") do
-      {:ok, nil} ->
-        {:ok, false}
-
-      {:ok, timestamp} when is_integer(timestamp) ->
-        current_time = System.system_time(:second)
-        threshold_seconds = threshold_minutes * 60
-        recently_fetched = current_time - timestamp < threshold_seconds
-        {:ok, recently_fetched}
-
-      {:ok, _invalid} ->
-        {:ok, false}
-
-      {:error, _reason} ->
-        {:ok, false}
-    end
   end
 
   # ============================================================================

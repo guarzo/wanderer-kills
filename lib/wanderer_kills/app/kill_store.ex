@@ -1,4 +1,4 @@
-defmodule WandererKills.KillStore do
+defmodule WandererKills.App.KillStore do
   @moduledoc """
   Simplified ETS-backed killmail storage with pattern-matching query support.
 

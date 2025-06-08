@@ -281,15 +281,29 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   defp subscribe_to_systems(systems) do
     Enum.each(systems, fn system_id ->
-      Phoenix.PubSub.subscribe(WandererKills.PubSub, "zkb:system:#{system_id}")
-      Phoenix.PubSub.subscribe(WandererKills.PubSub, "zkb:system:#{system_id}:detailed")
+      Phoenix.PubSub.subscribe(
+        WandererKills.PubSub,
+        WandererKills.Support.PubSubTopics.system_topic(system_id)
+      )
+
+      Phoenix.PubSub.subscribe(
+        WandererKills.PubSub,
+        WandererKills.Support.PubSubTopics.system_detailed_topic(system_id)
+      )
     end)
   end
 
   defp unsubscribe_from_systems(systems) do
     Enum.each(systems, fn system_id ->
-      Phoenix.PubSub.unsubscribe(WandererKills.PubSub, "zkb:system:#{system_id}")
-      Phoenix.PubSub.unsubscribe(WandererKills.PubSub, "zkb:system:#{system_id}:detailed")
+      Phoenix.PubSub.unsubscribe(
+        WandererKills.PubSub,
+        WandererKills.Support.PubSubTopics.system_topic(system_id)
+      )
+
+      Phoenix.PubSub.unsubscribe(
+        WandererKills.PubSub,
+        WandererKills.Support.PubSubTopics.system_detailed_topic(system_id)
+      )
     end)
   end
 end

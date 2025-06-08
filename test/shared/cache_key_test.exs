@@ -31,7 +31,7 @@ defmodule WandererKills.CacheKeyTest do
       # Note: get_active_systems() has streaming issues in test environment
 
       # No killmails initially
-      assert {:error, _} = Helper.system_get_killmails(456)
+      assert {:ok, []} = Helper.system_get_killmails(456)
       assert {:ok, true} = Helper.system_add_killmail(456, 123)
       assert {:ok, [123]} = Helper.system_get_killmails(456)
 

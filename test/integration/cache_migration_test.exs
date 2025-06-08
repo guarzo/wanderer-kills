@@ -98,7 +98,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       killmail_ids = [12_345, 67_890, 54_321]
 
       # Test empty system initially - should return not found error
-      assert {:error, _} = Helper.system_get_killmails(system_id)
+      assert {:ok, []} = Helper.system_get_killmails(system_id)
 
       # Add killmails to system
       Enum.each(killmail_ids, fn killmail_id ->
@@ -296,7 +296,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       # Test with non-existent valid IDs instead
       assert {:error, _} = Helper.character_get(999_999_999)
       assert {:error, _} = Helper.ship_type_get(999_999_999)
-      assert {:error, _} = Helper.system_get_killmails(999_999_999)
+      assert {:ok, []} = Helper.system_get_killmails(999_999_999)
     end
 
     test "fallback function errors are handled correctly" do
