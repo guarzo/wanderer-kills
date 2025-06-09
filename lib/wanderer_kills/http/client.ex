@@ -44,10 +44,10 @@ defmodule WandererKills.Http.Client do
   """
 
   require Logger
+  import WandererKills.Support.Logger
   alias WandererKills.Support.Error.{ConnectionError, TimeoutError, RateLimitError}
-  alias WandererKills.Config
   alias WandererKills.Support.{Error, Retry}
-  alias WandererKills.Http.ClientProvider
+  alias WandererKills.Http.{ClientProvider, Base}
   alias WandererKills.Observability.Telemetry
 
   @type url :: String.t()
@@ -243,41 +243,15 @@ defmodule WandererKills.Http.Client do
   ```
   """
   @spec handle_status_code(integer(), map()) :: {:ok, map()} | {:error, term()}
-  def handle_status_code(status, resp \\ %{})
-
-  # Success status codes (200-299)
-  def handle_status_code(status, resp) when status >= 200 and status < 300 do
-    {:ok, resp}
-  end
-
-  # Not found
-  def handle_status_code(404, _resp) do
-    {:error, :not_found}
-  end
-
-  # Rate limited
-  def handle_status_code(429, _resp) do
-    {:error, :rate_limited}
-  end
-
-  # Retryable client errors (400-499, excluding 404 and 429)
-  def handle_status_code(status, _resp)
-      when status >= 400 and status < 500 and status not in [404, 429] do
-    {:error, "HTTP #{status}"}
-  end
-
-  # Server errors (500-599) - typically retryable
-  def handle_status_code(status, _resp) when status >= 500 and status < 600 do
-    {:error, "HTTP #{status}"}
-  end
-
-  # Any other status code
-  def handle_status_code(status, _resp) do
-    {:error, "HTTP #{status}"}
+  def handle_status_code(status, resp \\ %{}) do
+    case Base.map_status_code(status) do
+      :ok -> {:ok, resp}
+      error -> error
+    end
   end
 
   @spec retriable_error?(term()) :: boolean()
-  def retriable_error?(error), do: Retry.retriable_http_error?(error)
+  def retriable_error?(error), do: Base.retryable_error?(error)
 
   # ============================================================================
   # Consolidated Utility Functions (from Http.Util)
@@ -294,7 +268,7 @@ defmodule WandererKills.Http.Client do
     operation = Keyword.get(opts, :operation, :http_request)
     request_opts = ClientProvider.build_request_opts(opts)
 
-    Logger.debug("Starting HTTP request",
+    log_debug("Starting HTTP request",
       url: url,
       service: service,
       operation: operation
@@ -302,7 +276,7 @@ defmodule WandererKills.Http.Client do
 
     case get_with_rate_limit(url, request_opts) do
       {:ok, response} ->
-        Logger.debug("HTTP request successful",
+        log_debug("HTTP request successful",
           url: url,
           service: service,
           operation: operation,
@@ -312,11 +286,11 @@ defmodule WandererKills.Http.Client do
         {:ok, response}
 
       {:error, reason} ->
-        Logger.error("HTTP request failed",
+        log_error("HTTP request failed",
           url: url,
           service: service,
           operation: operation,
-          error: inspect(reason)
+          error: reason
         )
 
         {:error, reason}
@@ -329,34 +303,11 @@ defmodule WandererKills.Http.Client do
   Provides consistent JSON parsing across all HTTP clients.
   """
   @spec parse_json_response(map()) :: {:ok, term()} | {:error, term()}
-  def parse_json_response(%{status: 200, body: body}) when is_map(body) or is_list(body) do
-    {:ok, body}
-  end
-
-  def parse_json_response(%{status: 200, body: body}) when is_binary(body) do
-    case Jason.decode(body) do
-      {:ok, parsed} ->
-        {:ok, parsed}
-
-      {:error, reason} ->
-        {:error, Error.parsing_error(:invalid_json, "Invalid JSON response", %{reason: reason})}
+  def parse_json_response(%{status: status, body: body}) do
+    case Base.map_status_code(status) do
+      :ok -> Base.parse_json(body)
+      error -> error
     end
-  end
-
-  def parse_json_response(%{status: 404}) do
-    {:error, :not_found}
-  end
-
-  def parse_json_response(%{status: 429}) do
-    {:error, :rate_limited}
-  end
-
-  def parse_json_response(%{status: status}) when status >= 500 do
-    {:error, Error.http_error(:server_error, "Server error", false, %{status: status})}
-  end
-
-  def parse_json_response(%{status: status}) do
-    {:error, Error.http_error(:http_error, "HTTP error", false, %{status: status})}
   end
 
   @doc """
@@ -364,13 +315,10 @@ defmodule WandererKills.Http.Client do
   """
   @spec retry_operation((-> term()), atom(), keyword()) :: {:ok, term()} | {:error, term()}
   def retry_operation(fun, service, opts \\ []) do
+    retry_opts = Base.retry_options(service, opts)
     operation_name = Keyword.get(opts, :operation_name, "#{service} request")
-    max_retries = Keyword.get(opts, :max_retries, Config.retry().http_max_retries)
-
-    Retry.retry_http_operation(fun,
-      operation_name: operation_name,
-      max_retries: max_retries
-    )
+    
+    Retry.retry_http_operation(fun, Keyword.put(retry_opts, :operation_name, operation_name))
   end
 
   @doc """

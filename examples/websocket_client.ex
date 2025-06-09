@@ -11,7 +11,8 @@ defmodule WandererKills.WebSocketClient do
       # Start the client
       {:ok, pid} = WandererKills.WebSocketClient.start_link([
         server_url: "ws://localhost:4004",
-        systems: [30000142, 30002187]  # Jita, Amarr
+        systems: [30000142, 30002187],  # Jita, Amarr
+        client_identifier: "my_app"      # Optional: helps identify your connection in server logs
       ])
 
       # Subscribe to additional systems
@@ -43,6 +44,7 @@ defmodule WandererKills.WebSocketClient do
 
     * `:server_url` - WebSocket server URL (required)
     * `:systems` - Initial systems to subscribe to (optional)
+    * `:client_identifier` - Client identifier for debugging (optional, max 32 chars)
     * `:name` - Process name (optional)
   """
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -89,6 +91,7 @@ defmodule WandererKills.WebSocketClient do
   def init(opts) do
     server_url = Keyword.fetch!(opts, :server_url)
     initial_systems = Keyword.get(opts, :systems, [])
+    client_identifier = Keyword.get(opts, :client_identifier, nil)
 
     # Convert HTTP URL to WebSocket URL if needed
     websocket_url =
@@ -103,12 +106,14 @@ defmodule WandererKills.WebSocketClient do
       subscribed_systems: MapSet.new(),
       initial_systems: initial_systems,
       subscription_id: nil,
-      connected: false
+      connected: false,
+      client_identifier: client_identifier
     }
 
     Logger.info("🚀 Starting WandererKills WebSocket client",
       server_url: websocket_url,
-      initial_systems: initial_systems
+      initial_systems: initial_systems,
+      client_identifier: client_identifier
     )
 
     # Connect asynchronously
@@ -286,9 +291,18 @@ defmodule WandererKills.WebSocketClient do
   defp connect_to_websocket(state) do
     url = "#{state.server_url}/socket/websocket"
 
+    params = %{vsn: "2.0.0"}
+    
+    # Add client identifier if provided
+    params = if state.client_identifier do
+      Map.put(params, :client_identifier, state.client_identifier)
+    else
+      params
+    end
+
     socket_opts = [
       url: url,
-      params: %{vsn: "2.0.0"}
+      params: params
     ]
 
     case GenSocketClient.start_link(__MODULE__, nil, socket_opts) do
@@ -421,6 +435,7 @@ defmodule WandererKills.WebSocketClient.Example do
     client_opts = [
       server_url: "ws://localhost:4004",
       systems: initial_systems,
+      client_identifier: "example_runner",  # Optional: helps identify this connection in logs
       name: :wanderer_websocket_client
     ]
 
@@ -517,6 +532,7 @@ defmodule WandererKills.WebSocketClient.Example do
     {:ok, pid} = WandererKills.WebSocketClient.start_link([
       server_url: "ws://localhost:4004",
       systems: [30000142, 30002187],  # Jita, Amarr
+      client_identifier: "simple_example",  # Optional: helps identify this connection in logs
       name: :simple_client
     ])
 
@@ -534,7 +550,11 @@ defmodule WandererKills.WebSocketClient.Example do
 
     Logger.info("🎧 Listening for real-time updates... (Ctrl+C to stop)")
 
-    # Keep running until stopped
-    Process.sleep(:infinity)
+    # Wait for termination signal
+    receive do
+      {:shutdown, reason} ->
+        Logger.info("🛑 Shutting down: #{inspect(reason)}")
+        :ok
+    end
   end
 end

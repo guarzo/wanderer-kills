@@ -1,8 +1,13 @@
 defmodule WandererKills.Killmails.StoreTest do
   use WandererKills.TestCase
+  use WandererKills.Test.SharedContexts
+  use WandererKills.Test.Tags
 
   alias WandererKills.App.KillStore
   alias WandererKills.TestHelpers
+
+  unit_test_tags()
+  @moduletag area: :killmail_storage
 
   @system_id_1 30_000_142
 
@@ -22,12 +27,7 @@ defmodule WandererKills.Killmails.StoreTest do
     "zkb" => %{"totalValue" => 2000}
   }
 
-  setup do
-    WandererKills.TestHelpers.clear_all_caches()
-    # Clear KillStore tables before each test
-    KillStore.clear()
-    :ok
-  end
+  setup [:with_clean_environment, :with_kill_store]
 
   describe "killmail operations" do
     test "can store and retrieve a killmail" do

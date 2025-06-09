@@ -29,13 +29,16 @@ defmodule WandererKills.App.Application do
     # 3) Build children list
     children =
       ([
+         WandererKills.App.EtsManager,
          {Task.Supervisor, name: WandererKills.TaskSupervisor},
          {Phoenix.PubSub, name: WandererKills.PubSub},
          {WandererKills.SubscriptionManager, [pubsub_name: WandererKills.PubSub]}
        ] ++
          cache_children() ++
          [
+           WandererKills.Observability.Metrics,
            WandererKills.Observability.Monitoring,
+           WandererKills.Observability.WebSocketStats,
            WandererKillsWeb.Endpoint,
            {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
          ])
@@ -80,7 +83,8 @@ defmodule WandererKills.App.Application do
       {WandererKills.Observability.Monitoring, :measure_http_requests, []},
       {WandererKills.Observability.Monitoring, :measure_cache_operations, []},
       {WandererKills.Observability.Monitoring, :measure_fetch_operations, []},
-      {WandererKills.Observability.Monitoring, :measure_system_resources, []}
+      {WandererKills.Observability.Monitoring, :measure_system_resources, []},
+      {WandererKills.Observability.WebSocketStats, :measure_websocket_metrics, []}
     ]
   end
 

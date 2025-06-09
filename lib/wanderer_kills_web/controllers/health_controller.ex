@@ -8,7 +8,7 @@ defmodule WandererKillsWeb.HealthController do
 
   use WandererKillsWeb, :controller
 
-  alias WandererKills.Observability.Monitoring
+  alias WandererKills.Observability.{Monitoring, Status}
 
   @doc """
   Simple ping endpoint for basic health checks.
@@ -46,18 +46,7 @@ defmodule WandererKillsWeb.HealthController do
   Status endpoint with detailed service information.
   """
   def status(conn, _params) do
-    subscriptions = WandererKills.SubscriptionManager.list_subscriptions()
-
-    response = %{
-      cache_stats: %{
-        status: "operational"
-      },
-      active_subscriptions: length(subscriptions),
-      websocket_connected: get_websocket_status(),
-      last_kill_received: get_last_kill_time(),
-      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-    }
-
+    response = Status.get_service_status()
     json(conn, response)
   end
 
@@ -81,17 +70,4 @@ defmodule WandererKillsWeb.HealthController do
     end
   end
 
-  # Private helper functions
-
-  defp get_websocket_status do
-    # This would integrate with your WebSocket supervision tree
-    # For now, return basic status
-    Process.whereis(WandererKillsWeb.Endpoint) != nil
-  end
-
-  defp get_last_kill_time do
-    # This would integrate with your kill tracking system
-    # For now, return nil
-    nil
-  end
 end

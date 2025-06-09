@@ -135,7 +135,7 @@ defmodule WandererKills.Preloader do
         step: :start
       )
 
-      case Helper.system_add_active(system_id) do
+      case Helper.add_active_system(system_id) do
         {:ok, true} ->
           Logger.info("System already in active list",
             system_id: system_id,
@@ -168,7 +168,7 @@ defmodule WandererKills.Preloader do
 
     @impl true
     def handle_cast(:run_expanded_pass, %{max_concurrency: _max} = state) do
-      case Helper.system_get_active_systems() do
+      case Helper.get_active_systems() do
         {:ok, systems} when is_list(systems) ->
           Logger.info("Starting preload pass for #{length(systems)} systems")
 
@@ -221,27 +221,20 @@ defmodule WandererKills.Preloader do
         max_concurrency: max_concurrency
       )
 
-      case Helper.system_get_active_systems() do
+      case Helper.get_active_systems() do
         {:ok, systems} when is_list(systems) and length(systems) > 0 ->
           Logger.info("Processing #{length(systems)} active systems")
 
           # Take only the limit number of systems for this pass
           systems_to_process = Enum.take(systems, limit)
 
-          # Process systems with limited concurrency
+          # Process systems with limited concurrency using Flow
           systems_to_process
-          |> Task.async_stream(
-            fn system_id -> preload_system(system_id, pass_type) end,
-            max_concurrency: max_concurrency,
-            timeout: 30_000,
-            on_timeout: :kill_task
-          )
-          |> Enum.each(fn
-            {:ok, result} ->
-              Logger.debug("System preload completed", result: result)
-
-            {:exit, reason} ->
-              Logger.warning("System preload task exited", reason: reason)
+          |> Flow.from_enumerable(max_demand: max_concurrency)
+          |> Flow.map(fn system_id -> preload_system(system_id, pass_type) end)
+          |> Flow.partition()
+          |> Enum.each(fn result ->
+            Logger.debug("System preload completed", result: result)
           end)
 
           Logger.info("Completed #{pass_type} preload pass")
@@ -301,7 +294,7 @@ defmodule WandererKills.Preloader do
             Enum.map(kills, fn kill -> Map.get(kill, "killID") || Map.get(kill, "killmail_id") end)
             |> Enum.filter(&(&1 != nil))
 
-          case Helper.system_put_killmails(system_id, killmail_ids) do
+          case Helper.put(:systems, "killmails:#{system_id}", killmail_ids) do
             {:ok, _} ->
               Logger.debug("Cached #{length(kills)} kills for system",
                 system_id: system_id,

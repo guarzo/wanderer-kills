@@ -39,8 +39,10 @@ class WandererKillsClient:
     async def connect(self) -> dict:
         """Connect to the WebSocket server and join the killmails channel."""
         try:
-            # Establish WebSocket connection
-            uri = f"{self.server_url}/socket/websocket?vsn=2.0.0"
+            # Establish WebSocket connection with optional client identifier
+            # The client_identifier helps with debugging and appears in server logs
+            client_id = "python_example_client"
+            uri = f"{self.server_url}/socket/websocket?vsn=2.0.0&client_identifier={client_id}"
             logger.info(f"Connecting to {uri}")
             
             self.websocket = await websockets.connect(uri)

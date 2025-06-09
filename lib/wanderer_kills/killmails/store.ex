@@ -79,11 +79,11 @@ defmodule WandererKills.Killmails.Store do
   @doc """
   Retrieves a killmail by ID.
   """
-  @spec get(kill_id()) :: {:ok, kill_data()} | :error
+  @spec get(kill_id()) :: {:ok, kill_data()} | {:error, WandererKills.Support.Error.t()}
   def get(kill_id) when is_integer(kill_id) do
     case :ets.lookup(@killmail_table, kill_id) do
       [{^kill_id, data}] -> {:ok, data}
-      [] -> :error
+      [] -> {:error, WandererKills.Support.Error.not_found_error("Killmail not found", %{kill_id: kill_id})}
     end
   end
 

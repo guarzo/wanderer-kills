@@ -12,7 +12,7 @@ defmodule WandererKills.RedisQ do
   use GenServer
   require Logger
 
-  alias WandererKills.Killmails.Pipeline.Coordinator
+  alias WandererKills.Killmails.UnifiedProcessor
   alias WandererKills.ESI.DataFetcher, as: EsiClient
   alias WandererKills.Support.Clock
   alias WandererKills.Http.Client, as: HttpClient
@@ -92,14 +92,18 @@ defmodule WandererKills.RedisQ do
       systems_active: MapSet.new()
     }
 
-    Logger.info("[RedisQ] Initialized with queue ID: #{queue_id}")
+    state = %State{queue_id: queue_id, backoff_ms: initial_backoff, stats: stats}
+    {:ok, state, {:continue, :start_polling}}
+  end
+
+  @impl true
+  def handle_continue(:start_polling, state) do
+    Logger.info("[RedisQ] Starting polling with queue ID: #{state.queue_id}")
     # Schedule the very first poll after the idle interval
     schedule_poll(Config.redisq().idle_interval_ms)
     # Schedule the first summary log
     schedule_summary_log()
-
-    state = %State{queue_id: queue_id, backoff_ms: initial_backoff, stats: stats}
-    {:ok, state}
+    {:noreply, state}
   end
 
   @impl true
@@ -203,7 +207,20 @@ defmodule WandererKills.RedisQ do
       stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
 
     if total_activity > 0 or stats.errors > 0 do
-      Logger.info("📊 REDISQ SUMMARY (#{duration}s):",
+      # Get websocket stats
+      ws_stats = WandererKillsWeb.KillmailChannel.get_stats()
+      
+      Logger.info(
+        "📊 REDISQ SUMMARY (#{duration}s): " <>
+        "Kills processed: #{stats.kills_received}, " <>
+        "Older kills: #{stats.kills_older}, " <>
+        "Skipped: #{stats.kills_skipped}, " <>
+        "Legacy: #{stats.legacy_kills}, " <>
+        "No-kill polls: #{stats.no_kills_count}, " <>
+        "Errors: #{stats.errors}, " <>
+        "Active systems: #{MapSet.size(stats.systems_active)}, " <>
+        "Total polls: #{total_activity + stats.no_kills_count + stats.errors}, " <>
+        "WS kills sent: #{ws_stats.total_kills_sent} (RT: #{ws_stats.kills_sent_realtime}, PL: #{ws_stats.kills_sent_preload})",
         kills_processed: stats.kills_received,
         kills_older: stats.kills_older,
         kills_skipped: stats.kills_skipped,
@@ -274,7 +291,8 @@ defmodule WandererKills.RedisQ do
       "[RedisQ] Processing new format killmail (cutoff: #{DateTime.to_iso8601(cutoff)})"
     )
 
-    case Coordinator.parse_full_and_store(killmail, %{"zkb" => zkb}, cutoff) do
+    merged = Map.merge(killmail, %{"zkb" => zkb})
+    case UnifiedProcessor.process_killmail(merged, cutoff) do
       {:ok, :kill_older} ->
         Logger.debug("[RedisQ] Kill is older than cutoff → skipping.")
         {:ok, :kill_older}
@@ -403,7 +421,7 @@ defmodule WandererKills.RedisQ do
 
   # Returns cutoff DateTime (e.g. "24 hours ago")
   defp get_cutoff_time do
-    Clock.hours_ago(24)
+    Clock.hours_ago(1)
   end
 
   defp handle_response(%{"package" => package}) do

@@ -11,8 +11,21 @@ defmodule WandererKills.SubscriptionManager do
   use GenServer
   require Logger
   alias WandererKills.Types
-  alias WandererKills.Cache.{SystemCache, KillmailCache}
   alias WandererKills.Support.PubSubTopics
+  alias WandererKills.Killmails.Preloader
+
+  defmodule State do
+    @moduledoc false
+    defstruct subscriptions: %{},
+              websocket_subscriptions: %{},
+              pubsub_name: nil
+
+    @type t :: %__MODULE__{
+            subscriptions: %{String.t() => map()},
+            websocket_subscriptions: %{String.t() => map()},
+            pubsub_name: atom()
+          }
+  end
 
   @type subscription_id :: String.t()
   @type subscriber_id :: String.t()
@@ -100,7 +113,7 @@ defmodule WandererKills.SubscriptionManager do
   def init(opts) do
     pubsub_name = Keyword.get(opts, :pubsub_name, WandererKills.PubSub)
 
-    state = %{
+    state = %State{
       subscriptions: %{},
       websocket_subscriptions: %{},
       pubsub_name: pubsub_name
@@ -124,7 +137,7 @@ defmodule WandererKills.SubscriptionManager do
         }
 
         new_subscriptions = Map.put(state.subscriptions, subscription_id, subscription)
-        new_state = %{state | subscriptions: new_subscriptions}
+        new_state = %State{state | subscriptions: new_subscriptions}
 
         Logger.info("Subscription created",
           subscriber_id: subscriber_id,
@@ -176,7 +189,7 @@ defmodule WandererKills.SubscriptionManager do
       Logger.warning("Unsubscribe failed: subscriber not found", subscriber_id: subscriber_id)
       {:reply, {:error, :not_found}, state}
     else
-      new_state = %{state | subscriptions: Map.new(remaining_subscriptions)}
+      new_state = %State{state | subscriptions: Map.new(remaining_subscriptions)}
       removed_count = length(removed_subscriptions)
 
       Logger.info("Subscription removed",
@@ -253,7 +266,7 @@ defmodule WandererKills.SubscriptionManager do
     new_websocket_subscriptions =
       Map.put(state.websocket_subscriptions, subscription.id, subscription)
 
-    new_state = %{state | websocket_subscriptions: new_websocket_subscriptions}
+    new_state = %State{state | websocket_subscriptions: new_websocket_subscriptions}
 
     Logger.debug("WebSocket subscription added",
       subscription_id: subscription.id,
@@ -279,7 +292,7 @@ defmodule WandererKills.SubscriptionManager do
         new_websocket_subscriptions =
           Map.put(state.websocket_subscriptions, subscription_id, updated_subscription)
 
-        new_state = %{state | websocket_subscriptions: new_websocket_subscriptions}
+        new_state = %State{state | websocket_subscriptions: new_websocket_subscriptions}
 
         Logger.debug("WebSocket subscription updated",
           subscription_id: subscription_id,
@@ -303,7 +316,7 @@ defmodule WandererKills.SubscriptionManager do
         new_websocket_subscriptions =
           Map.delete(state.websocket_subscriptions, subscription_id)
 
-        new_state = %{state | websocket_subscriptions: new_websocket_subscriptions}
+        new_state = %State{state | websocket_subscriptions: new_websocket_subscriptions}
 
         Logger.debug("WebSocket subscription removed",
           subscription_id: subscription_id
@@ -529,25 +542,15 @@ defmodule WandererKills.SubscriptionManager do
       limit: limit
     )
 
-    kills = get_kills_for_preload(system_id, limit, since_hours)
+    kills = Preloader.preload_kills_for_system(system_id, limit, since_hours)
     send_preload_kills_to_subscriber(subscription, system_id, kills)
   end
 
-  # Helper function to get kills for preload (cached or fresh)
-  defp get_kills_for_preload(system_id, limit, _since_hours) do
-    case SystemCache.get_killmails(system_id) do
-      {:ok, killmail_ids} when is_list(killmail_ids) ->
-        fetch_enriched_killmails(killmail_ids, limit)
-
-      {:error, _reason} ->
-        []
-    end
-  end
 
   # Helper function to send preload kills to subscriber
   defp send_preload_kills_to_subscriber(subscription, system_id, kills) do
     if length(kills) > 0 do
-      log_preload_summary(subscription, system_id, kills)
+      Preloader.log_preload_summary(%{subscriber_id: subscription.subscriber_id}, system_id, kills)
       broadcast_preload_kills(subscription, system_id, kills)
       length(kills)
     else
@@ -564,8 +567,8 @@ defmodule WandererKills.SubscriptionManager do
   defp log_broadcast_details(kills, system_id, interested_subscriptions) do
     if length(kills) > 0 do
       killmail_ids = Enum.map(kills, & &1["killmail_id"])
-      kill_times = extract_kill_times(kills)
-      enriched_count = count_enriched_kills(kills)
+      kill_times = Preloader.extract_kill_times(kills)
+      enriched_count = Preloader.count_enriched_kills(kills)
       subscriber_ids = Enum.map(interested_subscriptions, fn {_id, sub} -> sub.subscriber_id end)
 
       Logger.info("🚀 REAL-TIME BROADCAST: Sending kills to subscribers",
@@ -600,20 +603,7 @@ defmodule WandererKills.SubscriptionManager do
     )
   end
 
-  # Helper function to extract kill times
-  defp extract_kill_times(kills) do
-    Enum.map(kills, fn kill ->
-      kill["kill_time"] || kill["killmail_time"] || "unknown"
-    end)
-  end
 
-  # Helper function to count enriched kills
-  defp count_enriched_kills(kills) do
-    Enum.count(kills, fn kill ->
-      kill["victim"]["character_name"] != nil or
-        kill["attackers"] |> Enum.any?(&(&1["character_name"] != nil))
-    end)
-  end
 
   # Helper function to log when no subscribers exist
   defp log_no_subscribers_if_kills_exist(kills, system_id) do
@@ -625,40 +615,6 @@ defmodule WandererKills.SubscriptionManager do
     end
   end
 
-  # Helper function to log preload summary
-  defp log_preload_summary(subscription, system_id, kills) do
-    killmail_ids = Enum.map(kills, & &1["killmail_id"])
-    kill_times = extract_kill_times(kills)
-    enriched_count = count_enriched_kills(kills)
-
-    Logger.info("📦 PRELOAD SUMMARY: Sending kills to subscriber",
-      subscriber_id: subscription.subscriber_id,
-      system_id: system_id,
-      kill_count: length(kills),
-      killmail_ids: killmail_ids,
-      enriched_count: enriched_count,
-      unenriched_count: length(kills) - enriched_count,
-      kill_time_range: "#{List.first(kill_times)} to #{List.last(kill_times)}",
-      via_pubsub: true,
-      via_webhook: subscription.callback_url != nil
-    )
-
-    log_preload_sample_kill(kills)
-  end
-
-  # Helper function to log preload sample kill
-  defp log_preload_sample_kill(kills) do
-    sample_kill = List.first(kills)
-
-    Logger.info("📦 PRELOAD SAMPLE KILL DATA",
-      killmail_id: sample_kill["killmail_id"],
-      victim_character: sample_kill["victim"]["character_name"],
-      victim_corp: sample_kill["victim"]["corporation_name"],
-      attacker_count: length(sample_kill["attackers"] || []),
-      solar_system_id: sample_kill["solar_system_id"],
-      total_value: sample_kill["total_value"]
-    )
-  end
 
   # Helper function to broadcast preload kills
   defp broadcast_preload_kills(subscription, system_id, kills) do
@@ -671,19 +627,4 @@ defmodule WandererKills.SubscriptionManager do
     end
   end
 
-  # Helper function to fetch enriched killmails from cache
-  defp fetch_enriched_killmails(killmail_ids, limit) do
-    killmail_ids
-    |> Enum.take(limit)
-    |> Enum.map(&get_single_enriched_killmail/1)
-    |> Enum.filter(&(&1 != nil))
-  end
-
-  # Helper function to fetch a single enriched killmail from cache
-  defp get_single_enriched_killmail(killmail_id) do
-    case KillmailCache.get(killmail_id) do
-      {:ok, enriched_killmail} -> enriched_killmail
-      {:error, _reason} -> nil
-    end
-  end
 end

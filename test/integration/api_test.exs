@@ -1,17 +1,16 @@
 defmodule WandererKills.ApiTest do
   use ExUnit.Case, async: true
   use WandererKillsWeb.ConnCase
+  use WandererKills.Test.SharedContexts
+  use WandererKills.Test.Tags
   import Mox
 
   alias WandererKills.TestHelpers
 
-  setup do
-    WandererKills.TestHelpers.clear_all_caches()
-    TestHelpers.setup_http_mocks()
-    :ok
-  end
+  integration_test_tags()
+  @moduletag area: :api
 
-  setup :verify_on_exit!
+  setup [:with_clean_environment, :with_http_mocks]
 
   describe "GET /ping" do
     test "returns pong" do

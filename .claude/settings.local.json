@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(mix compile:*)",
+      "Bash(rm:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(mv:*)",
+      "Bash(mix deps.tree:*)",
+      "Bash(mix format:*)",
+      "Bash(awk:*)"
+    ],
+    "deny": []
+  }
+}

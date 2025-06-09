@@ -5,19 +5,20 @@ defmodule WandererKillsWeb.Api.Helpers do
 
   import Plug.Conn
   alias WandererKills.Types
+  alias WandererKills.Support.Error
 
   @doc """
   Parses an integer parameter from the request.
   Returns {:ok, integer} or {:error, :invalid_id}.
   """
-  @spec parse_integer_param(Plug.Conn.t(), String.t()) :: {:ok, integer()} | {:error, :invalid_id}
+  @spec parse_integer_param(Plug.Conn.t(), String.t()) :: {:ok, integer()} | {:error, Error.t()}
   def parse_integer_param(conn, param_name) do
     case Map.get(conn.params, param_name) do
       nil ->
-        {:error, :invalid_id}
+        {:error, Error.validation_error(:invalid_id, "Parameter #{param_name} is missing")}
 
       "" ->
-        {:error, :invalid_id}
+        {:error, Error.validation_error(:invalid_id, "Parameter #{param_name} is empty")}
 
       value when is_binary(value) ->
         case Integer.parse(value) do
@@ -29,14 +30,14 @@ defmodule WandererKillsWeb.Api.Helpers do
             {:ok, int}
 
           _ ->
-            {:error, :invalid_id}
+            {:error, Error.validation_error(:invalid_id, "Parameter #{param_name} is not a valid integer")}
         end
 
       value when is_integer(value) ->
         {:ok, value}
 
       _ ->
-        {:error, :invalid_id}
+        {:error, Error.validation_error(:invalid_id, "Parameter #{param_name} has invalid type")}
     end
   end
 
@@ -72,40 +73,40 @@ defmodule WandererKillsWeb.Api.Helpers do
   @doc """
   Validates and parses system_id parameter.
   """
-  @spec validate_system_id(String.t()) :: {:ok, integer()} | {:error, :invalid_format}
+  @spec validate_system_id(String.t()) :: {:ok, integer()} | {:error, Error.t()}
   def validate_system_id(system_id_str) when is_binary(system_id_str) do
     case Integer.parse(system_id_str) do
       {system_id, ""} when system_id > 0 ->
         {:ok, system_id}
 
       _ ->
-        {:error, :invalid_format}
+        {:error, Error.validation_error(:invalid_format, "System ID must be a positive integer")}
     end
   end
 
-  def validate_system_id(_), do: {:error, :invalid_format}
+  def validate_system_id(_), do: {:error, Error.validation_error(:invalid_format, "System ID must be a string")}
 
   @doc """
   Validates and parses killmail_id parameter.
   """
-  @spec validate_killmail_id(String.t()) :: {:ok, integer()} | {:error, :invalid_format}
+  @spec validate_killmail_id(String.t()) :: {:ok, integer()} | {:error, Error.t()}
   def validate_killmail_id(killmail_id_str) when is_binary(killmail_id_str) do
     case Integer.parse(killmail_id_str) do
       {killmail_id, ""} when killmail_id > 0 ->
         {:ok, killmail_id}
 
       _ ->
-        {:error, :invalid_format}
+        {:error, Error.validation_error(:invalid_format, "Killmail ID must be a positive integer")}
     end
   end
 
-  def validate_killmail_id(_), do: {:error, :invalid_format}
+  def validate_killmail_id(_), do: {:error, Error.validation_error(:invalid_format, "Killmail ID must be a string")}
 
   @doc """
   Validates and parses since_hours parameter.
   """
   @spec validate_since_hours(String.t() | integer()) ::
-          {:ok, integer()} | {:error, :invalid_format}
+          {:ok, integer()} | {:error, Error.t()}
   def validate_since_hours(since_hours) when is_integer(since_hours) and since_hours > 0 do
     {:ok, since_hours}
   end
@@ -116,17 +117,17 @@ defmodule WandererKillsWeb.Api.Helpers do
         {:ok, since_hours}
 
       _ ->
-        {:error, :invalid_format}
+        {:error, Error.validation_error(:invalid_format, "Since hours must be a positive integer")}
     end
   end
 
-  def validate_since_hours(_), do: {:error, :invalid_format}
+  def validate_since_hours(_), do: {:error, Error.validation_error(:invalid_format, "Since hours has invalid type")}
 
   @doc """
   Validates and parses limit parameter.
   """
   @spec validate_limit(String.t() | integer() | nil) ::
-          {:ok, integer()} | {:error, :invalid_format}
+          {:ok, integer()} | {:error, Error.t()}
   # default limit
   def validate_limit(nil), do: {:ok, 50}
 
@@ -140,46 +141,46 @@ defmodule WandererKillsWeb.Api.Helpers do
         {:ok, limit}
 
       _ ->
-        {:error, :invalid_format}
+        {:error, Error.validation_error(:invalid_format, "Limit must be between 1 and 1000")}
     end
   end
 
-  def validate_limit(_), do: {:error, :invalid_format}
+  def validate_limit(_), do: {:error, Error.validation_error(:invalid_format, "Limit has invalid type")}
 
   @doc """
   Validates system_ids array from request body.
   """
-  @spec validate_system_ids(list() | nil) :: {:ok, [integer()]} | {:error, :invalid_system_ids}
+  @spec validate_system_ids(list() | nil) :: {:ok, [integer()]} | {:error, Error.t()}
   def validate_system_ids(system_ids) when is_list(system_ids) do
     if Enum.all?(system_ids, &is_integer/1) and not Enum.empty?(system_ids) do
       {:ok, system_ids}
     else
-      {:error, :invalid_system_ids}
+      {:error, Error.validation_error(:invalid_system_ids, "System IDs must be a non-empty list of integers")}
     end
   end
 
-  def validate_system_ids(_), do: {:error, :invalid_system_ids}
+  def validate_system_ids(_), do: {:error, Error.validation_error(:invalid_system_ids, "System IDs must be a list")}
 
   @doc """
   Validates subscriber_id parameter.
   """
   @spec validate_subscriber_id(String.t() | nil) ::
-          {:ok, String.t()} | {:error, :invalid_subscriber_id}
+          {:ok, String.t()} | {:error, Error.t()}
   def validate_subscriber_id(subscriber_id) when is_binary(subscriber_id) do
     if String.trim(subscriber_id) != "" do
       {:ok, String.trim(subscriber_id)}
     else
-      {:error, :invalid_subscriber_id}
+      {:error, Error.validation_error(:invalid_subscriber_id, "Subscriber ID cannot be empty")}
     end
   end
 
-  def validate_subscriber_id(_), do: {:error, :invalid_subscriber_id}
+  def validate_subscriber_id(_), do: {:error, Error.validation_error(:invalid_subscriber_id, "Subscriber ID must be a string")}
 
   @doc """
   Validates callback_url parameter (optional).
   """
   @spec validate_callback_url(String.t() | nil) ::
-          {:ok, String.t() | nil} | {:error, :invalid_callback_url}
+          {:ok, String.t() | nil} | {:error, Error.t()}
   def validate_callback_url(nil), do: {:ok, nil}
 
   def validate_callback_url(url) when is_binary(url) do
@@ -188,9 +189,9 @@ defmodule WandererKillsWeb.Api.Helpers do
         {:ok, url}
 
       _ ->
-        {:error, :invalid_callback_url}
+        {:error, Error.validation_error(:invalid_callback_url, "Callback URL must be a valid HTTP/HTTPS URL")}
     end
   end
 
-  def validate_callback_url(_), do: {:error, :invalid_callback_url}
+  def validate_callback_url(_), do: {:error, Error.validation_error(:invalid_callback_url, "Callback URL must be a string")}
 end

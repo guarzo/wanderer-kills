@@ -62,6 +62,9 @@ defmodule WandererKills.MixProject do
 
       # CSV parsing
       {:nimble_csv, "~> 1.2"},
+      
+      # Parallel processing
+      {:flow, "~> 1.2"},
 
       # Telemetry
       {:telemetry_poller, "~> 1.2"},

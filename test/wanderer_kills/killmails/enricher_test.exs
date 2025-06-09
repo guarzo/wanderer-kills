@@ -76,18 +76,14 @@ defmodule WandererKills.Killmails.EnricherTest do
       required_victim_fields = [
         "character_id",
         "character_name",
-        "name",
         "corporation_id",
         "corporation_name",
-        "corp_name",
         "corporation_ticker",
-        "corp_ticker",
         "alliance_id",
         "alliance_name",
         "alliance_ticker",
         "ship_type_id",
         "ship_name",
-        "ship_type_name",
         "damage_taken"
       ]
 
@@ -101,18 +97,14 @@ defmodule WandererKills.Killmails.EnricherTest do
       required_attacker_fields = [
         "character_id",
         "character_name",
-        "name",
         "corporation_id",
         "corporation_name",
-        "corp_name",
         "corporation_ticker",
-        "corp_ticker",
         "alliance_id",
         "alliance_name",
         "alliance_ticker",
         "ship_type_id",
         "ship_name",
-        "ship_type_name",
         "final_blow",
         "damage_done",
         "security_status",
@@ -137,19 +129,11 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Test flattened name fields are added
       assert victim["character_name"] == "John Doe"
-      # Alternative field name
-      assert victim["name"] == "John Doe"
       assert victim["corporation_name"] == "Corp Name"
-      # Alternative field name
-      assert victim["corp_name"] == "Corp Name"
       assert victim["corporation_ticker"] == "[CORP]"
-      # Alternative field name
-      assert victim["corp_ticker"] == "[CORP]"
       assert victim["alliance_name"] == "Alliance Name"
       assert victim["alliance_ticker"] == "[ALLY]"
       assert victim["ship_name"] == "Rifter"
-      # Alternative field name
-      assert victim["ship_type_name"] == "Rifter"
     end
 
     test "validates flattened attacker data structure" do
@@ -168,14 +152,8 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Test flattened name fields are added
       assert attacker["character_name"] == "Jane Doe"
-      # Alternative field name
-      assert attacker["name"] == "Jane Doe"
       assert attacker["corporation_name"] == "Attacker Corp"
-      # Alternative field name
-      assert attacker["corp_name"] == "Attacker Corp"
       assert attacker["corporation_ticker"] == "[ATK]"
-      # Alternative field name
-      assert attacker["corp_ticker"] == "[ATK]"
       assert attacker["alliance_name"] == "Attacker Alliance"
       assert attacker["alliance_ticker"] == "[ATKR]"
     end
@@ -188,7 +166,6 @@ defmodule WandererKills.Killmails.EnricherTest do
 
       # Should have nil character name but other fields should work
       assert victim["character_name"] == nil
-      assert victim["name"] == nil
       assert victim["corporation_name"] == "Corp Name"
       assert victim["alliance_name"] == "Alliance Name"
     end
@@ -268,10 +245,7 @@ defmodule WandererKills.Killmails.EnricherTest do
   end
 
   defp add_character_name(entity, character_name) do
-    entity
-    |> Map.put("character_name", character_name)
-    # Alternative field name
-    |> Map.put("name", character_name)
+    Map.put(entity, "character_name", character_name)
   end
 
   defp add_corporation_info(entity) do
@@ -280,11 +254,7 @@ defmodule WandererKills.Killmails.EnricherTest do
 
     entity
     |> Map.put("corporation_name", corp_name)
-    # Alternative field name
-    |> Map.put("corp_name", corp_name)
     |> Map.put("corporation_ticker", corp_ticker)
-    # Alternative field name
-    |> Map.put("corp_ticker", corp_ticker)
   end
 
   defp add_alliance_info(entity) do
@@ -298,20 +268,13 @@ defmodule WandererKills.Killmails.EnricherTest do
 
   defp add_ship_name(entity) do
     ship_name = get_in(entity, ["ship", "name"])
-
-    entity
-    |> Map.put("ship_name", ship_name)
-    # Alternative field name
-    |> Map.put("ship_type_name", ship_name)
+    Map.put(entity, "ship_name", ship_name)
   end
 
   defp add_ship_name_for_attacker(attacker) do
     # For attackers, we don't have ship enrichment in our test data
     # so we'll just add nil values to match the expected structure
-    attacker
-    |> Map.put("ship_name", nil)
-    # Alternative field name
-    |> Map.put("ship_type_name", nil)
+    Map.put(attacker, "ship_name", nil)
   end
 
   defp add_attacker_count(killmail) do

@@ -216,4 +216,123 @@ defmodule WandererKills.Test.DataHelpers do
   def random_killmail_id do
     Enum.random(100_000_001..999_999_999)
   end
+
+  @doc """
+  Creates a minimal valid killmail for testing.
+
+  This is useful for tests that just need a valid structure
+  without caring about specific data.
+  """
+  @spec minimal_killmail(keyword()) :: map()
+  def minimal_killmail(opts \\ []) do
+    killmail_id = Keyword.get(opts, :killmail_id, random_killmail_id())
+    system_id = Keyword.get(opts, :system_id, random_system_id())
+
+    %{
+      "killmail_id" => killmail_id,
+      "killmail_time" => "2024-01-01T12:00:00Z",
+      "solar_system_id" => system_id,
+      "victim" => %{
+        "character_id" => random_character_id(),
+        "corporation_id" => 1_000_001,
+        "ship_type_id" => 587,
+        "damage_taken" => 100
+      },
+      "attackers" => [
+        %{
+          "character_id" => random_character_id(),
+          "corporation_id" => 1_000_002,
+          "ship_type_id" => 588,
+          "damage_done" => 100,
+          "final_blow" => true
+        }
+      ]
+    }
+  end
+
+  @doc """
+  Creates a killmail with ZKB data attached.
+  """
+  @spec killmail_with_zkb(keyword()) :: map()
+  def killmail_with_zkb(opts \\ []) do
+    base_killmail = minimal_killmail(opts)
+
+    zkb_data = %{
+      "totalValue" => Keyword.get(opts, :total_value, 1_000_000),
+      "points" => Keyword.get(opts, :points, 1),
+      "npc" => Keyword.get(opts, :npc, false),
+      "hash" => Keyword.get(opts, :hash, "abcdef123456")
+    }
+
+    Map.put(base_killmail, "zkb", zkb_data)
+  end
+
+  @doc """
+  Creates multiple killmails for the same system.
+  """
+  @spec system_killmails(integer(), integer()) :: [map()]
+  def system_killmails(system_id, count) when count > 0 do
+    for _ <- 1..count do
+      minimal_killmail(system_id: system_id)
+    end
+  end
+
+  @doc """
+  Creates test data for various scenarios.
+
+  Scenarios:
+  - `:basic` - Simple killmail
+  - `:with_zkb` - Killmail with ZKB data
+  - `:old_kill` - Killmail from several days ago
+  - `:recent_kill` - Very recent killmail
+  - `:high_value` - High-value killmail
+  - `:multi_attacker` - Killmail with multiple attackers
+  """
+  @spec scenario_data(atom(), keyword()) :: map()
+  def scenario_data(scenario, opts \\ [])
+
+  def scenario_data(:basic, opts) do
+    minimal_killmail(opts)
+  end
+
+  def scenario_data(:with_zkb, opts) do
+    killmail_with_zkb(opts)
+  end
+
+  def scenario_data(:old_kill, opts) do
+    old_time = DateTime.utc_now() |> DateTime.add(-7, :day) |> DateTime.to_iso8601()
+    opts = Keyword.put(opts, :kill_time, old_time)
+    minimal_killmail(opts) |> Map.put("killmail_time", old_time)
+  end
+
+  def scenario_data(:recent_kill, opts) do
+    recent_time = DateTime.utc_now() |> DateTime.add(-5, :minute) |> DateTime.to_iso8601()
+    minimal_killmail(opts) |> Map.put("killmail_time", recent_time)
+  end
+
+  def scenario_data(:high_value, opts) do
+    killmail_with_zkb(Keyword.put(opts, :total_value, 50_000_000))
+  end
+
+  def scenario_data(:multi_attacker, opts) do
+    base = minimal_killmail(opts)
+    attackers = [
+      hd(base["attackers"]),
+      %{
+        "character_id" => random_character_id(),
+        "corporation_id" => 1_000_003,
+        "ship_type_id" => 589,
+        "damage_done" => 50,
+        "final_blow" => false
+      },
+      %{
+        "character_id" => random_character_id(),
+        "corporation_id" => 1_000_004,
+        "ship_type_id" => 590,
+        "damage_done" => 25,
+        "final_blow" => false
+      }
+    ]
+    Map.put(base, "attackers", attackers)
+  end
 end

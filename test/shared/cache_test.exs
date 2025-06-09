@@ -1,13 +1,14 @@
 defmodule WandererKills.CacheTest do
   use WandererKills.TestCase
+  use WandererKills.Test.SharedContexts
+  use WandererKills.Test.Tags
 
   alias WandererKills.Cache.Helper
   alias WandererKills.TestHelpers
 
-  setup do
-    WandererKills.TestHelpers.clear_all_caches()
-    :ok
-  end
+  cache_test_tags()
+
+  setup :with_clean_environment
 
   describe "killmail operations" do
     test "can store and retrieve a killmail" do

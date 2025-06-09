@@ -126,6 +126,40 @@ channel.on("kill_count_update", (payload) => {
 }
 ```
 
+## 🔧 Advanced Connection Options
+
+### Client Identifiers
+
+You can provide an optional client identifier when connecting to help with debugging and troubleshooting. This identifier will appear in server logs alongside your connection's anonymous ID.
+
+**JavaScript Example:**
+```javascript
+const socket = new Socket("/socket", {
+  params: {
+    client_identifier: "my_app_name"  // Optional, max 32 chars
+  }
+});
+```
+
+**Python Example:**
+```python
+uri = f"{server_url}/socket/websocket?vsn=2.0.0&client_identifier=my_app_name"
+websocket = await websockets.connect(uri)
+```
+
+**Elixir Example:**
+```elixir
+socket_opts = [
+  url: url,
+  params: %{
+    vsn: "2.0.0",
+    client_identifier: "my_app_name"
+  }
+]
+```
+
+The client identifier will be sanitized (alphanumeric, underscore, and dash only) and limited to 32 characters. It will be combined with a timestamp and random suffix to create a unique anonymous ID like: `my_app_name_1737308400000000_a1b2c3d4`
+
 ## 🏗️ Client Examples
 
 ### JavaScript (Node.js)
@@ -239,6 +273,7 @@ channel.on("killmail_update", (payload) => {
    ```
 
 3. **Join Channel** (send this JSON):
+
    ```json
    { "topic": "killmails:lobby", "event": "phx_join", "payload": {}, "ref": 1 }
    ```

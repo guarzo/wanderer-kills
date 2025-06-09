@@ -123,11 +123,11 @@ defmodule WandererKillsWeb.KillsController do
         Logger.debug("Fetching specific killmail", killmail_id: killmail_id)
 
         case Client.get_killmail(killmail_id) do
-          nil ->
-            render_error(conn, 404, "Killmail not found", "NOT_FOUND")
-
-          killmail ->
+          {:ok, killmail} ->
             render_success(conn, killmail)
+
+          {:error, _reason} ->
+            render_error(conn, 404, "Killmail not found", "NOT_FOUND")
         end
 
       {:error, :invalid_format} ->

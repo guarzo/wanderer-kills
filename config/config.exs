@@ -73,9 +73,7 @@ config :wanderer_kills,
 # Configure the Phoenix endpoint
 config :wanderer_kills, WandererKillsWeb.Endpoint,
   http: [port: 4004, ip: {0, 0, 0, 0}],
-  secret_key_base: "wanderer_kills_secret_key_base_development_only",
   server: true,
-  live_view: [signing_salt: "wanderer_kills_live_view_salt"],
   pubsub_server: WandererKills.PubSub
 
 # Cachex default configuration
@@ -108,6 +106,11 @@ config :logger, :console,
     :duration,
     :source,
     :reason,
+    :type,
+    :message,
+    :stacktrace,
+    :timestamp,
+    :kind,
 
     # HTTP and API metadata
     :url,
@@ -115,6 +118,10 @@ config :logger, :console,
     :method,
     :service,
     :endpoint,
+    :duration_ms,
+    :response_size,
+    :query_string,
+    :remote_ip,
 
     # EVE Online entity metadata
     :character_id,
@@ -123,18 +130,37 @@ config :logger, :console,
     :type_id,
     :solar_system_id,
     :ship_type_id,
+    :victim_character,
+    :victim_corp,
+    :attacker_count,
+    :total_value,
+    :npc_kill,
 
     # Cache metadata
     :cache,
     :cache_key,
     :cache_type,
     :ttl,
+    :namespace,
+    :id,
 
     # Processing metadata
     :killmail_count,
     :count,
     :result,
     :data_source,
+    :payload_size_bytes,
+    :fresh_kills_fetched,
+    :kills_to_process,
+    :updates,
+
+    # WebSocket and connection metadata
+    :systems,
+    :active_connections,
+    :kills_sent_realtime,
+    :kills_sent_preload,
+    :kills_per_minute,
+    :connections_per_minute,
 
     # Retry and timeout metadata
     :attempt,
@@ -227,6 +253,8 @@ config :logger, :console,
     :recommendation,
     :structure,
     :kill_time,
+    :kill_time_type,
+    :kill_time_value,
     :cutoff,
     :subscriber_id,
     :system_ids,
@@ -265,7 +293,23 @@ config :logger, :console,
     :returned_kills,
     :unexpected_response,
     :cached_count,
-    :total_kills_sent
+    :total_kills_sent,
+    :kills_type,
+    :kills_value,
+    :kills_count,
+    :client_identifier,
+    :enriched_count,
+    :unenriched_count,
+    :kill_time_range,
+    :subscriber_count,
+    :subscriber_ids,
+    :via_pubsub,
+    :via_webhook,
+    :subscriber_id,
+    :since_hours,
+    :callback_url,
+    :kills_type,
+    :kills_value
   ]
 
 # Import environment specific config

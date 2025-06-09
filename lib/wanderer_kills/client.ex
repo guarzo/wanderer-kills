@@ -98,7 +98,7 @@ defmodule WandererKills.Client do
   def fetch_cached_kills(system_id) do
     Logger.debug("Fetching cached kills", system_id: system_id)
 
-    case Helper.system_get_killmails(system_id) do
+    case Helper.get_system_killmails(system_id) do
       {:ok, kills} when is_list(kills) ->
         Logger.debug("Retrieved cached kills",
           system_id: system_id,
@@ -201,7 +201,7 @@ defmodule WandererKills.Client do
     case ZkbClient.fetch_killmail(killmail_id) do
       {:ok, killmail} ->
         Logger.debug("Successfully fetched killmail", killmail_id: killmail_id)
-        killmail
+        {:ok, killmail}
 
       {:error, reason} ->
         Logger.warning("Failed to fetch killmail",
@@ -209,7 +209,7 @@ defmodule WandererKills.Client do
           error: reason
         )
 
-        nil
+        {:error, reason}
     end
   end
 
@@ -217,14 +217,17 @@ defmodule WandererKills.Client do
   def get_system_kill_count(system_id) do
     Logger.debug("Fetching system kill count", system_id: system_id)
 
-    case Helper.system_get_kill_count(system_id) do
-      {:ok, count} when is_integer(count) ->
+    case Helper.get_system_killmails(system_id) do
+      {:ok, killmail_ids} when is_list(killmail_ids) ->
+        count = length(killmail_ids)
         Logger.debug("Retrieved system kill count",
           system_id: system_id,
           count: count
         )
 
         count
+      _ ->
+        0
     end
   end
 
@@ -235,44 +238,50 @@ defmodule WandererKills.Client do
 
     Enum.filter(kills, fn kill ->
       case get_kill_time(kill) do
-        nil -> false
-        kill_time -> DateTime.compare(kill_time, cutoff_time) != :lt
+        {:ok, kill_time} -> DateTime.compare(kill_time, cutoff_time) != :lt
+        {:error, _} -> false
       end
     end)
   end
 
   defp get_kill_time(kill) do
-    kill
-    |> extract_time_from_killmail()
-    |> extract_time_from_kill_time()
-    |> extract_time_from_zkb()
+    case extract_time_from_killmail(kill) do
+      {:ok, time} -> {:ok, time}
+      {:continue, kill} ->
+        case extract_time_from_kill_time(kill) do
+          {:ok, time} -> {:ok, time}
+          {:continue, kill} -> extract_time_from_zkb(kill)
+        end
+    end
   end
 
   defp extract_time_from_killmail(kill) do
     if is_map(kill) and Map.has_key?(kill, "killmail_time") do
-      {:found, parse_datetime(kill["killmail_time"])}
+      case parse_datetime(kill["killmail_time"]) do
+        {:ok, datetime} -> {:ok, datetime}
+        {:error, _} -> {:continue, kill}
+      end
     else
       {:continue, kill}
     end
   end
 
-  defp extract_time_from_kill_time({:found, datetime}), do: datetime
-
-  defp extract_time_from_kill_time({:continue, kill}) do
+  defp extract_time_from_kill_time(kill) do
     if is_map(kill) and Map.has_key?(kill, "kill_time") do
-      {:found, parse_datetime(kill["kill_time"])}
+      case parse_datetime(kill["kill_time"]) do
+        {:ok, datetime} -> {:ok, datetime}
+        {:error, _} -> {:continue, kill}
+      end
     else
       {:continue, kill}
     end
   end
-
-  defp extract_time_from_zkb({:found, datetime}), do: datetime
 
   defp extract_time_from_zkb({:continue, kill}) do
     if is_map(kill) and Map.has_key?(kill, "zkb") do
       extract_time_from_zkb_metadata(kill["zkb"])
     else
-      nil
+      {:error, :no_time_found}
     end
   end
 
@@ -280,21 +289,21 @@ defmodule WandererKills.Client do
     if Map.has_key?(zkb, "killmail_time") do
       parse_datetime(zkb["killmail_time"])
     else
-      nil
+      {:error, :no_time_in_zkb}
     end
   end
 
-  defp extract_time_from_zkb_metadata(_), do: nil
+  defp extract_time_from_zkb_metadata(_), do: {:error, :invalid_zkb_data}
 
   defp parse_datetime(datetime_string) when is_binary(datetime_string) do
     case DateTime.from_iso8601(datetime_string) do
-      {:ok, datetime, _offset} -> datetime
-      {:error, _reason} -> nil
+      {:ok, datetime, _offset} -> {:ok, datetime}
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp parse_datetime(%DateTime{} = datetime), do: datetime
-  defp parse_datetime(_), do: nil
+  defp parse_datetime(%DateTime{} = datetime), do: {:ok, datetime}
+  defp parse_datetime(_), do: {:error, :invalid_datetime_format}
 
   @doc """
   Convenience function to broadcast kill updates to subscribers.

@@ -22,9 +22,14 @@ class WandererKillsClient {
    */
   async connect() {
     return new Promise((resolve, reject) => {
-      // Create socket connection
+      // Create socket connection with optional client identifier
       this.socket = new Socket(`${this.serverUrl}/socket`, {
-        timeout: 10000
+        timeout: 10000,
+        params: {
+          // Optional: provide a client identifier for easier debugging
+          // This will be included in server logs to help identify your connection
+          client_identifier: 'js_example_client'
+        }
       });
 
       // Handle connection events
