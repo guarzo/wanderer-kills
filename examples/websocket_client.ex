@@ -11,7 +11,6 @@ defmodule WandererKills.WebSocketClient do
       # Start the client
       {:ok, pid} = WandererKills.WebSocketClient.start_link([
         server_url: "ws://localhost:4004",
-        api_token: "your-api-token",
         systems: [30000142, 30002187]  # Jita, Amarr
       ])
 
@@ -43,7 +42,6 @@ defmodule WandererKills.WebSocketClient do
   ## Options
 
     * `:server_url` - WebSocket server URL (required)
-    * `:api_token` - Authentication token (required)
     * `:systems` - Initial systems to subscribe to (optional)
     * `:name` - Process name (optional)
   """
@@ -90,7 +88,6 @@ defmodule WandererKills.WebSocketClient do
   @impl true
   def init(opts) do
     server_url = Keyword.fetch!(opts, :server_url)
-    api_token = Keyword.fetch!(opts, :api_token)
     initial_systems = Keyword.get(opts, :systems, [])
 
     # Convert HTTP URL to WebSocket URL if needed
@@ -101,7 +98,6 @@ defmodule WandererKills.WebSocketClient do
 
     state = %{
       server_url: websocket_url,
-      api_token: api_token,
       socket: nil,
       channel: nil,
       subscribed_systems: MapSet.new(),
@@ -292,7 +288,7 @@ defmodule WandererKills.WebSocketClient do
 
     socket_opts = [
       url: url,
-      params: %{token: state.api_token, vsn: "2.0.0"}
+      params: %{vsn: "2.0.0"}
     ]
 
     case GenSocketClient.start_link(__MODULE__, nil, socket_opts) do
@@ -331,11 +327,21 @@ defmodule WandererKills.WebSocketClient do
     system_id = payload["system_id"]
     killmails = payload["killmails"] || []
     timestamp = payload["timestamp"]
+    is_preload = payload["preload"] || false
 
-    Logger.info("🔥 New killmails in system #{system_id}:",
-      killmails_count: length(killmails),
-      timestamp: timestamp
-    )
+    if is_preload do
+      Logger.info("📦 Preloaded killmails for system #{system_id}:",
+        killmails_count: length(killmails),
+        timestamp: timestamp,
+        preload: true
+      )
+    else
+      Logger.info("🔥 New real-time killmails in system #{system_id}:",
+        killmails_count: length(killmails),
+        timestamp: timestamp,
+        preload: false
+      )
+    end
 
     # Process each killmail
     Enum.with_index(killmails, 1)
@@ -346,10 +352,14 @@ defmodule WandererKills.WebSocketClient do
 
       character_name = victim["character_name"] || "Unknown"
       ship_name = victim["ship_type_name"] || "Unknown ship"
+      kill_time = killmail["kill_time"] || killmail["killmail_time"] || "Unknown time"
 
-      Logger.info("   [#{index}] Killmail ID: #{killmail_id}",
+      prefix = if is_preload, do: "📦", else: "🔥"
+
+      Logger.info("   #{prefix} [#{index}] Killmail ID: #{killmail_id}",
         victim: character_name,
         ship: ship_name,
+        kill_time: kill_time,
         attackers_count: length(attackers)
       )
     end)
@@ -400,53 +410,74 @@ defmodule WandererKills.WebSocketClient.Example do
   """
   def run do
     Logger.info("🚀 Starting WandererKills WebSocket client example...")
+    Logger.info("📋 This example demonstrates:")
+    Logger.info("   1. Connecting with initial systems (Jita, Amarr)")
+    Logger.info("   2. Receiving preloaded killmails for those systems")
+    Logger.info("   3. Subscribing to additional systems (Dodixie)")
+    Logger.info("   4. Receiving real-time killmail updates")
 
     # Start the client with some popular systems
+    initial_systems = [30000142, 30002187]  # Jita, Amarr
     client_opts = [
       server_url: "ws://localhost:4004",
-      api_token: "your-api-token-here",
-      systems: [30000142, 30002187],  # Jita, Amarr
+      systems: initial_systems,
       name: :wanderer_websocket_client
     ]
+
+    Logger.info("🔌 Connecting to WebSocket with initial systems:",
+      systems: initial_systems,
+      system_names: ["Jita (30000142)", "Amarr (30002187)"]
+    )
 
     case WandererKills.WebSocketClient.start_link(client_opts) do
       {:ok, pid} ->
         Logger.info("✅ WebSocket client started successfully")
+        Logger.info("⏳ Watch for preloaded killmails to arrive shortly...")
 
-        # Wait a bit for connection to establish
-        Process.sleep(2_000)
+        # Wait a bit for connection to establish and preload to complete
+        Process.sleep(3_000)
 
         # Subscribe to additional systems after 5 seconds
         spawn(fn ->
           Process.sleep(5_000)
           Logger.info("📡 Adding Dodixie to subscriptions...")
+          Logger.info("⏳ Watch for preloaded killmails from Dodixie...")
           WandererKills.WebSocketClient.subscribe_to_systems(pid, [30002659]) # Dodixie
         end)
 
-        # Unsubscribe from Jita after 10 seconds
+        # Unsubscribe from Jita after 15 seconds
         spawn(fn ->
-          Process.sleep(10_000)
+          Process.sleep(15_000)
           Logger.info("❌ Removing Jita from subscriptions...")
           WandererKills.WebSocketClient.unsubscribe_from_systems(pid, [30000142]) # Jita
         end)
 
-        # Get status after 15 seconds
+        # Get status after 20 seconds
         spawn(fn ->
-          Process.sleep(15_000)
+          Process.sleep(20_000)
           case WandererKills.WebSocketClient.get_status(pid) do
             {:ok, status} ->
-              Logger.info("📋 Current status: #{inspect(status)}")
+              Logger.info("📋 Current client status:",
+                connected: status.connected,
+                systems_count: status.systems_count,
+                subscribed_systems: status.subscribed_systems
+              )
             {:error, reason} ->
               Logger.error("❌ Failed to get status: #{inspect(reason)}")
           end
         end)
 
         # Keep the example running
-        Logger.info("🎧 Listening for killmail updates... The client will run indefinitely.")
+        Logger.info("")
+        Logger.info("🎧 Client is now listening for killmail updates...")
         Logger.info("💡 You can interact with it using:")
         Logger.info("   WandererKills.WebSocketClient.subscribe_to_systems(:wanderer_websocket_client, [system_ids])")
+        Logger.info("   WandererKills.WebSocketClient.unsubscribe_from_systems(:wanderer_websocket_client, [system_ids])")
         Logger.info("   WandererKills.WebSocketClient.get_status(:wanderer_websocket_client)")
         Logger.info("   WandererKills.WebSocketClient.stop(:wanderer_websocket_client)")
+        Logger.info("")
+        Logger.info("📦 Preloaded killmails have a 📦 icon")
+        Logger.info("🔥 Real-time killmails have a 🔥 icon")
 
         {:ok, pid}
 
@@ -470,5 +501,40 @@ defmodule WandererKills.WebSocketClient.Example do
         Logger.info("🛑 WebSocket client stopped")
         :ok
     end
+  end
+
+  @doc """
+  Simple example that connects with initial systems and shows preload behavior.
+
+  This demonstrates the most common use case: connecting to a few systems
+  and immediately receiving cached killmail data.
+  """
+  def simple_example do
+    Logger.info("🚀 Simple WebSocket client example")
+    Logger.info("📋 Connecting to Jita and Amarr with preload...")
+
+    # Connect with initial systems
+    {:ok, pid} = WandererKills.WebSocketClient.start_link([
+      server_url: "ws://localhost:4004",
+      systems: [30000142, 30002187],  # Jita, Amarr
+      name: :simple_client
+    ])
+
+    Logger.info("✅ Connected! Watch for preloaded killmails...")
+
+    # Wait and show status
+    Process.sleep(5_000)
+
+    case WandererKills.WebSocketClient.get_status(pid) do
+      {:ok, status} ->
+        Logger.info("📋 Client status: #{status.systems_count} systems, connected: #{status.connected}")
+      {:error, _} ->
+        Logger.warning("⚠️  Could not get client status")
+    end
+
+    Logger.info("🎧 Listening for real-time updates... (Ctrl+C to stop)")
+
+    # Keep running until stopped
+    Process.sleep(:infinity)
   end
 end

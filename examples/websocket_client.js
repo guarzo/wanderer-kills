@@ -10,9 +10,8 @@
 const { Socket } = require('phoenix');
 
 class WandererKillsClient {
-  constructor(serverUrl, apiToken) {
+  constructor(serverUrl) {
     this.serverUrl = serverUrl;
-    this.apiToken = apiToken;
     this.socket = null;
     this.channel = null;
     this.subscriptions = new Set();
@@ -25,7 +24,6 @@ class WandererKillsClient {
     return new Promise((resolve, reject) => {
       // Create socket connection
       this.socket = new Socket(`${this.serverUrl}/socket`, {
-        params: { token: this.apiToken },
         timeout: 10000
       });
 
@@ -159,7 +157,7 @@ class WandererKillsClient {
 
 // Example usage
 async function example() {
-  const client = new WandererKillsClient('ws://localhost:4004', 'your-api-token-here');
+  const client = new WandererKillsClient('ws://localhost:4004');
 
   try {
     // Connect to the server

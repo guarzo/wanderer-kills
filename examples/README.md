@@ -14,21 +14,21 @@ WandererKills now supports **real-time WebSocket subscriptions** for receiving k
 
 - **WebSocket URL**: `ws://your-server:4004/socket`
 - **Protocol**: Phoenix Channels (compatible with Phoenix JavaScript/Python clients)
-- **Authentication**: Token-based via connection params
+- **Authentication**: None required - anonymous connections
 - **Channel**: `killmails:lobby`
 
 ## 🔑 Authentication
 
-Include your API token in the WebSocket connection parameters:
+No authentication is required - all WebSocket connections are anonymous:
 
 ```javascript
 // JavaScript
-const socket = new Socket("/socket", { params: { token: "your-api-token" } });
+const socket = new Socket("/socket", {});
 ```
 
 ```python
 # Python
-uri = f"ws://localhost:4004/socket/websocket?token={api_token}&vsn=2.0.0"
+uri = f"ws://localhost:4004/socket/websocket?vsn=2.0.0"
 ```
 
 ## 📋 Channel Operations
@@ -165,7 +165,6 @@ iex> WandererKills.WebSocketClient.Example.run()
 # Or use the client directly
 iex> {:ok, client} = WandererKills.WebSocketClient.start_link([
 ...>   server_url: "ws://localhost:4004",
-...>   api_token: "your-token",
 ...>   systems: [30000142]  # Jita
 ...> ])
 
@@ -189,7 +188,7 @@ Here are some popular system IDs for testing:
 
 - **Max Systems per Subscription**: 100 (configurable)
 - **WebSocket Timeout**: 45 seconds
-- **Connection Authentication**: Required via token
+- **Connection Authentication**: None required - anonymous connections
 - **Rate Limiting**: Applied per connection
 
 ## 🔄 Migration from HTTP Webhooks
@@ -210,7 +209,7 @@ POST /api/v1/subscribe
 ### After (WebSockets)
 
 ```javascript
-const socket = new Socket("/socket", { params: { token: "my-api-token" } });
+const socket = new Socket("/socket", {});
 const channel = socket.channel("killmails:lobby", {});
 
 channel.join().receive("ok", () => {
@@ -236,7 +235,7 @@ channel.on("killmail_update", (payload) => {
    ```bash
    # Using wscat
    npm install -g wscat
-   wscat -c "ws://localhost:4004/socket/websocket?token=test-token&vsn=2.0.0"
+   wscat -c "ws://localhost:4004/socket/websocket?vsn=2.0.0"
    ```
 
 3. **Join Channel** (send this JSON):
@@ -249,7 +248,6 @@ channel.on("killmail_update", (payload) => {
 ### Connection Issues
 
 - Verify the WebSocket URL and port
-- Check that your API token is valid
 - Ensure the server is running and accessible
 
 ### Subscription Issues
@@ -277,10 +275,10 @@ Compared to the previous HTTP webhook system:
 ## 🔒 Security Considerations
 
 - Use WSS (secure WebSocket) in production
-- Implement proper token validation
-- Set appropriate `check_origin` restrictions
+- Set appropriate `check_origin` restrictions for your domain
 - Monitor connection limits and rate limiting
 - Use TLS for all WebSocket connections in production
+- Consider implementing authentication in production environments
 
 ---
 

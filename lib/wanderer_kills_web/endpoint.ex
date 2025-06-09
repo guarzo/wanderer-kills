@@ -20,7 +20,7 @@ defmodule WandererKillsWeb.Endpoint do
   socket("/socket", WandererKillsWeb.UserSocket,
     websocket: [
       timeout: 45_000,
-      transport_log: false,
+      transport_log: if(Mix.env() == :dev, do: :debug, else: false),
       # Set to specific origins in production
       check_origin: false
     ],
@@ -41,7 +41,6 @@ defmodule WandererKillsWeb.Endpoint do
   # :code_reloader configuration of your endpoint.
   if code_reloading? do
     plug(Phoenix.CodeReloader)
-    plug(Phoenix.Ecto.CheckRepoStatus, otp_app: :wanderer_kills)
   end
 
   plug(Plug.RequestId)

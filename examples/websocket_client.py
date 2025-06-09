@@ -29,9 +29,8 @@ logger = logging.getLogger(__name__)
 class WandererKillsClient:
     """WebSocket client for WandererKills real-time killmail subscriptions."""
     
-    def __init__(self, server_url: str, api_token: str):
+    def __init__(self, server_url: str):
         self.server_url = server_url.replace('http://', 'ws://').replace('https://', 'wss://')
-        self.api_token = api_token
         self.websocket: Optional[websockets.WebSocketServerProtocol] = None
         self.subscriptions: Set[int] = set()
         self.subscription_id: Optional[str] = None
@@ -41,7 +40,7 @@ class WandererKillsClient:
         """Connect to the WebSocket server and join the killmails channel."""
         try:
             # Establish WebSocket connection
-            uri = f"{self.server_url}/socket/websocket?token={self.api_token}&vsn=2.0.0"
+            uri = f"{self.server_url}/socket/websocket?vsn=2.0.0"
             logger.info(f"Connecting to {uri}")
             
             self.websocket = await websockets.connect(uri)
@@ -226,7 +225,7 @@ class WandererKillsClient:
 
 async def example():
     """Example usage of the WandererKills WebSocket client."""
-    client = WandererKillsClient('ws://localhost:4004', 'your-api-token-here')
+    client = WandererKillsClient('ws://localhost:4004')
     
     # Set up signal handler for graceful shutdown
     def signal_handler():

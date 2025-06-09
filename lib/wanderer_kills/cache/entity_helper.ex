@@ -205,12 +205,13 @@ defmodule WandererKills.Cache.EntityHelper do
         threshold = threshold_minutes || WandererKills.Config.cache().recent_fetch_threshold
 
         case unquote(:"system_get_#{data_type}")(system_id) do
-          {:ok, timestamp} when is_integer(timestamp) ->
+          {:ok, timestamp} when is_integer(timestamp) and timestamp > 0 ->
             current_time = System.system_time(:second)
             threshold_seconds = threshold * 60
             {:ok, current_time - timestamp < threshold_seconds}
 
           {:ok, _} ->
+            # Default value case (0) or invalid timestamp - not recent
             {:ok, false}
         end
       end

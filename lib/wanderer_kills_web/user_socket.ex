@@ -6,6 +6,8 @@ defmodule WandererKillsWeb.UserSocket do
   - Subscribe to specific EVE Online systems
   - Receive real-time killmail updates
   - Manage their subscriptions dynamically
+
+  No authentication is required - connections are anonymous.
   """
 
   use Phoenix.Socket
@@ -15,67 +17,51 @@ defmodule WandererKillsWeb.UserSocket do
   # Channels
   channel("killmails:*", WandererKillsWeb.KillmailChannel)
 
-  # Socket params are passed from the client and can
-  # be used to verify and authenticate a user. After
-  # verification, you can put default assigns into
-  # the socket that will be set for all channels, ie
-  #
-  #     {:ok, socket} |> assign(:user_id, verified_user_id)}
-  #
-  # To deny connection, return `:error`.
-  #
-  # See `Phoenix.Token` documentation for examples in
-  # performing token verification on connect.
+  # Allow anonymous connections - no authentication required
   @impl true
-  def connect(%{"token" => token} = params, socket, _connect_info) do
-    case verify_token(token) do
-      {:ok, user_id} ->
-        Logger.info("WebSocket connection established",
-          user_id: user_id,
-          params: Map.drop(params, ["token"])
-        )
+  def connect(_params, socket, connect_info) do
+    # Generate anonymous user ID based on connection time and process
+    anonymous_id = "anon_#{System.system_time(:microsecond)}_#{inspect(self())}"
 
-        socket =
-          socket
-          |> assign(:user_id, user_id)
-          |> assign(:connected_at, DateTime.utc_now())
+    # Store connection info for debugging but don't log here
+    # Logging will be handled when user joins a channel
+    socket =
+      socket
+      |> assign(:user_id, anonymous_id)
+      |> assign(:connected_at, DateTime.utc_now())
+      |> assign(:anonymous, true)
+      |> assign(:peer_data, get_peer_data(connect_info))
+      |> assign(:user_agent, get_user_agent(connect_info))
 
-        {:ok, socket}
-
-      {:error, reason} ->
-        Logger.warning("WebSocket connection denied", reason: reason, token: token)
-        :error
-    end
-  end
-
-  def connect(_params, _socket, _connect_info) do
-    Logger.warning("WebSocket connection denied: missing token")
-    :error
+    {:ok, socket}
   end
 
   # Socket id's are topics that allow you to identify all sockets for a given user:
-  #
-  #     def id(socket), do: "user_socket:#{socket.assigns.user_id}"
-  #
-  # Would allow you to broadcast a "disconnect" event and terminate
-  # all active sockets and channels for a given user:
-  #
-  #     WandererKillsWeb.Endpoint.broadcast("user_socket:#{user.id}", "disconnect", %{})
-  #
-  # Returning `nil` makes this socket anonymous.
+  # For anonymous connections, we use the anonymous_id
   @impl true
   def id(socket), do: "user_socket:#{socket.assigns.user_id}"
 
-  # Simple token verification - in production you'd want proper JWT or similar
-  defp verify_token(token) do
-    case String.length(token) do
-      len when len >= 8 ->
-        # For demo purposes, use token as user_id
-        # In production, decode and verify JWT/signed token
-        {:ok, token}
+  # Helper functions for connection info
+  defp get_peer_data(connect_info) do
+    case connect_info do
+      %{peer_data: %{address: address, port: port}} ->
+        "#{:inet.ntoa(address)}:#{port}"
 
       _ ->
-        {:error, :invalid_token}
+        "unknown"
+    end
+  end
+
+  defp get_user_agent(connect_info) do
+    case connect_info do
+      %{x_headers: headers} ->
+        Enum.find_value(headers, "unknown", fn
+          {"user-agent", ua} -> ua
+          _ -> nil
+        end)
+
+      _ ->
+        "unknown"
     end
   end
 end

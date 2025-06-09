@@ -1,9 +1,9 @@
 defmodule WandererKillsWeb.WebSocketController do
   @moduledoc """
-  WebSocket API information and status endpoints.
+  WebSocket connection information and status endpoints.
 
-  Provides information about WebSocket connections and status
-  for API v2 which is WebSocket-first.
+  Provides service discovery information about WebSocket connections
+  and real-time status monitoring for WebSocket infrastructure.
   """
 
   use WandererKillsWeb, :controller
@@ -11,7 +11,7 @@ defmodule WandererKillsWeb.WebSocketController do
   @doc """
   WebSocket connection information.
 
-  Endpoint: GET /api/v2/websocket
+  Endpoint: GET /websocket
   """
   def info(conn, _params) do
     response = %{
@@ -22,9 +22,8 @@ defmodule WandererKillsWeb.WebSocketController do
         killmails: "killmails:lobby"
       },
       authentication: %{
-        type: "token",
-        parameter: "token",
-        description: "Include your API token in the connection parameters"
+        type: "none",
+        description: "No authentication required - connections are anonymous"
       },
       limits: %{
         max_systems_per_subscription: 100,
@@ -47,7 +46,7 @@ defmodule WandererKillsWeb.WebSocketController do
   @doc """
   WebSocket server status.
 
-  Endpoint: GET /api/v2/websocket/status
+  Endpoint: GET /websocket/status
   """
   def status(conn, _params) do
     response = %{
@@ -68,7 +67,7 @@ defmodule WandererKillsWeb.WebSocketController do
     host = conn.host
     port = conn.port
 
-    "#{scheme}://#{host}:#{port}/socket"
+    "#{scheme}://#{host}:#{port}/socket/websocket"
   end
 
   defp get_server_status do

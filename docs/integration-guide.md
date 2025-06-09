@@ -636,6 +636,6 @@ For issues and questions:
 
 The current API version is `v1`. Future versions will be released with backward compatibility guarantees:
 
-- **URL Versioning**: `/api/v1/`, `/api/v2/`
+- **URL Versioning**: `/api/v1/` (WebSocket info available at `/websocket`)
 - **Deprecation Notice**: 6 months advance notice
 - **Migration Guide**: Provided for breaking changes

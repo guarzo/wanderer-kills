@@ -72,7 +72,7 @@ config :wanderer_kills,
 
 # Configure the Phoenix endpoint
 config :wanderer_kills, WandererKillsWeb.Endpoint,
-  http: [port: 4004],
+  http: [port: 4004, ip: {0, 0, 0, 0}],
   secret_key_base: "wanderer_kills_secret_key_base_development_only",
   server: true,
   live_view: [signing_salt: "wanderer_kills_live_view_salt"],
