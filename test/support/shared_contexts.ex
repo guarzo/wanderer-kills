@@ -295,12 +295,12 @@ defmodule WandererKills.Test.SharedContexts do
   defp setup_default_http_stubs do
     # These are basic stubs that can be overridden in specific tests
     # They prevent errors when HTTP calls are made but not expected
-    
+
     # Stub the HTTP client mock to return not_found for any request
     Mox.stub(WandererKills.Http.Client.Mock, :get_with_rate_limit, fn _url, _opts ->
       {:error, :not_found}
     end)
-    
+
     :ok
   end
 
