@@ -57,7 +57,8 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   require Logger
   alias WandererKills.Support.Error
   alias WandererKills.Killmails.Pipeline.Parser
-  alias WandererKills.Killmails.{Store, FieldNormalizer}
+  alias WandererKills.Killmails.FieldNormalizer
+  alias WandererKills.Storage.KillmailStore
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -117,7 +118,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   end
 
   defp handle_parse_result({:ok, :kill_older}, _killmail_id), do: {:ok, :kill_older}
-  
+
   defp handle_parse_result({:ok, parsed}, killmail_id) do
     with {:ok, enriched} <- enrich_and_log_killmail(parsed, killmail_id),
          {:ok, system_id} <- extract_system_id(enriched, killmail_id) do
@@ -125,7 +126,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
       {:ok, enriched}
     end
   end
-  
+
   defp handle_parse_result({:error, reason}, _killmail_id), do: {:error, reason}
 
   @spec parse_killmail_with_cutoff(killmail(), DateTime.t(), term()) ::
@@ -175,14 +176,15 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   end
 
   @spec extract_system_id(killmail(), term()) :: {:ok, integer()} | {:error, Error.t()}
-  defp extract_system_id(%{"solar_system_id" => system_id}, _killmail_id) when not is_nil(system_id) do
+  defp extract_system_id(%{"solar_system_id" => system_id}, _killmail_id)
+       when not is_nil(system_id) do
     {:ok, system_id}
   end
-  
+
   defp extract_system_id(%{"system_id" => system_id}, _killmail_id) when not is_nil(system_id) do
     {:ok, system_id}
   end
-  
+
   defp extract_system_id(_enriched, killmail_id) do
     Logger.error("Missing system_id in enriched killmail", %{
       killmail_id: killmail_id,
@@ -204,7 +206,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
     Task.start(fn ->
       try do
         killmail_id = enriched["killmail_id"]
-        :ok = Store.put(killmail_id, system_id, enriched)
+        :ok = KillmailStore.put(killmail_id, system_id, enriched)
 
         Logger.debug("Successfully enriched and stored killmail", %{
           killmail_id: killmail_id,
@@ -281,7 +283,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
     normalized = FieldNormalizer.normalize_killmail(partial)
     do_parse_partial(normalized, cutoff)
   end
-  
+
   defp do_parse_partial(%{"killmail_id" => id, "zkb" => %{"hash" => hash}} = partial, cutoff) do
     Logger.debug("Starting to parse partial killmail", %{
       killmail_id: id,

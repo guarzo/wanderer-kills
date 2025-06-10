@@ -34,7 +34,6 @@ defmodule WandererKillsWeb.UserSocket do
     {:ok, socket}
   end
 
-
   @impl true
   def id(socket), do: "user_socket:#{socket.assigns.user_id}"
 
@@ -85,7 +84,7 @@ defmodule WandererKillsWeb.UserSocket do
     identifier
     |> String.trim()
     |> String.slice(0, 32)
-    |> String.replace(~r/[^a-zA-Z0-9_\-]/, "_") 
+    |> String.replace(~r/[^a-zA-Z0-9_\-]/, "_")
     |> case do
       "" -> nil
       sanitized -> sanitized

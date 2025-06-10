@@ -265,7 +265,7 @@ defmodule WandererKills.Observability.Telemetry do
   Executes WebSocket subscription telemetry.
   """
   @spec websocket_subscription(atom(), integer(), map()) :: :ok
-  def websocket_subscription(event, system_count, metadata \\ %{}) 
+  def websocket_subscription(event, system_count, metadata \\ %{})
       when event in [:added, :updated, :removed] do
     :telemetry.execute(
       [:wanderer_kills, :websocket, :subscription],
@@ -518,17 +518,18 @@ defmodule WandererKills.Observability.Telemetry do
   @doc """
   Handles WebSocket telemetry events.
   """
-  def handle_websocket_event([:wanderer_kills, :websocket, event], measurements, metadata, _config) do
+  def handle_websocket_event(
+        [:wanderer_kills, :websocket, event],
+        measurements,
+        metadata,
+        _config
+      ) do
     case event do
       :kills_sent ->
-        Logger.debug(
-          "[WebSocket] Sent #{measurements.count} #{metadata.type} killmails"
-        )
+        Logger.debug("[WebSocket] Sent #{measurements.count} #{metadata.type} killmails")
 
       :connection ->
-        Logger.debug(
-          "[WebSocket] Connection #{metadata.event} (count: #{measurements.count})"
-        )
+        Logger.debug("[WebSocket] Connection #{metadata.event} (count: #{measurements.count})")
 
       :subscription ->
         Logger.debug(
@@ -543,9 +544,7 @@ defmodule WandererKills.Observability.Telemetry do
   def handle_zkb_event([:wanderer_kills, :zkb, event], measurements, metadata, _config) do
     case event do
       :format ->
-        Logger.debug(
-          "[ZKB] Format detected: #{metadata.format} (count: #{measurements.count})"
-        )
+        Logger.debug("[ZKB] Format detected: #{metadata.format} (count: #{measurements.count})")
     end
   end
 

@@ -23,6 +23,12 @@ defmodule WandererKills.Test.SharedContexts do
   ```
   """
 
+  defmacro __using__(_opts) do
+    quote do
+      import WandererKills.Test.SharedContexts
+    end
+  end
+
   import ExUnit.Callbacks
 
   @doc """
@@ -37,7 +43,9 @@ defmodule WandererKills.Test.SharedContexts do
     {:ok, _pid} = Cachex.start_link(cache_name)
 
     on_exit(fn ->
-      Cachex.stop(cache_name)
+      if Process.whereis(cache_name) do
+        Supervisor.stop(cache_name)
+      end
     end)
 
     %{cache: cache_name}
@@ -60,7 +68,7 @@ defmodule WandererKills.Test.SharedContexts do
   - `%{}` - Empty context (KillStore is global)
   """
   def with_kill_store(_context \\ %{}) do
-    WandererKills.App.KillStore.clear()
+    WandererKills.Storage.KillmailStore.clear()
     %{}
   end
 
@@ -176,10 +184,11 @@ defmodule WandererKills.Test.SharedContexts do
   def with_pubsub(_context \\ %{}) do
     pubsub_name = :"test_pubsub_#{System.unique_integer()}"
 
-    {:ok, _pid} = Phoenix.PubSub.start_link(
-      name: pubsub_name,
-      adapter: Phoenix.PubSub.PG2
-    )
+    {:ok, _pid} =
+      Phoenix.PubSub.Supervisor.start_link(
+        name: pubsub_name,
+        adapter: Phoenix.PubSub.PG2
+      )
 
     on_exit(fn ->
       # PubSub will be stopped automatically when test process exits
@@ -205,12 +214,14 @@ defmodule WandererKills.Test.SharedContexts do
       serializer: Phoenix.Socket.V2.JSONSerializer
     }
 
-    case WandererKillsWeb.UserSocket.connect(%{}, socket) do
-      {:ok, connected_socket} ->
-        %{socket: connected_socket, channel: "killmails:lobby"}
-      {:error, _reason} ->
-        %{socket: nil, channel: nil}
-    end
+    # Simulate connect_info for testing
+    connect_info = %{
+      peer_data: %{address: {127, 0, 0, 1}, port: 12_345},
+      x_headers: []
+    }
+
+    {:ok, connected_socket} = WandererKillsWeb.UserSocket.connect(%{}, socket, connect_info)
+    %{socket: connected_socket, channel: "killmails:lobby"}
   end
 
   # Private helper functions

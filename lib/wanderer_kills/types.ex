@@ -11,7 +11,7 @@ defmodule WandererKills.Types do
 
   This represents the canonical killmail format used throughout the service.
   """
-  @type kill :: %{
+  @type killmail :: %{
           killmail_id: integer(),
           kill_time: DateTime.t(),
           solar_system_id: integer(),
@@ -89,7 +89,7 @@ defmodule WandererKills.Types do
   @typedoc """
   Kill count information for a system.
   """
-  @type kill_count :: %{
+  @type killmail_count :: %{
           system_id: integer(),
           count: integer(),
           timestamp: DateTime.t()
@@ -98,8 +98,8 @@ defmodule WandererKills.Types do
   @typedoc """
   Multi-system kill data response.
   """
-  @type systems_kills :: %{
-          systems_kills: %{integer() => [kill()]},
+  @type systems_killmails :: %{
+          systems_killmails: %{integer() => [killmail()]},
           timestamp: DateTime.t()
         }
 
@@ -130,8 +130,8 @@ defmodule WandererKills.Types do
   @doc """
   Creates a kill count response.
   """
-  @spec kill_count_response(integer(), integer()) :: kill_count()
-  def kill_count_response(system_id, count) do
+  @spec killmail_count_response(integer(), integer()) :: killmail_count()
+  def killmail_count_response(system_id, count) do
     %{
       system_id: system_id,
       count: count,
@@ -142,10 +142,10 @@ defmodule WandererKills.Types do
   @doc """
   Creates a systems kills response.
   """
-  @spec systems_kills_response(%{integer() => [kill()]}) :: systems_kills()
-  def systems_kills_response(systems_kills) do
+  @spec systems_killmails_response(%{integer() => [killmail()]}) :: systems_killmails()
+  def systems_killmails_response(systems_killmails) do
     %{
-      systems_kills: systems_kills,
+      systems_killmails: systems_killmails,
       timestamp: DateTime.utc_now()
     }
   end

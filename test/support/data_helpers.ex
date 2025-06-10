@@ -316,6 +316,7 @@ defmodule WandererKills.Test.DataHelpers do
 
   def scenario_data(:multi_attacker, opts) do
     base = minimal_killmail(opts)
+
     attackers = [
       hd(base["attackers"]),
       %{
@@ -333,6 +334,7 @@ defmodule WandererKills.Test.DataHelpers do
         "final_blow" => false
       }
     ]
+
     Map.put(base, "attackers", attackers)
   end
 end

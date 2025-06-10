@@ -131,8 +131,8 @@ defmodule WandererKills.Observability.WebSocketStats do
         :telemetry.execute(
           [:wanderer_kills, :system, :websocket_metrics],
           %{
-            active_connections: stats.active_connections,
-            total_kills_sent: stats.total_kills_sent,
+            active_connections: stats.connections.active,
+            total_kills_sent: stats.kills_sent.total,
             kills_sent_rate: calculate_rate(stats)
           },
           %{}

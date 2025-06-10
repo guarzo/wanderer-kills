@@ -13,6 +13,7 @@ defmodule WandererKills.SubscriptionManager do
   alias WandererKills.Types
   alias WandererKills.Support.PubSubTopics
   alias WandererKills.Killmails.Preloader
+  alias WandererKills.Http.Client, as: HttpClient
 
   defmodule State do
     @moduledoc false
@@ -139,7 +140,7 @@ defmodule WandererKills.SubscriptionManager do
         new_subscriptions = Map.put(state.subscriptions, subscription_id, subscription)
         new_state = %State{state | subscriptions: new_subscriptions}
 
-        Logger.info("Subscription created",
+        Logger.debug("Subscription created",
           subscriber_id: subscriber_id,
           subscription_id: subscription_id,
           system_ids: system_ids,
@@ -192,7 +193,7 @@ defmodule WandererKills.SubscriptionManager do
       new_state = %State{state | subscriptions: Map.new(remaining_subscriptions)}
       removed_count = length(removed_subscriptions)
 
-      Logger.info("Subscription removed",
+      Logger.debug("Subscription removed",
         subscriber_id: subscriber_id,
         removed_count: removed_count
       )
@@ -430,7 +431,7 @@ defmodule WandererKills.SubscriptionManager do
 
     payload_size = byte_size(Jason.encode!(payload))
 
-    Logger.info("📡 WEBHOOK: Sending notification",
+    Logger.debug("📡 WEBHOOK: Sending notification",
       subscriber_id: subscription.subscriber_id,
       system_id: system_id,
       type: type,
@@ -439,20 +440,16 @@ defmodule WandererKills.SubscriptionManager do
       callback_url: String.slice(subscription.callback_url, 0, 50) <> "..."
     )
 
-    case Req.post(subscription.callback_url,
-           json: payload,
-           headers: [{"Content-Type", "application/json"}],
-           receive_timeout: 10_000
-         ) do
-      {:ok, %Req.Response{status: status}} when status in 200..299 ->
-        Logger.info("📡 WEBHOOK SUCCESS",
+    case HttpClient.post(subscription.callback_url, payload) do
+      {:ok, %{status: status}} when status in 200..299 ->
+        Logger.debug("📡 WEBHOOK SUCCESS",
           subscriber_id: subscription.subscriber_id,
           status: status,
           kill_count: length(kills),
           type: type
         )
 
-      {:ok, %Req.Response{status: status}} ->
+      {:ok, %{status: status}} ->
         Logger.warning("📡 WEBHOOK FAILED",
           subscriber_id: subscription.subscriber_id,
           status: status,
@@ -480,19 +477,15 @@ defmodule WandererKills.SubscriptionManager do
       }
     }
 
-    case Req.post(subscription.callback_url,
-           json: payload,
-           headers: [{"Content-Type", "application/json"}],
-           receive_timeout: 10_000
-         ) do
-      {:ok, %Req.Response{status: status}} when status in 200..299 ->
+    case HttpClient.post(subscription.callback_url, payload) do
+      {:ok, %{status: status}} when status in 200..299 ->
         Logger.debug("Webhook count notification sent successfully",
           subscriber_id: subscription.subscriber_id,
           callback_url: subscription.callback_url,
           status: status
         )
 
-      {:ok, %Req.Response{status: status}} ->
+      {:ok, %{status: status}} ->
         Logger.warning("Webhook count notification failed",
           subscriber_id: subscription.subscriber_id,
           callback_url: subscription.callback_url,
@@ -510,7 +503,7 @@ defmodule WandererKills.SubscriptionManager do
 
   # Preload and send recent kills for a new subscriber
   defp preload_kills_for_new_subscriber(subscription, system_ids) do
-    Logger.info("Preloading kills for new subscriber",
+    Logger.debug("Preloading kills for new subscriber",
       subscriber_id: subscription.subscriber_id,
       system_count: length(system_ids)
     )
@@ -526,7 +519,7 @@ defmodule WandererKills.SubscriptionManager do
       end)
       |> Enum.sum()
 
-    Logger.info("Preload completed for new subscriber",
+    Logger.debug("Preload completed for new subscriber",
       subscriber_id: subscription.subscriber_id,
       total_systems: length(system_ids),
       total_kills_sent: total_kills_sent
@@ -535,7 +528,7 @@ defmodule WandererKills.SubscriptionManager do
 
   # Preload kills for a specific system and send to subscriber
   defp preload_system_kills(subscription, system_id, since_hours, limit) do
-    Logger.info("🔍 PRELOAD DEBUG: Starting preload for system",
+    Logger.debug("🔍 PRELOAD DEBUG: Starting preload for system",
       subscriber_id: subscription.subscriber_id,
       system_id: system_id,
       since_hours: since_hours,
@@ -546,15 +539,19 @@ defmodule WandererKills.SubscriptionManager do
     send_preload_kills_to_subscriber(subscription, system_id, kills)
   end
 
-
   # Helper function to send preload kills to subscriber
   defp send_preload_kills_to_subscriber(subscription, system_id, kills) do
     if length(kills) > 0 do
-      Preloader.log_preload_summary(%{subscriber_id: subscription.subscriber_id}, system_id, kills)
+      Preloader.log_preload_summary(
+        %{subscriber_id: subscription.subscriber_id},
+        system_id,
+        kills
+      )
+
       broadcast_preload_kills(subscription, system_id, kills)
       length(kills)
     else
-      Logger.info("🔍 PRELOAD DEBUG: No kills found for system",
+      Logger.debug("🔍 PRELOAD DEBUG: No kills found for system",
         subscriber_id: subscription.subscriber_id,
         system_id: system_id
       )
@@ -571,7 +568,7 @@ defmodule WandererKills.SubscriptionManager do
       enriched_count = Preloader.count_enriched_kills(kills)
       subscriber_ids = Enum.map(interested_subscriptions, fn {_id, sub} -> sub.subscriber_id end)
 
-      Logger.info("🚀 REAL-TIME BROADCAST: Sending kills to subscribers",
+      Logger.debug("🚀 REAL-TIME BROADCAST: Sending kills to subscribers",
         system_id: system_id,
         kill_count: length(kills),
         killmail_ids: killmail_ids,
@@ -592,7 +589,7 @@ defmodule WandererKills.SubscriptionManager do
   defp log_sample_kill_data(kills) do
     sample_kill = List.first(kills)
 
-    Logger.info("🚀 REAL-TIME SAMPLE KILL DATA",
+    Logger.debug("🚀 REAL-TIME SAMPLE KILL DATA",
       killmail_id: sample_kill["killmail_id"],
       victim_character: sample_kill["victim"]["character_name"],
       victim_corp: sample_kill["victim"]["corporation_name"],
@@ -602,8 +599,6 @@ defmodule WandererKills.SubscriptionManager do
       npc_kill: sample_kill["npc"]
     )
   end
-
-
 
   # Helper function to log when no subscribers exist
   defp log_no_subscribers_if_kills_exist(kills, system_id) do
@@ -615,7 +610,6 @@ defmodule WandererKills.SubscriptionManager do
     end
   end
 
-
   # Helper function to broadcast preload kills
   defp broadcast_preload_kills(subscription, system_id, kills) do
     # Send via PubSub
@@ -626,5 +620,4 @@ defmodule WandererKills.SubscriptionManager do
       send_webhook_notification(subscription, system_id, kills, :preload_kill_update)
     end
   end
-
 end

@@ -208,19 +208,22 @@ defmodule WandererKills.RedisQ do
 
     if total_activity > 0 or stats.errors > 0 do
       # Get websocket stats
-      ws_stats = WandererKillsWeb.KillmailChannel.get_stats()
-      
+      ws_stats = case WandererKillsWeb.KillmailChannel.get_stats() do
+        {:ok, stats} -> stats
+        _ -> %{kills_sent: %{total: 0, realtime: 0, preload: 0}}
+      end
+
       Logger.info(
         "📊 REDISQ SUMMARY (#{duration}s): " <>
-        "Kills processed: #{stats.kills_received}, " <>
-        "Older kills: #{stats.kills_older}, " <>
-        "Skipped: #{stats.kills_skipped}, " <>
-        "Legacy: #{stats.legacy_kills}, " <>
-        "No-kill polls: #{stats.no_kills_count}, " <>
-        "Errors: #{stats.errors}, " <>
-        "Active systems: #{MapSet.size(stats.systems_active)}, " <>
-        "Total polls: #{total_activity + stats.no_kills_count + stats.errors}, " <>
-        "WS kills sent: #{ws_stats.total_kills_sent} (RT: #{ws_stats.kills_sent_realtime}, PL: #{ws_stats.kills_sent_preload})",
+          "Kills processed: #{stats.kills_received}, " <>
+          "Older kills: #{stats.kills_older}, " <>
+          "Skipped: #{stats.kills_skipped}, " <>
+          "Legacy: #{stats.legacy_kills}, " <>
+          "No-kill polls: #{stats.no_kills_count}, " <>
+          "Errors: #{stats.errors}, " <>
+          "Active systems: #{MapSet.size(stats.systems_active)}, " <>
+          "Total polls: #{total_activity + stats.no_kills_count + stats.errors}, " <>
+          "WS kills sent: #{ws_stats.kills_sent.total} (RT: #{ws_stats.kills_sent.realtime}, PL: #{ws_stats.kills_sent.preload})",
         kills_processed: stats.kills_received,
         kills_older: stats.kills_older,
         kills_skipped: stats.kills_skipped,
@@ -292,6 +295,7 @@ defmodule WandererKills.RedisQ do
     )
 
     merged = Map.merge(killmail, %{"zkb" => zkb})
+
     case UnifiedProcessor.process_killmail(merged, cutoff) do
       {:ok, :kill_older} ->
         Logger.debug("[RedisQ] Kill is older than cutoff → skipping.")
@@ -426,7 +430,7 @@ defmodule WandererKills.RedisQ do
 
   defp handle_response(%{"package" => package}) do
     # Process the killmail package
-    Logger.info("Received killmail package: #{inspect(package)}")
+    Logger.debug("Received killmail package: #{inspect(package)}")
   end
 
   defp handle_response(_) do

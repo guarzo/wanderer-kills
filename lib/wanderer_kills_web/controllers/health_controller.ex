@@ -69,5 +69,4 @@ defmodule WandererKillsWeb.HealthController do
         |> json(response)
     end
   end
-
 end

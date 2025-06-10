@@ -33,6 +33,7 @@ defmodule WandererKills.ShipTypes.CSV do
   alias NimbleCSV.RFC4180, as: CSVParser
   alias WandererKills.Support.BatchProcessor
   alias WandererKills.Support.Error
+  alias WandererKills.Cache.Helper
 
   @type parse_result :: {:ok, term()} | {:error, Error.t()}
   @type parser_function :: (map() -> term() | nil)
@@ -339,8 +340,12 @@ defmodule WandererKills.ShipTypes.CSV do
     Logger.debug("Starting ship type update from CSV")
 
     with {:ok, raw_data} <- download_csv_files(opts),
-         {:ok, _parsed_data} <- parse_ship_type_csvs(raw_data) do
-      Logger.debug("Ship type update from CSV completed successfully")
+         {:ok, parsed_data} <- parse_ship_type_csvs(raw_data) do
+      Logger.debug("Ship type update from CSV completed successfully, storing #{map_size(parsed_data)} ship types")
+      
+      # Store each ship type in the cache
+      store_ship_types_in_cache(parsed_data)
+      
       :ok
     else
       {:error, reason} ->
@@ -379,7 +384,7 @@ defmodule WandererKills.ShipTypes.CSV do
       Logger.debug("All required CSV files are present")
       {:ok, get_file_paths(data_dir)}
     else
-      Logger.info("Downloading #{length(missing_files)} CSV files: #{inspect(missing_files)}")
+      Logger.debug("Downloading #{length(missing_files)} CSV files: #{inspect(missing_files)}")
 
       case download_files(missing_files, data_dir) do
         :ok -> {:ok, get_file_paths(data_dir)}
@@ -398,7 +403,7 @@ defmodule WandererKills.ShipTypes.CSV do
   - `{:ok, ship_types}` - Parsed ship type data
   - `{:error, reason}` - Parsing failed
   """
-  @spec parse_ship_type_csvs([String.t()]) :: {:ok, [map()]} | {:error, Error.t()}
+  @spec parse_ship_type_csvs([String.t()]) :: {:ok, map()} | {:error, Error.t()}
   def parse_ship_type_csvs(file_paths) when is_list(file_paths) do
     Logger.debug("Parsing ship type data from CSV files")
 
@@ -516,7 +521,7 @@ defmodule WandererKills.ShipTypes.CSV do
            description: "CSV file downloads"
          ) do
       {:ok, _results} ->
-        Logger.info("Successfully downloaded all CSV files")
+        Logger.debug("Successfully downloaded all CSV files")
         :ok
 
       {:partial, _results, failures} ->
@@ -541,13 +546,13 @@ defmodule WandererKills.ShipTypes.CSV do
     url = "#{@eve_db_dump_url}/#{file_name}"
     download_path = Path.join(data_dir, file_name)
 
-    Logger.info("Downloading CSV file", file: file_name, url: url, path: download_path)
+    Logger.debug("Downloading CSV file", file: file_name, url: url, path: download_path)
 
     case WandererKills.Http.ClientProvider.get_client().get(url, []) do
       {:ok, %{body: body}} ->
         case File.write(download_path, body) do
           :ok ->
-            Logger.info("Successfully downloaded #{file_name}")
+            Logger.debug("Successfully downloaded #{file_name}")
             :ok
 
           {:error, reason} ->
@@ -591,8 +596,9 @@ defmodule WandererKills.ShipTypes.CSV do
     with {:ok, types_data} <- parse_csv_file_simple(types_path),
          {:ok, groups_data} <- parse_csv_file_simple(groups_path) do
       ship_types = build_ship_types(types_data, groups_data)
-      Logger.debug("Successfully processed #{length(ship_types)} ship types from CSV")
-      {:ok, ship_types}
+      ship_types_map = Map.new(ship_types, fn type -> {type["type_id"], type} end)
+      Logger.debug("Successfully processed #{map_size(ship_types_map)} ship types from CSV")
+      {:ok, ship_types_map}
     else
       {:error, reason} ->
         Logger.error("Failed to process CSV data: #{inspect(reason)}")
@@ -650,14 +656,36 @@ defmodule WandererKills.ShipTypes.CSV do
 
   defp build_ship_types(types, groups) do
     # Get ship group IDs from configuration
-    ship_group_ids = [6, 7, 9, 11, 16, 17, 23]
+    # Adding more ship groups to cover all ships including:
+    # 25 - Frigate, 26 - Cruiser, 27 - Battleship, 28 - Industrial
+    # 29 - Capsule, 30 - Titan, 31 - Shuttle, 237 - Corvette
+    # 324 - Assault Frigate, 358 - Heavy Assault Cruiser, 380 - Deep Space Transport
+    # 419 - Combat Battlecruiser, 420 - Destroyer, 463 - Mining Barge
+    # 485 - Dreadnought, 513 - Freighter, 540 - Command Ship
+    # 541 - Interdictor, 543 - Exhumer, 547 - Carrier
+    # 659 - Supercarrier, 830 - Covert Ops, 831 - Interceptor
+    # 832 - Logistics, 833 - Force Recon Ship, 834 - Stealth Bomber
+    # 863 - Electronic Attack Ship, 864 - Heavy Interdiction Cruiser
+    # 883 - Capital Industrial Ship, 893 - Electronic Warfare Ship
+    # 894 - Heavy Assault Cruiser, 898 - Black Ops, 900 - Marauder
+    # 902 - Jump Freighter, 906 - Combat Recon Ship, 941 - Industrial Command Ship
+    # 963 - Strategic Cruiser, 1022 - Prototype Exploration Ship
+    # 1201 - Attack Battlecruiser, 1202 - Blockade Runner
+    # 1283 - Expedition Frigate, 1305 - Tactical Destroyer
+    # 1527 - Logistics Frigate, 1534 - Command Destroyer
+    ship_group_ids = [
+      6, 7, 9, 11, 16, 17, 23, 25, 26, 27, 28, 29, 30, 31, 237,
+      324, 358, 380, 419, 420, 463, 485, 513, 540, 541, 543, 547,
+      659, 830, 831, 832, 833, 834, 863, 864, 883, 893, 894, 898,
+      900, 902, 906, 941, 963, 1022, 1201, 1202, 1283, 1305, 1527, 1534
+    ]
 
     groups_map = build_groups_map(groups)
 
     types
     |> filter_ship_types(ship_group_ids)
     |> map_to_ship_types(groups_map)
-    |> Enum.reject(&is_nil(&1.type_id))
+    |> Enum.reject(&is_nil(&1["type_id"]))
   end
 
   @spec build_groups_map([map()]) :: map()
@@ -722,10 +750,10 @@ defmodule WandererKills.ShipTypes.CSV do
     group_id = parse_integer_simple(Map.get(row, "groupID"))
 
     %{
-      type_id: type_id,
-      name: Map.get(row, "typeName", "Unknown"),
-      group_id: group_id,
-      group_name: Map.get(groups_map, group_id, "Unknown Group")
+      "type_id" => type_id,
+      "name" => Map.get(row, "typeName", "Unknown"),
+      "group_id" => group_id,
+      "group_name" => Map.get(groups_map, group_id, "Unknown Group")
     }
   end
 
@@ -739,4 +767,20 @@ defmodule WandererKills.ShipTypes.CSV do
   end
 
   defp parse_integer_simple(int) when is_integer(int), do: int
+
+  # Store ship types in the cache
+  defp store_ship_types_in_cache(ship_types_map) when is_map(ship_types_map) do
+    Logger.debug("Storing #{map_size(ship_types_map)} ship types in cache")
+    
+    Enum.each(ship_types_map, fn {type_id, ship_type} ->
+      case Helper.put(:ship_types, type_id, ship_type) do
+        {:ok, _} ->
+          Logger.debug("Stored ship type #{type_id}: #{ship_type.name}")
+        {:error, reason} ->
+          Logger.error("Failed to store ship type #{type_id}: #{inspect(reason)}")
+      end
+    end)
+    
+    Logger.debug("Ship types stored in cache successfully")
+  end
 end

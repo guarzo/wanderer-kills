@@ -30,7 +30,8 @@ defmodule WandererKillsWeb.Api.Helpers do
             {:ok, int}
 
           _ ->
-            {:error, Error.validation_error(:invalid_id, "Parameter #{param_name} is not a valid integer")}
+            {:error,
+             Error.validation_error(:invalid_id, "Parameter #{param_name} is not a valid integer")}
         end
 
       value when is_integer(value) ->
@@ -84,7 +85,8 @@ defmodule WandererKillsWeb.Api.Helpers do
     end
   end
 
-  def validate_system_id(_), do: {:error, Error.validation_error(:invalid_format, "System ID must be a string")}
+  def validate_system_id(_),
+    do: {:error, Error.validation_error(:invalid_format, "System ID must be a string")}
 
   @doc """
   Validates and parses killmail_id parameter.
@@ -96,11 +98,13 @@ defmodule WandererKillsWeb.Api.Helpers do
         {:ok, killmail_id}
 
       _ ->
-        {:error, Error.validation_error(:invalid_format, "Killmail ID must be a positive integer")}
+        {:error,
+         Error.validation_error(:invalid_format, "Killmail ID must be a positive integer")}
     end
   end
 
-  def validate_killmail_id(_), do: {:error, Error.validation_error(:invalid_format, "Killmail ID must be a string")}
+  def validate_killmail_id(_),
+    do: {:error, Error.validation_error(:invalid_format, "Killmail ID must be a string")}
 
   @doc """
   Validates and parses since_hours parameter.
@@ -117,11 +121,13 @@ defmodule WandererKillsWeb.Api.Helpers do
         {:ok, since_hours}
 
       _ ->
-        {:error, Error.validation_error(:invalid_format, "Since hours must be a positive integer")}
+        {:error,
+         Error.validation_error(:invalid_format, "Since hours must be a positive integer")}
     end
   end
 
-  def validate_since_hours(_), do: {:error, Error.validation_error(:invalid_format, "Since hours has invalid type")}
+  def validate_since_hours(_),
+    do: {:error, Error.validation_error(:invalid_format, "Since hours has invalid type")}
 
   @doc """
   Validates and parses limit parameter.
@@ -145,7 +151,8 @@ defmodule WandererKillsWeb.Api.Helpers do
     end
   end
 
-  def validate_limit(_), do: {:error, Error.validation_error(:invalid_format, "Limit has invalid type")}
+  def validate_limit(_),
+    do: {:error, Error.validation_error(:invalid_format, "Limit has invalid type")}
 
   @doc """
   Validates system_ids array from request body.
@@ -155,11 +162,16 @@ defmodule WandererKillsWeb.Api.Helpers do
     if Enum.all?(system_ids, &is_integer/1) and not Enum.empty?(system_ids) do
       {:ok, system_ids}
     else
-      {:error, Error.validation_error(:invalid_system_ids, "System IDs must be a non-empty list of integers")}
+      {:error,
+       Error.validation_error(
+         :invalid_system_ids,
+         "System IDs must be a non-empty list of integers"
+       )}
     end
   end
 
-  def validate_system_ids(_), do: {:error, Error.validation_error(:invalid_system_ids, "System IDs must be a list")}
+  def validate_system_ids(_),
+    do: {:error, Error.validation_error(:invalid_system_ids, "System IDs must be a list")}
 
   @doc """
   Validates subscriber_id parameter.
@@ -174,7 +186,8 @@ defmodule WandererKillsWeb.Api.Helpers do
     end
   end
 
-  def validate_subscriber_id(_), do: {:error, Error.validation_error(:invalid_subscriber_id, "Subscriber ID must be a string")}
+  def validate_subscriber_id(_),
+    do: {:error, Error.validation_error(:invalid_subscriber_id, "Subscriber ID must be a string")}
 
   @doc """
   Validates callback_url parameter (optional).
@@ -189,9 +202,14 @@ defmodule WandererKillsWeb.Api.Helpers do
         {:ok, url}
 
       _ ->
-        {:error, Error.validation_error(:invalid_callback_url, "Callback URL must be a valid HTTP/HTTPS URL")}
+        {:error,
+         Error.validation_error(
+           :invalid_callback_url,
+           "Callback URL must be a valid HTTP/HTTPS URL"
+         )}
     end
   end
 
-  def validate_callback_url(_), do: {:error, Error.validation_error(:invalid_callback_url, "Callback URL must be a string")}
+  def validate_callback_url(_),
+    do: {:error, Error.validation_error(:invalid_callback_url, "Callback URL must be a string")}
 end

@@ -1,11 +1,11 @@
 defmodule WandererKills.Killmails.Preloader do
   @moduledoc """
   Shared preload logic for killmails across different channels.
-  
+
   This module consolidates the common preload functionality used by:
   - WebSocket channels (KillmailChannel)
   - Webhook subscriptions (SubscriptionManager)
-  
+
   It provides consistent killmail preloading with:
   - Cache-first approach
   - Fallback to fresh fetch from ZKillboard
@@ -15,7 +15,7 @@ defmodule WandererKills.Killmails.Preloader do
   """
 
   require Logger
-  
+
   alias WandererKills.Cache.Helper
   alias WandererKills.Killmails.ZkbClient
   alias WandererKills.Systems.KillmailManager
@@ -27,18 +27,18 @@ defmodule WandererKills.Killmails.Preloader do
 
   @doc """
   Preloads kills for a system with a specified limit.
-  
+
   This function:
   1. Checks cache for existing killmail IDs
   2. If not found, fetches fresh kills from ZKillboard
   3. Enriches the killmails through the pipeline
   4. Returns the most recent enriched killmails up to the limit
-  
+
   ## Parameters
     - `system_id` - The EVE Online solar system ID
     - `limit` - Maximum number of kills to return
     - `since_hours` - How many hours back to fetch (for fresh fetches)
-    
+
   ## Returns
     - List of enriched killmail maps
   """
@@ -55,39 +55,76 @@ defmodule WandererKills.Killmails.Preloader do
 
   @doc """
   Fetches enriched killmails from cache by their IDs.
-  
+
   ## Parameters
     - `killmail_ids` - List of killmail IDs to fetch
     - `limit` - Maximum number of kills to return
     - `filter_recent` - Whether to filter by recency (default: true)
-    
+
   ## Returns
     - List of enriched killmail maps
   """
   @spec fetch_enriched_killmails([integer()], limit(), boolean()) :: [killmail()]
   def fetch_enriched_killmails(killmail_ids, limit, filter_recent \\ true) do
+    Logger.debug("📦 fetch_enriched_killmails called",
+      killmail_ids_count: length(killmail_ids),
+      limit: limit,
+      filter_recent: filter_recent
+    )
+
     # Only include kills from the last hour if filtering is enabled
-    cutoff_time = if filter_recent do
-      DateTime.utc_now() |> DateTime.add(-1 * 60 * 60, :second)
-    else
-      nil
-    end
-    
-    killmail_ids
-    |> Enum.take(limit * 2)  # Take more to account for filtering
-    |> Enum.map(&get_single_enriched_killmail/1)
-    |> Enum.reduce([], fn
-      {:ok, killmail}, acc -> [killmail | acc]
-      {:error, _}, acc -> acc
-    end)
-    |> Enum.reverse()
-    |> maybe_filter_recent(cutoff_time)
-    |> Enum.take(limit)
+    cutoff_time =
+      if filter_recent do
+        now = DateTime.utc_now()
+        cutoff = DateTime.add(now, -1 * 60 * 60, :second)
+        Logger.debug("📦 Calculated cutoff time for filtering",
+          current_time: DateTime.to_iso8601(now),
+          cutoff_time: DateTime.to_iso8601(cutoff),
+          hours_back: 1
+        )
+        cutoff
+      else
+        nil
+      end
+
+    fetched_kills =
+      killmail_ids
+      # Take more to account for filtering
+      |> Enum.take(limit * 2)
+      |> Enum.map(&get_single_enriched_killmail/1)
+      |> Enum.reduce([], fn
+        {:ok, killmail}, acc ->
+          Logger.debug("📦 Retrieved killmail from cache",
+            killmail_id: killmail["killmail_id"]
+          )
+          [killmail | acc]
+        {:error, reason}, acc ->
+          Logger.debug("📦 Failed to retrieve killmail from cache",
+            error: inspect(reason)
+          )
+          acc
+      end)
+
+    Logger.debug("📦 Fetched kills before filtering",
+      count: length(fetched_kills)
+    )
+
+    result =
+      fetched_kills
+      |> Enum.reverse()
+      |> maybe_filter_recent(cutoff_time)
+      |> Enum.take(limit)
+
+    Logger.debug("📦 Final result after filtering",
+      count: length(result)
+    )
+
+    result
   end
 
   @doc """
   Extracts kill times from a list of killmails.
-  
+
   Handles both `kill_time` and legacy `killmail_time` fields.
   """
   @spec extract_kill_times([killmail()]) :: [String.t()]
@@ -103,7 +140,7 @@ defmodule WandererKills.Killmails.Preloader do
 
   @doc """
   Counts how many kills have enriched data (character names).
-  
+
   A kill is considered enriched if it has:
   - Victim character name, OR
   - At least one attacker with a character name
@@ -115,8 +152,8 @@ defmodule WandererKills.Killmails.Preloader do
       attackers = kill["attackers"] || []
 
       victim_name != nil or
-        Enum.any?(attackers, fn attacker -> 
-          attacker["character_name"] != nil 
+        Enum.any?(attackers, fn attacker ->
+          attacker["character_name"] != nil
         end)
     end)
   end
@@ -128,21 +165,53 @@ defmodule WandererKills.Killmails.Preloader do
   def killmail_recent?(killmail, cutoff_time) do
     case killmail["kill_time"] do
       %DateTime{} = dt ->
-        DateTime.compare(dt, cutoff_time) == :gt
-        
+        result = DateTime.compare(dt, cutoff_time) == :gt
+        Logger.debug("📦 Checking if killmail is recent",
+          killmail_id: killmail["killmail_id"],
+          kill_time: DateTime.to_iso8601(dt),
+          cutoff_time: DateTime.to_iso8601(cutoff_time),
+          comparison_result: DateTime.compare(dt, cutoff_time),
+          is_recent: result
+        )
+        result
+
+      time_string when is_binary(time_string) ->
+        case DateTime.from_iso8601(time_string) do
+          {:ok, dt, _offset} ->
+            result = DateTime.compare(dt, cutoff_time) == :gt
+            Logger.debug("📦 Checking if killmail is recent (parsed from string)",
+              killmail_id: killmail["killmail_id"],
+              kill_time_string: time_string,
+              kill_time_parsed: DateTime.to_iso8601(dt),
+              cutoff_time: DateTime.to_iso8601(cutoff_time),
+              comparison_result: DateTime.compare(dt, cutoff_time),
+              is_recent: result
+            )
+            result
+          
+          {:error, _} ->
+            Logger.error("Failed to parse kill_time",
+              killmail_id: killmail["killmail_id"],
+              kill_time: time_string
+            )
+            false
+        end
+
       nil ->
         Logger.error("Enriched killmail missing kill_time",
           killmail_id: killmail["killmail_id"],
           available_keys: Map.keys(killmail) |> Enum.sort()
         )
+
         false
-        
+
       other ->
         Logger.error("Enriched killmail has invalid kill_time format",
           killmail_id: killmail["killmail_id"],
           kill_time_type: inspect(other),
           kill_time_value: inspect(other, limit: 100)
         )
+
         false
     end
   end
@@ -156,7 +225,8 @@ defmodule WandererKills.Killmails.Preloader do
     kill_times = extract_kill_times(kills)
     enriched_count = count_enriched_kills(kills)
 
-    Logger.info("📦 Preload summary",
+    Logger.debug(
+      "📦 Preload summary",
       Map.merge(context, %{
         system_id: system_id,
         kill_count: length(kills),
@@ -174,7 +244,7 @@ defmodule WandererKills.Killmails.Preloader do
   # Private functions
 
   defp fetch_and_cache_fresh_kills(system_id, limit, since_hours) do
-    Logger.info("📦 No cached kills found, fetching fresh kills",
+    Logger.debug("📦 No cached kills found, fetching fresh kills",
       system_id: system_id,
       limit: limit,
       since_hours: since_hours
@@ -184,11 +254,11 @@ defmodule WandererKills.Killmails.Preloader do
       {:ok, fresh_kills} when is_list(fresh_kills) ->
         # Only process the number of kills we need for preload
         kills_to_cache = Enum.take(fresh_kills, limit)
-        
+
         # Cache the kills through the pipeline
         KillmailManager.process_system_killmails(system_id, kills_to_cache)
 
-        Logger.info("📦 Fetched and cached fresh kills",
+        Logger.debug("📦 Fetched and cached fresh kills",
           system_id: system_id,
           fresh_kills_fetched: length(fresh_kills),
           kills_to_process: length(kills_to_cache)
@@ -197,29 +267,72 @@ defmodule WandererKills.Killmails.Preloader do
         # Now get the enriched killmails from cache
         case Helper.get_system_killmails(system_id) do
           {:ok, killmail_ids} when is_list(killmail_ids) ->
-            fetch_enriched_killmails(killmail_ids, limit)
+            Logger.debug("📦 Found killmail IDs for system",
+              system_id: system_id,
+              killmail_ids: killmail_ids,
+              count: length(killmail_ids)
+            )
 
-          {:error, _reason} ->
-            Logger.warning("📦 Failed to get cached killmail IDs after caching",
+            result = fetch_enriched_killmails(killmail_ids, limit)
+
+            Logger.debug("📦 Fetched enriched killmails",
+              system_id: system_id,
+              requested_count: length(killmail_ids),
+              returned_count: length(result)
+            )
+
+            result
+
+          {:error, %{type: :not_found}} ->
+            # This is expected when no killmails passed validation (e.g., all too old)
+            Logger.debug("📦 No killmails were cached for system (likely all filtered out)",
               system_id: system_id
             )
+
+            []
+
+          {:error, reason} ->
+            # Only warn for actual errors, not expected "not found" cases
+            Logger.warning("📦 Failed to get cached killmail IDs after caching",
+              system_id: system_id,
+              error: reason
+            )
+
             []
         end
 
       {:error, reason} ->
-        Logger.info("📦 Failed to fetch fresh kills for preload",
+        Logger.debug("📦 Failed to fetch fresh kills for preload",
           system_id: system_id,
           error: reason
         )
+
         []
     end
   end
 
   defp get_single_enriched_killmail(killmail_id) do
-    Helper.get(:killmails, killmail_id)
+    result = Helper.get(:killmails, killmail_id)
+
+    case result do
+      {:ok, killmail} ->
+        Logger.debug("📦 Successfully retrieved killmail from cache",
+          killmail_id: killmail_id,
+          has_kill_time: Map.has_key?(killmail, "kill_time"),
+          kill_time: Map.get(killmail, "kill_time")
+        )
+      {:error, reason} ->
+        Logger.debug("📦 Failed to retrieve killmail from cache",
+          killmail_id: killmail_id,
+          error: inspect(reason)
+        )
+    end
+
+    result
   end
 
   defp maybe_filter_recent(kills, nil), do: kills
+
   defp maybe_filter_recent(kills, cutoff_time) do
     Enum.filter(kills, fn killmail ->
       killmail_recent?(killmail, cutoff_time)
@@ -227,13 +340,15 @@ defmodule WandererKills.Killmails.Preloader do
   end
 
   defp kill_time_range([]), do: "no kills"
+
   defp kill_time_range(times) do
     "#{List.first(times)} to #{List.last(times)}"
   end
 
   defp log_sample_kill([]), do: :ok
+
   defp log_sample_kill([sample | _]) do
-    Logger.info("📦 Sample kill data",
+    Logger.debug("📦 Sample kill data",
       killmail_id: sample["killmail_id"],
       victim_character: get_in(sample, ["victim", "character_name"]),
       victim_corp: get_in(sample, ["victim", "corporation_name"]),

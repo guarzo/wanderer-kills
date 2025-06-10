@@ -10,7 +10,17 @@
       "Bash(mv:*)",
       "Bash(mix deps.tree:*)",
       "Bash(mix format:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(mix dialyzer:*)",
+      "Bash(MIX_ENV=test mix test test/test_helper.exs --trace)",
+      "Bash(MIX_ENV=test mix test test/shared/cache_test.exs --trace)",
+      "Bash(MIX_ENV=test mix test test/shared/cache_test.exs --max-failures 1)",
+      "Bash(MIX_ENV=test mix test --max-failures 5)",
+      "Bash(mix test:*)",
+      "Bash(mix deps.get:*)",
+      "Bash(MIX_ENV=test mix test test/shared/cache_key_test.exs --no-start)",
+      "Bash(MIX_ENV=test mix test test/external/esi_cache_test.exs --no-start)",
+      "Bash(MIX_ENV=test mix test)"
     ],
     "deny": []
   }

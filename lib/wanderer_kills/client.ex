@@ -14,6 +14,7 @@ defmodule WandererKills.Client do
   alias WandererKills.{SubscriptionManager, Types}
   alias WandererKills.Killmails.ZkbClient
   alias WandererKills.Cache.Helper
+  alias WandererKills.Support.Error
 
   @impl true
   def fetch_system_kills(system_id, since_hours, limit) do
@@ -29,7 +30,7 @@ defmodule WandererKills.Client do
         filtered_kills = filter_kills_by_time(kills, since_hours)
         limited_kills = Enum.take(filtered_kills, limit)
 
-        Logger.info("Successfully fetched system kills",
+        Logger.debug("Successfully fetched system kills",
           system_id: system_id,
           total_kills: length(kills),
           filtered_kills: length(filtered_kills),
@@ -85,7 +86,7 @@ defmodule WandererKills.Client do
         _ -> 0
       end
 
-    Logger.info("Fetched kills for multiple systems",
+    Logger.debug("Fetched kills for multiple systems",
       requested_systems: length(system_ids),
       successful_systems: map_size(results),
       total_kills: total_kills
@@ -111,13 +112,6 @@ defmodule WandererKills.Client do
         Logger.warning("Failed to fetch cached kills",
           system_id: system_id,
           error: reason
-        )
-
-        []
-
-      _ ->
-        Logger.warning("Unexpected response from cache",
-          system_id: system_id
         )
 
         []
@@ -157,7 +151,7 @@ defmodule WandererKills.Client do
 
     case SubscriptionManager.subscribe(subscriber_id, system_ids, callback_url) do
       {:ok, subscription_id} ->
-        Logger.info("Kill subscription created",
+        Logger.debug("Kill subscription created",
           subscriber_id: subscriber_id,
           subscription_id: subscription_id,
           system_count: length(system_ids)
@@ -181,7 +175,7 @@ defmodule WandererKills.Client do
 
     case SubscriptionManager.unsubscribe(subscriber_id) do
       :ok ->
-        Logger.info("Kill subscription removed", subscriber_id: subscriber_id)
+        Logger.debug("Kill subscription removed", subscriber_id: subscriber_id)
         :ok
 
       {:error, reason} ->
@@ -201,7 +195,7 @@ defmodule WandererKills.Client do
     case ZkbClient.fetch_killmail(killmail_id) do
       {:ok, killmail} ->
         Logger.debug("Successfully fetched killmail", killmail_id: killmail_id)
-        {:ok, killmail}
+        killmail
 
       {:error, reason} ->
         Logger.warning("Failed to fetch killmail",
@@ -209,7 +203,7 @@ defmodule WandererKills.Client do
           error: reason
         )
 
-        {:error, reason}
+        nil
     end
   end
 
@@ -220,12 +214,14 @@ defmodule WandererKills.Client do
     case Helper.get_system_killmails(system_id) do
       {:ok, killmail_ids} when is_list(killmail_ids) ->
         count = length(killmail_ids)
+
         Logger.debug("Retrieved system kill count",
           system_id: system_id,
           count: count
         )
 
         count
+
       _ ->
         0
     end
@@ -246,7 +242,9 @@ defmodule WandererKills.Client do
 
   defp get_kill_time(kill) do
     case extract_time_from_killmail(kill) do
-      {:ok, time} -> {:ok, time}
+      {:ok, time} ->
+        {:ok, time}
+
       {:continue, kill} ->
         case extract_time_from_kill_time(kill) do
           {:ok, time} -> {:ok, time}
@@ -281,7 +279,7 @@ defmodule WandererKills.Client do
     if is_map(kill) and Map.has_key?(kill, "zkb") do
       extract_time_from_zkb_metadata(kill["zkb"])
     else
-      {:error, :no_time_found}
+      {:error, Error.time_error(:no_time_found, "No time field found in killmail")}
     end
   end
 
@@ -289,11 +287,11 @@ defmodule WandererKills.Client do
     if Map.has_key?(zkb, "killmail_time") do
       parse_datetime(zkb["killmail_time"])
     else
-      {:error, :no_time_in_zkb}
+      {:error, Error.time_error(:no_time_in_zkb, "No time field in zkb metadata")}
     end
   end
 
-  defp extract_time_from_zkb_metadata(_), do: {:error, :invalid_zkb_data}
+  defp extract_time_from_zkb_metadata(_), do: {:error, Error.validation_error(:invalid_zkb_data, "Invalid zkb metadata format")}
 
   defp parse_datetime(datetime_string) when is_binary(datetime_string) do
     case DateTime.from_iso8601(datetime_string) do

@@ -14,6 +14,7 @@ defmodule WandererKills.Support.Retry do
 
   require Logger
   alias WandererKills.Config
+  alias WandererKills.Support.Error
 
   # Retry Configuration Constants
   @default_base_delay 1_000
@@ -83,7 +84,7 @@ defmodule WandererKills.Support.Retry do
           {:ok, term()} | {:error, term()}
   defp do_retry(_fun, 0, _backoff_state, _rescue_only, operation_name) do
     Logger.error("#{operation_name} failed after exhausting all retry attempts")
-    {:error, :max_retries_exceeded}
+    {:error, Error.system_error(:max_retries_exceeded, "#{operation_name} failed after exhausting all retry attempts", false)}
   end
 
   defp do_retry(fun, retries_left, backoff_state, rescue_only, operation_name) do

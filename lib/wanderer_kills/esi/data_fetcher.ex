@@ -78,7 +78,7 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl true
   def get_group(group_id) when is_integer(group_id) do
-    Helper.get_or_set("groups", to_string(group_id), fn ->
+    Helper.get_or_set(:ship_types, "group:#{group_id}", fn ->
       fetch_from_api(:group, group_id)
     end)
   end

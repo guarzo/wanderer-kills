@@ -4,6 +4,7 @@ defmodule WandererKills.Api.HelpersTest do
   import Plug.Conn
 
   alias WandererKillsWeb.Api.Helpers
+  alias WandererKills.Support.Error
 
   describe "parse_integer_param/2" do
     test "returns {:ok, integer} for valid integer string" do
@@ -16,24 +17,24 @@ defmodule WandererKills.Api.HelpersTest do
       assert {:ok, 123} = Helpers.parse_integer_param(conn, "id")
     end
 
-    test "returns {:error, :invalid_id} for non-integer string" do
+    test "returns {:error, %Error{}} for non-integer string" do
       conn = conn(:get, "/test?id=abc") |> fetch_query_params()
-      assert {:error, :invalid_id} = Helpers.parse_integer_param(conn, "id")
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
     end
 
-    test "returns {:error, :invalid_id} for empty string" do
+    test "returns {:error, %Error{}} for empty string" do
       conn = conn(:get, "/test?id=") |> fetch_query_params()
-      assert {:error, :invalid_id} = Helpers.parse_integer_param(conn, "id")
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
     end
 
-    test "returns {:error, :invalid_id} for missing parameter" do
+    test "returns {:error, %Error{}} for missing parameter" do
       conn = conn(:get, "/test") |> fetch_query_params()
-      assert {:error, :invalid_id} = Helpers.parse_integer_param(conn, "id")
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
     end
 
-    test "returns {:error, :invalid_id} for integer with trailing characters" do
+    test "returns {:error, %Error{}} for integer with trailing characters" do
       conn = conn(:get, "/test?id=123abc") |> fetch_query_params()
-      assert {:error, :invalid_id} = Helpers.parse_integer_param(conn, "id")
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
     end
 
     test "returns {:ok, integer} for negative integer" do

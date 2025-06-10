@@ -37,7 +37,15 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
   require Logger
 
   alias WandererKills.Support.Error
-  alias WandererKills.Killmails.Pipeline.{Enricher, Validator, Normalizer, DataBuilder, ESIFetcher}
+
+  alias WandererKills.Killmails.Pipeline.{
+    Enricher,
+    Validator,
+    Normalizer,
+    DataBuilder,
+    ESIFetcher
+  }
+
   alias WandererKills.Killmails.FieldNormalizer
 
   @type killmail :: map()
@@ -112,7 +120,7 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
   def parse_partial_killmail(partial, cutoff_time) do
     # Normalize field names first
     normalized = FieldNormalizer.normalize_killmail(partial)
-    
+
     case {normalized["killmail_id"], normalized["zkb"]} do
       {id, zkb} when is_integer(id) and is_map(zkb) ->
         Logger.debug("Parsing partial killmail", killmail_id: id)
@@ -125,7 +133,7 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
             Logger.error("Failed to parse partial killmail", killmail_id: id, error: reason)
             {:error, reason}
         end
-        
+
       _ ->
         {:error,
          Error.killmail_error(
@@ -188,5 +196,4 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
         {:ok, killmail}
     end
   end
-
 end

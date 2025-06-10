@@ -15,4 +15,5 @@ defmodule WandererKills.Http.ClientBehaviour do
 
   @callback get(url(), headers(), options()) :: response()
   @callback get_with_rate_limit(url(), options()) :: response()
+  @callback post(url(), map(), options()) :: response()
 end

@@ -116,7 +116,7 @@ defmodule WandererKills.Killmails.ZkbClient do
 
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    Logger.info("[ZKB] Fetching system killmails",
+    Logger.debug("[ZKB] Fetching system killmails",
       system_id: system_id,
       data_source: "zkillboard.com/api",
       request_type: "historical_data"
@@ -472,19 +472,23 @@ defmodule WandererKills.Killmails.ZkbClient do
       killmail_count: length(killmails),
       data_source: "zkillboard.com/api"
     )
-    
+
     # Track format for telemetry if we have killmails
     if length(killmails) > 0 do
       sample = List.first(killmails)
-      format_type = cond do
-        Map.has_key?(sample, "victim") && Map.has_key?(sample, "attackers") ->
-          :full_esi_format
-        Map.has_key?(sample, "killmail_id") && Map.has_key?(sample, "zkb") ->
-          :zkb_reference_format
-        true ->
-          :unknown_format
-      end
-      
+
+      format_type =
+        cond do
+          Map.has_key?(sample, "victim") && Map.has_key?(sample, "attackers") ->
+            :full_esi_format
+
+          Map.has_key?(sample, "killmail_id") && Map.has_key?(sample, "zkb") ->
+            :zkb_reference_format
+
+          true ->
+            :unknown_format
+        end
+
       # Emit telemetry event
       WandererKills.Observability.Telemetry.zkb_format(format_type, %{
         source: :zkb_api,
@@ -493,5 +497,4 @@ defmodule WandererKills.Killmails.ZkbClient do
       })
     end
   end
-
 end

@@ -1,16 +1,16 @@
 defmodule WandererKills.Killmails.Pipeline.Normalizer do
   @moduledoc """
   Data normalization functions for killmail processing.
-  
+
   This module handles normalizing victim and attacker data structures
   to ensure consistent formatting throughout the pipeline.
   """
-  
+
   @type killmail :: map()
-  
+
   @doc """
   Normalizes victim data structure.
-  
+
   Ensures all expected fields are present with appropriate defaults.
   """
   @spec normalize_victim(map()) :: map()
@@ -24,17 +24,17 @@ defmodule WandererKills.Killmails.Pipeline.Normalizer do
       "items" => victim["items"] || []
     }
   end
-  
+
   @doc """
   Normalizes a list of attackers.
-  
+
   Ensures all attackers have consistent field structure.
   """
   @spec normalize_attackers([map()]) :: [map()]
   def normalize_attackers(attackers) when is_list(attackers) do
     Enum.map(attackers, &normalize_attacker/1)
   end
-  
+
   @doc """
   Normalizes a single attacker's data.
   """
@@ -51,17 +51,18 @@ defmodule WandererKills.Killmails.Pipeline.Normalizer do
       "security_status" => attacker["security_status"]
     }
   end
-  
+
   @doc """
   Extracts the kill time field from a killmail.
-  
+
   Handles different field name variations.
   """
   @spec get_kill_time(killmail()) :: String.t() | nil
   def get_kill_time(killmail) do
-    killmail["kill_time"]
+    # ESI returns "killmail_time", but after normalization it might be "kill_time"
+    killmail["killmail_time"] || killmail["kill_time"]
   end
-  
+
   @doc """
   Extracts the killmail ID from a killmail.
   """

@@ -10,6 +10,7 @@ defmodule WandererKillsWeb.KillsController do
   import WandererKillsWeb.Api.Helpers
   require Logger
   alias WandererKills.Client
+  alias WandererKills.Support.Error
 
   @doc """
   Lists kills for a specific system with time filtering.
@@ -49,7 +50,7 @@ defmodule WandererKillsWeb.KillsController do
           })
       end
     else
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
     end
   end
@@ -79,10 +80,10 @@ defmodule WandererKillsWeb.KillsController do
 
       render_success(conn, response)
     else
-      {:error, :invalid_system_ids} ->
+      {:error, %Error{type: :invalid_system_ids}} ->
         render_error(conn, 400, "Invalid system IDs", "INVALID_SYSTEM_IDS")
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid parameters", "INVALID_PARAMETERS")
     end
   end
@@ -107,7 +108,7 @@ defmodule WandererKillsWeb.KillsController do
 
         render_success(conn, response)
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
     end
   end
@@ -123,14 +124,14 @@ defmodule WandererKillsWeb.KillsController do
         Logger.debug("Fetching specific killmail", killmail_id: killmail_id)
 
         case Client.get_killmail(killmail_id) do
-          {:ok, killmail} ->
-            render_success(conn, killmail)
-
-          {:error, _reason} ->
+          nil ->
             render_error(conn, 404, "Killmail not found", "NOT_FOUND")
+
+          killmail ->
+            render_success(conn, killmail)
         end
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid killmail ID format", "INVALID_KILLMAIL_ID")
     end
   end
@@ -155,7 +156,7 @@ defmodule WandererKillsWeb.KillsController do
 
         render_success(conn, response)
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
     end
   end

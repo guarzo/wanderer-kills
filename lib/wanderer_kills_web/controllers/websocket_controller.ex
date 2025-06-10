@@ -7,7 +7,7 @@ defmodule WandererKillsWeb.WebSocketController do
   """
 
   use WandererKillsWeb, :controller
-  
+
   alias WandererKills.WebSocket.Info
 
   @doc """
@@ -21,7 +21,7 @@ defmodule WandererKillsWeb.WebSocketController do
       host: conn.host,
       port: conn.port
     }
-    
+
     response = Info.get_connection_info(conn_info)
     json(conn, response)
   end
@@ -35,5 +35,4 @@ defmodule WandererKillsWeb.WebSocketController do
     response = Info.get_server_status()
     json(conn, response)
   end
-
 end

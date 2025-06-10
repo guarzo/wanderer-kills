@@ -43,6 +43,7 @@ defmodule WandererKills.Support.BatchProcessor do
 
   require Logger
   alias WandererKills.Config
+  alias WandererKills.Support.Error
 
   @type task_result :: {:ok, term()} | {:error, term()}
   @type batch_result :: {:ok, [term()]} | {:partial, [term()], [term()]} | {:error, term()}
@@ -77,7 +78,7 @@ defmodule WandererKills.Support.BatchProcessor do
     supervisor = Keyword.get(opts, :supervisor, WandererKills.TaskSupervisor)
     description = Keyword.get(opts, :description, "items")
 
-    Logger.info(
+    Logger.debug(
       "Processing #{length(items)} #{description} in parallel " <>
         "(max_concurrency: #{max_concurrency}, timeout: #{timeout}ms)"
     )
@@ -117,7 +118,7 @@ defmodule WandererKills.Support.BatchProcessor do
     timeout = Keyword.get(opts, :timeout, Config.timeouts().default_request_ms)
     description = Keyword.get(opts, :description, "tasks")
 
-    Logger.info("Awaiting #{length(tasks)} #{description} (timeout: #{timeout}ms)")
+    Logger.debug("Awaiting #{length(tasks)} #{description} (timeout: #{timeout}ms)")
 
     start_time = System.monotonic_time()
 
@@ -127,7 +128,7 @@ defmodule WandererKills.Support.BatchProcessor do
       duration = System.monotonic_time() - start_time
       duration_ms = System.convert_time_unit(duration, :native, :millisecond)
 
-      Logger.info("Completed #{length(tasks)} #{description} in #{duration_ms}ms")
+      Logger.debug("Completed #{length(tasks)} #{description} in #{duration_ms}ms")
       {:ok, results}
     rescue
       error ->
@@ -155,12 +156,12 @@ defmodule WandererKills.Support.BatchProcessor do
 
     case {success_count, failure_count} do
       {^total_count, 0} ->
-        Logger.info("Successfully processed #{success_count} #{description} in #{duration_ms}ms")
+        Logger.debug("Successfully processed #{success_count} #{description} in #{duration_ms}ms")
         {:ok, successes}
 
       {0, ^total_count} ->
         Logger.error("Failed to process all #{total_count} #{description} in #{duration_ms}ms")
-        {:error, "All items failed to process"}
+        {:error, Error.system_error(:batch_failed, "All items failed to process", false, %{total: total_count, description: description})}
 
       {_, _} ->
         Logger.warning(

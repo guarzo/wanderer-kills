@@ -29,6 +29,7 @@ defmodule WandererKills.Support.Clock do
   """
 
   require Logger
+  alias WandererKills.Support.Error
 
   @type killmail :: map()
   @type time_result :: {:ok, DateTime.t()} | {:error, term()}
@@ -146,7 +147,7 @@ defmodule WandererKills.Support.Clock do
   def get_killmail_time(%{"killmail_time" => value}), do: parse_time(value)
   def get_killmail_time(%{"killTime" => value}), do: parse_time(value)
   def get_killmail_time(%{"zkb" => %{"time" => value}}), do: parse_time(value)
-  def get_killmail_time(_), do: {:error, :missing_time}
+  def get_killmail_time(_), do: {:error, Error.time_error(:missing_time, "No time field found in killmail")}
 
   @doc """
   Parses a time value from various formats into a DateTime.
@@ -175,7 +176,7 @@ defmodule WandererKills.Support.Clock do
     end
   end
 
-  def parse_time(_), do: {:error, :invalid_time_format}
+  def parse_time(_), do: {:error, Error.time_error(:invalid_time_format, "Invalid time format")}
 
   @doc """
   Converts a DateTime to an ISO8601 string for storage in cache.
@@ -195,7 +196,7 @@ defmodule WandererKills.Support.Clock do
     end
   end
 
-  defp parse_kill_time(_), do: {:error, :invalid_kill_time}
+  defp parse_kill_time(_), do: {:error, Error.time_error(:invalid_kill_time, "Invalid kill time format")}
 
   defp parse_zkb_time(time) when is_binary(time) do
     case DateTime.from_iso8601(time) do
@@ -204,7 +205,7 @@ defmodule WandererKills.Support.Clock do
     end
   end
 
-  defp parse_zkb_time(_), do: {:error, :invalid_zkb_time}
+  defp parse_zkb_time(_), do: {:error, Error.time_error(:invalid_zkb_time, "Invalid zkb time format")}
 
   defp log_time_parse_error(time_str, error) do
     Logger.warning("[Clock] Failed to parse time: #{time_str}, error: #{inspect(error)}")

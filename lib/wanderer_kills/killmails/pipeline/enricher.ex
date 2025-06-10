@@ -35,7 +35,8 @@ defmodule WandererKills.Killmails.Pipeline.Enricher do
     with {:ok, killmail} <- enrich_victim(killmail),
          {:ok, killmail} <- enrich_attackers(killmail),
          {:ok, killmail} <- enrich_ship(killmail),
-         {:ok, killmail} <- flatten_enriched_data(killmail) do
+         {:ok, killmail} <- flatten_enriched_data(killmail),
+         {:ok, killmail} <- Transformations.enrich_with_ship_names(killmail) do
       {:ok, killmail}
     else
       error ->
@@ -184,5 +185,4 @@ defmodule WandererKills.Killmails.Pipeline.Enricher do
         {:ok, killmail}
     end
   end
-
 end

@@ -139,7 +139,7 @@ defmodule WandererKills.ShipTypes.Updater do
 
     case update_with_csv() do
       :ok ->
-        Logger.info("Ship type update completed successfully using CSV data")
+        Logger.debug("Ship type update completed successfully using CSV data")
         :ok
 
       csv_result ->
@@ -147,7 +147,7 @@ defmodule WandererKills.ShipTypes.Updater do
 
         case update_with_esi() do
           :ok ->
-            Logger.info("Ship type update completed successfully using ESI fallback")
+            Logger.debug("Ship type update completed successfully using ESI fallback")
             :ok
 
           esi_result ->
@@ -229,11 +229,11 @@ defmodule WandererKills.ShipTypes.Updater do
   """
   @spec update_with_esi() :: :ok | {:error, term()}
   def update_with_esi do
-    Logger.info("Attempting ship type update from ESI")
+    Logger.debug("Attempting ship type update from ESI")
 
     case EsiSource.update() do
       :ok ->
-        Logger.info("ESI ship type update completed successfully")
+        Logger.debug("ESI ship type update completed successfully")
         :ok
 
       {:error, reason} ->
@@ -271,7 +271,7 @@ defmodule WandererKills.ShipTypes.Updater do
   """
   @spec update_ship_groups([integer()]) :: :ok | {:error, term()}
   def update_ship_groups(group_ids) when is_list(group_ids) do
-    Logger.info("Updating specific ship groups: #{inspect(group_ids)}")
+    Logger.debug("Updating specific ship groups: #{inspect(group_ids)}")
     EsiSource.update(group_ids: group_ids)
   end
 
@@ -296,11 +296,11 @@ defmodule WandererKills.ShipTypes.Updater do
   """
   @spec download_csv_files() :: :ok | {:error, term()}
   def download_csv_files do
-    Logger.info("Downloading CSV files for ship type data")
+    Logger.debug("Downloading CSV files for ship type data")
 
     case CSV.download_csv_files(force_download: true) do
       {:ok, _file_paths} ->
-        Logger.info("CSV files downloaded successfully")
+        Logger.debug("CSV files downloaded successfully")
         :ok
 
       {:error, reason} ->

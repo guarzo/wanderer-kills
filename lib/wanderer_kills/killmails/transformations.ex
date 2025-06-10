@@ -1,35 +1,36 @@
 defmodule WandererKills.Killmails.Transformations do
   @moduledoc """
   Centralized module for all killmail field transformations and data normalization.
-  
+
   This module consolidates transformation logic that was previously scattered
   across multiple modules including field normalization, data structure 
   standardization, and data flattening operations.
-  
+
   ## Functions
-  
+
   - Field name normalization (killID -> killmail_id, etc.)
   - Data structure normalization with defaults
   - Entity data flattening (nested -> flat fields)
   - Ship name enrichment
   - Attacker count calculation
-  
+
   ## Usage
-  
+
   ```elixir
   # Normalize field names
   normalized = Transformations.normalize_field_names(raw_killmail)
-  
+
   # Flatten enriched entity data
   flattened = Transformations.flatten_enriched_data(enriched_killmail)
-  
+
   # Apply victim/attacker normalization  
   victim = Transformations.normalize_victim_data(victim_map)
   attackers = Transformations.normalize_attackers_data(attackers_list)
   ```
   """
-  
+
   require Logger
+  alias WandererKills.Support.Error
 
   # Field name mappings for normalization
   @field_mappings %{
@@ -67,17 +68,17 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Normalizes killmail field names to consistent naming convention.
-  
+
   Converts legacy field names like "killID" to standardized names like "killmail_id".
-  
+
   ## Parameters
   - `killmail` - Raw killmail map with potentially non-standard field names
-  
+
   ## Returns
   - Killmail map with normalized field names
-  
+
   ## Examples
-  
+
   ```elixir
   raw = %{"killID" => 123, "killmail_time" => "2024-01-01T12:00:00Z"}
   normalized = normalize_field_names(raw)
@@ -100,13 +101,13 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Normalizes victim data structure with default values.
-  
+
   Ensures victim data has all required fields with appropriate defaults
   for missing values.
-  
+
   ## Parameters
   - `victim` - Raw victim data map
-  
+
   ## Returns
   - Normalized victim map with defaults applied
   """
@@ -117,12 +118,12 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Normalizes attackers data structure with defaults.
-  
+
   Applies default values to each attacker and calculates total attacker count.
-  
+
   ## Parameters
   - `attackers` - List of raw attacker data maps
-  
+
   ## Returns
   - `{normalized_attackers, attacker_count}` - Tuple of normalized list and count
   """
@@ -138,13 +139,13 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Flattens enriched data in a killmail by extracting nested entity information.
-  
+
   Converts nested enriched data like victim.character.name to flat fields
   like victim_name for easier access and processing.
-  
+
   ## Parameters
   - `killmail` - Killmail with enriched nested entity data
-  
+
   ## Returns
   - Killmail with flattened data fields
   """
@@ -157,59 +158,61 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Flattens victim entity data to top-level fields.
-  
+
   Extracts character, corporation, alliance, and ship information
   from nested structures to flat victim fields.
-  
+
   ## Parameters
   - `killmail` - Killmail containing victim with nested entity data
-  
+
   ## Returns
   - Killmail with flattened victim data
   """
   @spec flatten_victim_data(map()) :: map()
   def flatten_victim_data(killmail) when is_map(killmail) do
     victim = Map.get(killmail, "victim", %{})
-    
-    flattened_victim = victim
-    |> add_flat_field("victim_name", ["character", "name"])
-    |> add_flat_field("corporation_name", ["corporation", "name"])
-    |> add_flat_field("corporation_ticker", ["corporation", "ticker"])
-    |> add_flat_field("alliance_name", ["alliance", "name"])
-    |> add_flat_field("alliance_ticker", ["alliance", "ticker"])
-    |> add_flat_field("ship_name", ["ship", "name"])
-    |> remove_nested_entity_data()
-    
-    Map.put(killmail, "victim", flattened_victim)
-  end
 
-  @doc """
-  Flattens attackers entity data to top-level fields.
-  
-  Extracts character, corporation, alliance, and ship information
-  from nested structures for each attacker.
-  
-  ## Parameters
-  - `killmail` - Killmail containing attackers with nested entity data
-  
-  ## Returns
-  - Killmail with flattened attackers data
-  """
-  @spec flatten_attackers_data(map()) :: map()
-  def flatten_attackers_data(killmail) when is_map(killmail) do
-    attackers = Map.get(killmail, "attackers", [])
-    
-    flattened_attackers = Enum.map(attackers, fn attacker ->
-      attacker
-      |> add_flat_field("attacker_name", ["character", "name"])
+    flattened_victim =
+      victim
+      |> add_flat_field("victim_name", ["character", "name"])
       |> add_flat_field("corporation_name", ["corporation", "name"])
       |> add_flat_field("corporation_ticker", ["corporation", "ticker"])
       |> add_flat_field("alliance_name", ["alliance", "name"])
       |> add_flat_field("alliance_ticker", ["alliance", "ticker"])
       |> add_flat_field("ship_name", ["ship", "name"])
       |> remove_nested_entity_data()
-    end)
-    
+
+    Map.put(killmail, "victim", flattened_victim)
+  end
+
+  @doc """
+  Flattens attackers entity data to top-level fields.
+
+  Extracts character, corporation, alliance, and ship information
+  from nested structures for each attacker.
+
+  ## Parameters
+  - `killmail` - Killmail containing attackers with nested entity data
+
+  ## Returns
+  - Killmail with flattened attackers data
+  """
+  @spec flatten_attackers_data(map()) :: map()
+  def flatten_attackers_data(killmail) when is_map(killmail) do
+    attackers = Map.get(killmail, "attackers", [])
+
+    flattened_attackers =
+      Enum.map(attackers, fn attacker ->
+        attacker
+        |> add_flat_field("attacker_name", ["character", "name"])
+        |> add_flat_field("corporation_name", ["corporation", "name"])
+        |> add_flat_field("corporation_ticker", ["corporation", "ticker"])
+        |> add_flat_field("alliance_name", ["alliance", "name"])
+        |> add_flat_field("alliance_ticker", ["alliance", "ticker"])
+        |> add_flat_field("ship_name", ["ship", "name"])
+        |> remove_nested_entity_data()
+      end)
+
     Map.put(killmail, "attackers", flattened_attackers)
   end
 
@@ -219,13 +222,13 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Adds ship names to victim and attackers based on ship_type_id.
-  
+
   Uses cached ship type information to enrich killmail data with
   readable ship names.
-  
+
   ## Parameters
   - `killmail` - Killmail to enrich with ship names
-  
+
   ## Returns
   - `{:ok, killmail}` - Killmail with ship names added
   - `{:error, reason}` - If ship enrichment fails
@@ -239,10 +242,10 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Calculates and adds attacker count to killmail.
-  
+
   ## Parameters
   - `killmail` - Killmail to add attacker count to
-  
+
   ## Returns
   - Killmail with "attacker_count" field added
   """
@@ -250,6 +253,33 @@ defmodule WandererKills.Killmails.Transformations do
   def add_attacker_count(killmail) when is_map(killmail) do
     count = killmail |> Map.get("attackers", []) |> length()
     Map.put(killmail, "attacker_count", count)
+  end
+
+  @doc """
+  Enriches killmail with ship names for victim and attackers.
+  
+  This function adds "ship_name" fields to the victim and all attackers
+  by looking up ship type IDs in the ship types cache.
+  
+  ## Parameters
+  - `killmail` - Killmail to enrich with ship names
+  
+  ## Returns
+  - `{:ok, enriched_killmail}` - Killmail with ship names added
+  """
+  @spec enrich_with_ship_names(map()) :: {:ok, map()}
+  def enrich_with_ship_names(killmail) when is_map(killmail) do
+    Logger.debug("Starting ship name enrichment for killmail #{killmail["killmail_id"]}")
+    
+    with {:ok, killmail} <- add_victim_ship_name(killmail),
+         {:ok, killmail} <- add_attackers_ship_names(killmail) do
+      Logger.debug("Completed ship name enrichment for killmail #{killmail["killmail_id"]}")
+      {:ok, killmail}
+    else
+      error ->
+        Logger.error("Failed to enrich ship names: #{inspect(error)}")
+        {:ok, killmail}
+    end
   end
 
   # ============================================================================
@@ -268,7 +298,7 @@ defmodule WandererKills.Killmails.Transformations do
   defp remove_nested_entity_data(data) when is_map(data) do
     data
     |> Map.delete("character")
-    |> Map.delete("corporation") 
+    |> Map.delete("corporation")
     |> Map.delete("alliance")
     |> Map.delete("ship")
   end
@@ -276,15 +306,18 @@ defmodule WandererKills.Killmails.Transformations do
   # Adds ship name to victim
   defp add_victim_ship_name(killmail) do
     victim = Map.get(killmail, "victim", %{})
-    
+
     case get_ship_name(Map.get(victim, "ship_type_id")) do
       {:ok, ship_name} ->
         updated_victim = Map.put(victim, "ship_name", ship_name)
         {:ok, Map.put(killmail, "victim", updated_victim)}
-      
+
       {:error, _reason} ->
         # Log but don't fail the enrichment for missing ship names
-        Logger.debug("Could not get ship name for victim ship_type_id: #{inspect(Map.get(victim, "ship_type_id"))}")
+        Logger.debug(
+          "Could not get ship name for victim ship_type_id: #{inspect(Map.get(victim, "ship_type_id"))}"
+        )
+
         {:ok, killmail}
     end
   end
@@ -292,33 +325,69 @@ defmodule WandererKills.Killmails.Transformations do
   # Adds ship names to all attackers  
   defp add_attackers_ship_names(killmail) do
     attackers = Map.get(killmail, "attackers", [])
-    
-    updated_attackers = Enum.map(attackers, fn attacker ->
-      case get_ship_name(Map.get(attacker, "ship_type_id")) do
-        {:ok, ship_name} ->
-          Map.put(attacker, "ship_name", ship_name)
-        
-        {:error, _reason} ->
-          Logger.debug("Could not get ship name for attacker ship_type_id: #{inspect(Map.get(attacker, "ship_type_id"))}")
-          attacker
-      end
-    end)
-    
+
+    updated_attackers =
+      Enum.map(attackers, fn attacker ->
+        case get_ship_name(Map.get(attacker, "ship_type_id")) do
+          {:ok, ship_name} ->
+            Map.put(attacker, "ship_name", ship_name)
+
+          {:error, _reason} ->
+            Logger.debug(
+              "Could not get ship name for attacker ship_type_id: #{inspect(Map.get(attacker, "ship_type_id"))}"
+            )
+
+            attacker
+        end
+      end)
+
     {:ok, Map.put(killmail, "attackers", updated_attackers)}
   end
 
   # Gets ship name from ship type ID using cached data
-  defp get_ship_name(nil), do: {:error, :no_ship_type_id}
+  defp get_ship_name(nil), do: {:error, Error.ship_types_error(:no_ship_type_id, "No ship type ID provided")}
+
   defp get_ship_name(ship_type_id) when is_integer(ship_type_id) do
     try do
+      Logger.debug("Looking up ship name for type ID: #{ship_type_id}")
+      
       case WandererKills.ShipTypes.Info.get_ship_type(ship_type_id) do
-        %{"name" => ship_name} when is_binary(ship_name) -> {:ok, ship_name}
-        nil -> {:error, :ship_name_not_found}
-        _ -> {:error, :invalid_ship_data}
+        {:ok, %{"name" => ship_name}} when is_binary(ship_name) -> 
+          Logger.debug("Found ship name: #{ship_name} for type ID: #{ship_type_id}")
+          {:ok, ship_name}
+          
+        {:ok, ship_data} -> 
+          Logger.warning("Ship data missing name field for type ID: #{ship_type_id}, data: #{inspect(ship_data)}")
+          {:error, Error.ship_types_error(:invalid_ship_data, "Ship data missing name field")}
+          
+        {:error, %Error{type: :not_found}} -> 
+          # Try to fetch from ESI if not in cache
+          Logger.debug("Ship type not in cache, fetching from ESI for type ID: #{ship_type_id}")
+          
+          case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
+            {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
+              Logger.debug("Found ship name from ESI: #{ship_name} for type ID: #{ship_type_id}")
+              {:ok, ship_name}
+              
+            {:ok, _} ->
+              Logger.warning("ESI data missing name field for type ID: #{ship_type_id}")
+              {:error, Error.ship_types_error(:invalid_ship_data, "ESI data missing name field")}
+              
+            {:error, reason} ->
+              Logger.warning("Failed to fetch from ESI for type ID: #{ship_type_id}, error: #{inspect(reason)}")
+              {:error, Error.ship_types_error(:ship_name_not_found, "Ship type not found")}
+          end
+          
+        {:error, reason} -> 
+          Logger.warning("Ship type lookup failed for type ID: #{ship_type_id}, error: #{inspect(reason)}")
+          {:error, Error.ship_types_error(:ship_name_not_found, "Ship type lookup failed")}
       end
     rescue
-      error -> {:error, error}
+      error -> 
+        Logger.error("Exception while looking up ship name for type ID: #{ship_type_id}, error: #{inspect(error)}")
+        {:error, error}
     end
   end
-  defp get_ship_name(_), do: {:error, :invalid_ship_type_id}
+
+  defp get_ship_name(_), do: {:error, Error.ship_types_error(:invalid_ship_type_id, "Invalid ship type ID format")}
 end

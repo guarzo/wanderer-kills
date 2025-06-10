@@ -1,13 +1,13 @@
 defmodule WandererKills.Observability.Status do
   @moduledoc """
   Business logic for application status and health information.
-  
+
   This module centralizes all status-related operations that were
   previously scattered across controllers.
   """
-  
+
   alias WandererKills.SubscriptionManager
-  
+
   @doc """
   Get comprehensive service status information.
   """
@@ -21,7 +21,7 @@ defmodule WandererKills.Observability.Status do
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
-  
+
   @doc """
   Get WebSocket-specific status information.
   """
@@ -32,7 +32,7 @@ defmodule WandererKills.Observability.Status do
       _pid -> "online"
     end
   end
-  
+
   @doc """
   Get the last kill time from the system.
   """
@@ -42,7 +42,7 @@ defmodule WandererKills.Observability.Status do
     # For now, return nil as placeholder
     nil
   end
-  
+
   @doc """
   Get active subscription count.
   """
@@ -52,16 +52,16 @@ defmodule WandererKills.Observability.Status do
   rescue
     _ -> 0
   end
-  
+
   # Private functions
-  
+
   defp get_cache_stats do
     %{
       status: "operational",
       message: "Cache subsystem functioning normally"
     }
   end
-  
+
   defp websocket_connected? do
     Process.whereis(WandererKillsWeb.Endpoint) != nil
   end

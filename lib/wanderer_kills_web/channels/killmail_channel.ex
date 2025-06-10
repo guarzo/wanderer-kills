@@ -37,6 +37,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   alias WandererKills.SubscriptionManager
   alias WandererKills.Config
   alias WandererKills.Observability.WebSocketStats
+  alias WandererKills.Support.Error
 
   @impl true
   def join("killmails:lobby", %{"systems" => systems} = _params, socket) when is_list(systems) do
@@ -59,7 +60,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       initial_systems_count: 0
     })
 
-    Logger.info("🔌 Client connected and joined killmail channel",
+    Logger.debug("🔌 Client connected and joined killmail channel",
       user_id: socket.assigns.user_id,
       client_identifier: socket.assigns[:client_identifier],
       subscription_id: subscription_id,
@@ -95,7 +96,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           socket = assign(socket, :subscribed_systems, all_systems)
 
-          Logger.info("📡 Client subscribed to systems",
+          Logger.debug("📡 Client subscribed to systems",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             new_systems_count: MapSet.size(new_systems),
@@ -132,7 +133,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           socket = assign(socket, :subscribed_systems, remaining_systems)
 
-          Logger.info("📡 Client unsubscribed from systems",
+          Logger.debug("📡 Client unsubscribed from systems",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             removed_systems_count: MapSet.size(systems_to_remove),
@@ -164,7 +165,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Handle preload after join completes
   @impl true
   def handle_info({:after_join, systems}, socket) do
-    Logger.info("📡 Starting preload after join completed",
+    Logger.debug("📡 Starting preload after join completed",
       user_id: socket.assigns.user_id,
       subscription_id: socket.assigns.subscription_id,
       systems_count: length(systems)
@@ -186,7 +187,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       ) do
     # Only send if we're subscribed to this system
     if MapSet.member?(socket.assigns.subscribed_systems, system_id) do
-      Logger.info("🔥 Forwarding real-time kills to WebSocket client",
+      Logger.debug("🔥 Forwarding real-time kills to WebSocket client",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         killmail_count: length(killmails),
@@ -218,7 +219,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       ) do
     # Only send if we're subscribed to this system
     if MapSet.member?(socket.assigns.subscribed_systems, system_id) do
-      Logger.info("📊 Forwarding kill count update to WebSocket client",
+      Logger.debug("📊 Forwarding kill count update to WebSocket client",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         count: count,
@@ -322,7 +323,7 @@ defmodule WandererKillsWeb.KillmailChannel do
           |> assign(:subscription_id, subscription_id)
           |> assign(:subscribed_systems, MapSet.new(valid_systems))
 
-        Logger.info("🔌 Client connected and joined killmail channel",
+        Logger.debug("🔌 Client connected and joined killmail channel",
           user_id: socket.assigns.user_id,
           client_identifier: socket.assigns[:client_identifier],
           subscription_id: subscription_id,
@@ -355,7 +356,7 @@ defmodule WandererKillsWeb.KillmailChannel do
           systems: systems
         )
 
-        {:error, %{reason: reason}}
+        {:error, %{reason: Error.to_string(reason)}}
     end
   end
 
@@ -364,7 +365,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
     cond do
       length(systems) > max_systems ->
-        {:error, "Too many systems (max: #{max_systems})"}
+        {:error, Error.validation_error(:too_many_systems, "Too many systems (max: #{max_systems})", %{max: max_systems, provided: length(systems)})}
 
       Enum.all?(systems, &is_integer/1) ->
         valid_systems =
@@ -373,11 +374,11 @@ defmodule WandererKillsWeb.KillmailChannel do
         if length(valid_systems) == length(systems) do
           {:ok, Enum.uniq(valid_systems)}
         else
-          {:error, "Invalid system IDs"}
+          {:error, Error.validation_error(:invalid_system_ids, "Invalid system IDs", %{systems: systems})}
         end
 
       true ->
-        {:error, "System IDs must be integers"}
+        {:error, Error.validation_error(:non_integer_system_ids, "System IDs must be integers", %{systems: systems})}
     end
   end
 
@@ -437,7 +438,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     subscription_id = socket.assigns.subscription_id
     limit_per_system = 5
 
-    Logger.info("📡 Preloading kills for WebSocket client",
+    Logger.debug("📡 Preloading kills for WebSocket client",
       user_id: user_id,
       subscription_id: subscription_id,
       systems_count: length(systems),
@@ -451,7 +452,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       end)
       |> Enum.sum()
 
-    Logger.info("📦 Preload completed for WebSocket client",
+    Logger.debug("📦 Preload completed for WebSocket client",
       user_id: user_id,
       subscription_id: subscription_id,
       total_systems: length(systems),
@@ -461,7 +462,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp preload_system_kills_for_websocket(socket, system_id, limit) do
-    Logger.info("📦 Starting preload for system",
+    Logger.debug("📦 Starting preload for system",
       user_id: socket.assigns.user_id,
       system_id: system_id,
       limit: limit
@@ -470,7 +471,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     # Use the shared preloader
     kills = Preloader.preload_kills_for_system(system_id, limit, 24)
 
-    Logger.info("📦 Got kills from preload function",
+    Logger.debug("📦 Got kills from preload function",
       user_id: socket.assigns.user_id,
       system_id: system_id,
       kills_count: length(kills)
@@ -488,7 +489,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       kill_times = Preloader.extract_kill_times(kills)
       enriched_count = Preloader.count_enriched_kills(kills)
 
-      Logger.info("📦 Sending preload kills to WebSocket client",
+      Logger.debug("📦 Sending preload kills to WebSocket client",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         killmail_count: length(kills),
@@ -501,6 +502,24 @@ defmodule WandererKillsWeb.KillmailChannel do
             else: "none"
           )
       )
+
+      # Log sample killmails to debug client issues
+      sample_kills = Enum.take(kills, 2)
+      Enum.each(sample_kills, fn kill ->
+        Logger.debug("📦 Sample killmail being sent",
+          killmail_id: kill["killmail_id"],
+          system_id: system_id,
+          has_victim: Map.has_key?(kill, "victim"),
+          has_attackers: Map.has_key?(kill, "attackers"),
+          has_zkb: Map.has_key?(kill, "zkb"),
+          victim_ship: get_in(kill, ["victim", "ship_type_id"]),
+          victim_character: get_in(kill, ["victim", "character_id"]),
+          attacker_count: length(Map.get(kill, "attackers", [])),
+          total_value: get_in(kill, ["zkb", "totalValue"]),
+          kill_time: kill["kill_time"],
+          available_keys: Map.keys(kill) |> Enum.sort()
+        )
+      end)
 
       # Send killmail update to the WebSocket client
       push(socket, "killmail_update", %{
@@ -515,7 +534,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       length(kills)
     else
-      Logger.info("📦 No kills available for preload",
+      Logger.debug("📦 No kills available for preload",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         reason: "no_kills_found"
@@ -523,18 +542,6 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       0
     end
-  end
-
-  # Handle case where kills is not a list (nil, atom, etc.)
-  defp send_preload_kills_to_websocket(socket, system_id, kills) do
-    Logger.warning("📦 Invalid kills data type for preload",
-      user_id: socket.assigns.user_id,
-      system_id: system_id,
-      kills_type: kills |> inspect() |> String.slice(0, 100),
-      kills_value: kills
-    )
-
-    0
   end
 
   # Removed - now using shared Preloader module for these helper functions

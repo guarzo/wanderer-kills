@@ -1,7 +1,7 @@
 defmodule WandererKills.Config do
   @moduledoc """
   Simplified configuration wrapper for WandererKills.
-  
+
   This module provides direct access to application configuration
   using `Application.get_env/3` with sensible defaults.
   """
@@ -10,18 +10,18 @@ defmodule WandererKills.Config do
 
   @doc """
   Get a configuration value by key with optional default.
-  
+
   ## Examples
       
       Config.get(:port, 4004)
       Config.get([:cache, :killmails_ttl], 3600)
   """
   def get(key, default \\ nil)
-  
+
   def get(key, default) when is_atom(key) do
     Application.get_env(@app_name, key, default)
   end
-  
+
   def get([key | path], default) when is_atom(key) do
     @app_name
     |> Application.get_env(key, %{})
@@ -134,17 +134,17 @@ defmodule WandererKills.Config do
   def max_system_id, do: 32_000_000
   def max_character_id, do: 999_999_999_999
   def max_subscribed_systems, do: 100
-  
+
   # Validation helper
   def validation(:max_subscribed_systems), do: max_subscribed_systems()
   def validation(:max_killmail_id), do: max_killmail_id()
   def validation(:max_system_id), do: max_system_id()
   def validation(:max_character_id), do: max_character_id()
-  
+
   # Compatibility helpers
   def start_preloader?, do: get(:start_preloader, true)
   def start_redisq?, do: get(:start_redisq, true)
-  
+
   def services do
     %{
       esi_base_url: get(:esi_base_url, "https://esi.evetech.net/latest"),
@@ -152,7 +152,7 @@ defmodule WandererKills.Config do
       redisq_base_url: get(:redisq_base_url, "https://zkillredisq.stream/listen.php")
     }
   end
-  
+
   def batch do
     %{
       concurrency_esi: get(:esi_batch_concurrency, 10),
@@ -160,7 +160,7 @@ defmodule WandererKills.Config do
       concurrency_default: get(:concurrency_batch_size, 100)
     }
   end
-  
+
   def timeouts do
     %{
       esi_request_ms: get(:esi_request_timeout_ms, 30_000),

@@ -32,24 +32,24 @@ defmodule WandererKills.Observability.Statistics do
   require Logger
 
   @type metric_data :: %{
-    count: non_neg_integer(),
-    total: non_neg_integer(),
-    duration_seconds: number(),
-    timestamp: DateTime.t()
-  }
+          count: non_neg_integer(),
+          total: non_neg_integer(),
+          duration_seconds: number(),
+          timestamp: DateTime.t()
+        }
 
   @type rate_opts :: [
-    period: :second | :minute | :hour | :day,
-    precision: non_neg_integer()
-  ]
+          period: :second | :minute | :hour | :day,
+          precision: non_neg_integer()
+        ]
 
   @type cache_stats :: %{
-    hit_rate: float(),
-    miss_rate: float(),
-    size: non_neg_integer(),
-    operations: non_neg_integer(),
-    evictions: non_neg_integer()
-  }
+          hit_rate: float(),
+          miss_rate: float(),
+          size: non_neg_integer(),
+          operations: non_neg_integer(),
+          evictions: non_neg_integer()
+        }
 
   # ============================================================================
   # Rate Calculations
@@ -82,14 +82,15 @@ defmodule WandererKills.Observability.Statistics do
     period = Keyword.get(opts, :period, :minute)
     precision = Keyword.get(opts, :precision, 2)
 
-    period_multiplier = case period do
-      :second -> 1
-      :minute -> 60
-      :hour -> 3600
-      :day -> 86_400
-    end
+    period_multiplier =
+      case period do
+        :second -> 1
+        :minute -> 60
+        :hour -> 3600
+        :day -> 86_400
+      end
 
-    rate = (count * period_multiplier) / duration_seconds
+    rate = count * period_multiplier / duration_seconds
     Float.round(rate, precision)
   end
 
@@ -143,7 +144,7 @@ defmodule WandererKills.Observability.Statistics do
       when is_number(numerator) and is_number(denominator) do
     case denominator do
       0 -> 0.0
-      _ -> Float.round((numerator / denominator) * 100, precision)
+      _ -> Float.round(numerator / denominator * 100, precision)
     end
   end
 
@@ -186,6 +187,7 @@ defmodule WandererKills.Observability.Statistics do
   """
   @spec calculate_average([number()]) :: {:ok, float()} | {:error, :empty_list}
   def calculate_average([]), do: {:error, :empty_list}
+
   def calculate_average(values) when is_list(values) do
     sum = Enum.sum(values)
     count = length(values)
@@ -203,12 +205,13 @@ defmodule WandererKills.Observability.Statistics do
   - `{:error, reason}` - If calculation fails
   """
   @spec calculate_weighted_average([{number(), number()}]) ::
-    {:ok, float()} | {:error, atom()}
+          {:ok, float()} | {:error, atom()}
   def calculate_weighted_average([]), do: {:error, :empty_list}
+
   def calculate_weighted_average(value_weight_pairs) when is_list(value_weight_pairs) do
     {weighted_sum, total_weight} =
       Enum.reduce(value_weight_pairs, {0, 0}, fn {value, weight}, {sum, weight_sum} ->
-        {sum + (value * weight), weight_sum + weight}
+        {sum + value * weight, weight_sum + weight}
       end)
 
     case total_weight do
@@ -287,6 +290,7 @@ defmodule WandererKills.Observability.Statistics do
   """
   @spec aggregate_cache_stats([cache_stats()]) :: {:ok, map()} | {:error, term()}
   def aggregate_cache_stats([]), do: {:error, :empty_list}
+
   def aggregate_cache_stats(cache_stats_list) when is_list(cache_stats_list) do
     try do
       total_size = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :size, 0)))
@@ -294,14 +298,16 @@ defmodule WandererKills.Observability.Statistics do
       total_evictions = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :evictions, 0)))
 
       # Calculate weighted average hit rate based on operations
-      hit_rates = Enum.map(cache_stats_list, fn stats ->
-        {Map.get(stats, :hit_rate, 0.0), Map.get(stats, :operations, 0)}
-      end)
+      hit_rates =
+        Enum.map(cache_stats_list, fn stats ->
+          {Map.get(stats, :hit_rate, 0.0), Map.get(stats, :operations, 0)}
+        end)
 
-      avg_hit_rate = case calculate_weighted_average(hit_rates) do
-        {:ok, rate} -> rate
-        {:error, _} -> 0.0
-      end
+      avg_hit_rate =
+        case calculate_weighted_average(hit_rates) do
+          {:ok, rate} -> rate
+          {:error, _} -> 0.0
+        end
 
       aggregated = %{
         total_size: total_size,
@@ -389,28 +395,34 @@ defmodule WandererKills.Observability.Statistics do
   # Checks if an event's timestamp is within the time window
   defp event_within_window?(event, window_start) do
     case Map.get(event, :timestamp) do
-      nil -> false
+      nil ->
+        false
+
       timestamp when is_binary(timestamp) ->
         case DateTime.from_iso8601(timestamp) do
           {:ok, dt, _} -> DateTime.compare(dt, window_start) != :lt
           _ -> false
         end
+
       %DateTime{} = dt ->
         DateTime.compare(dt, window_start) != :lt
-      _ -> false
+
+      _ ->
+        false
     end
   end
 
   # Calculates a cache efficiency score based on hit rate and stability
   defp calculate_efficiency_score(hit_rate, evictions, operations) do
-    stability_factor = if operations > 0 do
-      1.0 - (evictions / operations)
-    else
-      1.0
-    end
+    stability_factor =
+      if operations > 0 do
+        1.0 - evictions / operations
+      else
+        1.0
+      end
 
     # Combine hit rate (0-100) with stability factor (0-1)
-    efficiency = (hit_rate / 100.0) * stability_factor * 100
+    efficiency = hit_rate / 100.0 * stability_factor * 100
     Float.round(efficiency, 2)
   end
 end

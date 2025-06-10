@@ -3,9 +3,6 @@ defmodule WandererKills.ApiTest do
   use WandererKillsWeb.ConnCase
   use WandererKills.Test.SharedContexts
   use WandererKills.Test.Tags
-  import Mox
-
-  alias WandererKills.TestHelpers
 
   integration_test_tags()
   @moduletag area: :api
