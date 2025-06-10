@@ -365,7 +365,11 @@ defmodule WandererKillsWeb.KillmailChannel do
 
     cond do
       length(systems) > max_systems ->
-        {:error, Error.validation_error(:too_many_systems, "Too many systems (max: #{max_systems})", %{max: max_systems, provided: length(systems)})}
+        {:error,
+         Error.validation_error(:too_many_systems, "Too many systems (max: #{max_systems})", %{
+           max: max_systems,
+           provided: length(systems)
+         })}
 
       Enum.all?(systems, &is_integer/1) ->
         valid_systems =
@@ -374,11 +378,15 @@ defmodule WandererKillsWeb.KillmailChannel do
         if length(valid_systems) == length(systems) do
           {:ok, Enum.uniq(valid_systems)}
         else
-          {:error, Error.validation_error(:invalid_system_ids, "Invalid system IDs", %{systems: systems})}
+          {:error,
+           Error.validation_error(:invalid_system_ids, "Invalid system IDs", %{systems: systems})}
         end
 
       true ->
-        {:error, Error.validation_error(:non_integer_system_ids, "System IDs must be integers", %{systems: systems})}
+        {:error,
+         Error.validation_error(:non_integer_system_ids, "System IDs must be integers", %{
+           systems: systems
+         })}
     end
   end
 
@@ -505,6 +513,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       # Log sample killmails to debug client issues
       sample_kills = Enum.take(kills, 2)
+
       Enum.each(sample_kills, fn kill ->
         Logger.debug("📦 Sample killmail being sent",
           killmail_id: kill["killmail_id"],

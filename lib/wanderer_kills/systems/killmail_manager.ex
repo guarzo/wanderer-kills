@@ -40,48 +40,19 @@ defmodule WandererKills.Systems.KillmailManager do
 
     # Process killmails through the pipeline to get enriched data
     enriched_killmails = process_and_enrich_killmails(killmails, system_id)
-    
+
     Logger.debug("[KillmailManager] Enriched killmails check",
       system_id: system_id,
       enriched_count: length(enriched_killmails),
-      sample_killmail_keys: if(List.first(enriched_killmails), do: Map.keys(List.first(enriched_killmails)) |> Enum.sort(), else: [])
+      sample_killmail_keys:
+        if(List.first(enriched_killmails),
+          do: Map.keys(List.first(enriched_killmails)) |> Enum.sort(),
+          else: []
+        )
     )
 
     # Extract killmail IDs and cache individual enriched killmails
-    killmail_ids =
-      for killmail <- enriched_killmails,
-          killmail_id = Map.get(killmail, "killmail_id") || Map.get(killmail, :killmail_id),
-          not is_nil(killmail_id) do
-        Logger.debug("[KillmailManager] Caching killmail",
-          killmail_id: killmail_id,
-          system_id: system_id,
-          killmail_keys: Map.keys(killmail) |> Enum.sort()
-        )
-        
-        # Cache the enriched killmail
-        case Helper.put(:killmails, killmail_id, killmail) do
-          {:ok, _} ->
-            Logger.debug("[KillmailManager] Successfully cached killmail", killmail_id: killmail_id)
-            
-            # Verify it can be retrieved
-            case Helper.get(:killmails, killmail_id) do
-              {:ok, _retrieved} ->
-                Logger.debug("[KillmailManager] Verified killmail can be retrieved", killmail_id: killmail_id)
-              {:error, reason} ->
-                Logger.error("[KillmailManager] Cannot retrieve just-cached killmail!", 
-                  killmail_id: killmail_id,
-                  error: inspect(reason)
-                )
-            end
-          {:error, reason} ->
-            Logger.error("[KillmailManager] Failed to cache killmail", 
-              killmail_id: killmail_id, 
-              error: inspect(reason)
-            )
-        end
-        
-        killmail_id
-      end
+    killmail_ids = cache_enriched_killmails(enriched_killmails, system_id)
 
     Logger.debug("[KillmailManager] Processed and cached killmails",
       system_id: system_id,
@@ -91,21 +62,7 @@ defmodule WandererKills.Systems.KillmailManager do
     )
 
     # Add each killmail ID to system's killmail list
-    Enum.each(killmail_ids, fn killmail_id ->
-      case Helper.add_system_killmail(system_id, killmail_id) do
-        {:ok, _} ->
-          Logger.debug("[KillmailManager] Added killmail to system list",
-            system_id: system_id,
-            killmail_id: killmail_id
-          )
-        {:error, reason} ->
-          Logger.error("[KillmailManager] Failed to add killmail to system list",
-            system_id: system_id,
-            killmail_id: killmail_id,
-            error: inspect(reason)
-          )
-      end
-    end)
+    add_killmails_to_system(killmail_ids, system_id)
 
     # Add system to active list
     Helper.add_active_system(system_id)
@@ -167,5 +124,75 @@ defmodule WandererKills.Systems.KillmailManager do
     |> Flow.filter(&(&1 != nil))
     |> Flow.partition()
     |> Enum.to_list()
+  end
+
+  defp cache_enriched_killmails(enriched_killmails, system_id) do
+    for killmail <- enriched_killmails,
+        killmail_id = extract_killmail_id(killmail),
+        not is_nil(killmail_id) do
+      Logger.debug("[KillmailManager] Caching killmail",
+        killmail_id: killmail_id,
+        system_id: system_id,
+        killmail_keys: Map.keys(killmail) |> Enum.sort()
+      )
+
+      cache_and_verify_killmail(killmail_id, killmail)
+      killmail_id
+    end
+  end
+
+  defp extract_killmail_id(killmail) do
+    Map.get(killmail, "killmail_id") || Map.get(killmail, :killmail_id)
+  end
+
+  defp cache_and_verify_killmail(killmail_id, killmail) do
+    case Helper.put(:killmails, killmail_id, killmail) do
+      {:ok, _} ->
+        Logger.debug("[KillmailManager] Successfully cached killmail",
+          killmail_id: killmail_id
+        )
+
+        verify_cached_killmail(killmail_id)
+
+      {:error, reason} ->
+        Logger.error("[KillmailManager] Failed to cache killmail",
+          killmail_id: killmail_id,
+          error: inspect(reason)
+        )
+    end
+  end
+
+  defp verify_cached_killmail(killmail_id) do
+    case Helper.get(:killmails, killmail_id) do
+      {:ok, _retrieved} ->
+        Logger.debug("[KillmailManager] Verified killmail can be retrieved",
+          killmail_id: killmail_id
+        )
+
+      {:error, reason} ->
+        Logger.error("[KillmailManager] Cannot retrieve just-cached killmail!",
+          killmail_id: killmail_id,
+          error: inspect(reason)
+        )
+    end
+  end
+
+  defp add_killmails_to_system(killmail_ids, system_id) do
+    Enum.each(killmail_ids, fn killmail_id ->
+      case Helper.add_system_killmail(system_id, killmail_id) do
+        {:ok, _} ->
+          Logger.debug("[KillmailManager] Added killmail to system list",
+            system_id: system_id,
+            killmail_id: killmail_id
+          )
+
+        {:error, reason} ->
+          Logger.error("[KillmailManager] Failed to add killmail to system list",
+            system_id: system_id,
+            killmail_id: killmail_id,
+            error: inspect(reason)
+          )
+      end
+    end)
   end
 end

@@ -120,6 +120,12 @@ defmodule WandererKills.Config do
     }
   end
 
+  def storage do
+    %{
+      enable_event_streaming: get([:storage, :enable_event_streaming], true)
+    }
+  end
+
   def telemetry do
     %{
       enabled_metrics: get(:telemetry_enabled_metrics, [:cache, :api, :circuit, :event]),
@@ -149,7 +155,8 @@ defmodule WandererKills.Config do
     %{
       esi_base_url: get(:esi_base_url, "https://esi.evetech.net/latest"),
       zkb_base_url: get(:zkb_base_url, "https://zkillboard.com/api"),
-      redisq_base_url: get(:redisq_base_url, "https://zkillredisq.stream/listen.php")
+      redisq_base_url: get(:redisq_base_url, "https://zkillredisq.stream/listen.php"),
+      eve_db_dump_url: get(:eve_db_dump_url, "https://www.fuzzwork.co.uk/dump/latest")
     }
   end
 
@@ -166,7 +173,22 @@ defmodule WandererKills.Config do
       esi_request_ms: get(:esi_request_timeout_ms, 30_000),
       zkb_request_ms: get(:zkb_request_timeout_ms, 15_000),
       http_request_ms: get(:http_request_timeout_ms, 10_000),
-      default_request_ms: get(:default_request_timeout_ms, 10_000)
+      default_request_ms: get(:default_request_timeout_ms, 10_000),
+      health_check_ms: get(:health_check_timeout_ms, 10_000),
+      health_check_cache_ms: get(:health_check_cache_timeout_ms, 5_000),
+      gen_server_call_ms: gen_server_call_timeout()
+    }
+  end
+
+  def metadata do
+    %{
+      user_agent:
+        get(
+          :user_agent,
+          "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
+        ),
+      github_url: get(:github_url, "https://github.com/wanderer-industries/wanderer-kills"),
+      contact_email: get(:contact_email, "wanderer-kills@proton.me")
     }
   end
 end

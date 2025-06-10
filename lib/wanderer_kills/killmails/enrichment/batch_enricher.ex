@@ -247,6 +247,6 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
       _ -> killmail
     end
   end
-  
+
   defp wrap_result(value), do: {:ok, value}
 end

@@ -20,7 +20,7 @@ defmodule WandererKills.Killmails.Pipeline.UnifiedValidator do
         }
 
   # Accept either kill_time or killmail_time since ESI returns killmail_time
-  @required_fields ["killmail_id", "solar_system_id", "victim", "attackers"]
+  @required_fields ["killmail_id", "system_id", "victim", "attackers"]
 
   @doc """
   Performs all validations in a single pass.
@@ -88,7 +88,7 @@ defmodule WandererKills.Killmails.Pipeline.UnifiedValidator do
   defp validate_field_types(%{killmail: killmail} = result) do
     type_checks = [
       {:killmail_id, &is_integer/1, "must be an integer"},
-      {:solar_system_id, &is_integer/1, "must be an integer"},
+      {:system_id, &is_integer/1, "must be an integer"},
       {:victim, &is_map/1, "must be a map"},
       {:attackers, &is_list/1, "must be a list"}
     ]
@@ -162,7 +162,7 @@ defmodule WandererKills.Killmails.Pipeline.UnifiedValidator do
     first_error = List.first(errors)
     error_type = if first_error, do: first_error.type, else: :unknown
     error_message = if first_error, do: first_error.message, else: "Unknown error"
-    
+
     # Check if this is just an old kill (not a real error)
     if error_type == :kill_too_old do
       Logger.debug("Killmail skipped - older than cutoff",

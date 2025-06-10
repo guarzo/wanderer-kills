@@ -30,7 +30,7 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
     test "complete system killmail workflow" do
       # Initially, system should have no killmails
       assert {:error, %WandererKills.Support.Error{type: :not_found}} =
-               Helper.get_system_killmails(@test_system_id)
+               Helper.list_system_killmails(@test_system_id)
 
       # Add killmails one by one
       Enum.each(@test_killmail_ids, fn killmail_id ->
@@ -38,7 +38,7 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
       end)
 
       # Verify all killmails are tracked
-      assert {:ok, tracked_killmails} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, tracked_killmails} = Helper.list_system_killmails(@test_system_id)
       assert length(tracked_killmails) == length(@test_killmail_ids)
 
       # All killmail IDs should be present (order may vary due to prepending)
@@ -51,14 +51,14 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
       first_killmail = List.first(@test_killmail_ids)
       assert {:ok, true} = Helper.add_system_killmail(@test_system_id, first_killmail)
 
-      assert {:ok, final_killmails} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, final_killmails} = Helper.list_system_killmails(@test_system_id)
       assert length(final_killmails) == length(@test_killmail_ids)
 
       # Test replacing killmail list entirely
       new_killmail_ids = [999_888, 777_666]
       assert {:ok, true} = Helper.put(:systems, "killmails:#{@test_system_id}", new_killmail_ids)
 
-      assert {:ok, ^new_killmail_ids} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, ^new_killmail_ids} = Helper.list_system_killmails(@test_system_id)
     end
 
     test "system kill count tracking" do
@@ -212,7 +212,7 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
                Helper.put(:systems, "cached_killmails:#{@test_system_id}", enriched_killmails)
 
       # Verify complete state
-      assert {:ok, [^killmail_2, ^killmail_1]} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, [^killmail_2, ^killmail_1]} = Helper.list_system_killmails(@test_system_id)
       assert {:ok, 2} = Helper.get(:systems, "kill_count:#{@test_system_id}")
       assert true = Helper.system_fetched_recently?(@test_system_id)
 
@@ -235,14 +235,14 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
 
       # System should now return empty killmails but keep other data
       assert {:error, %WandererKills.Support.Error{type: :not_found}} =
-               Helper.get_system_killmails(@test_system_id)
+               Helper.list_system_killmails(@test_system_id)
 
       assert {:ok, 1} = Helper.get(:systems, "kill_count:#{@test_system_id}")
       assert true = Helper.system_fetched_recently?(@test_system_id)
 
       # Refill cache
       assert {:ok, true} = Helper.add_system_killmail(@test_system_id, 888)
-      assert {:ok, [888]} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, [888]} = Helper.list_system_killmails(@test_system_id)
     end
 
     test "concurrent killmail additions" do
@@ -257,7 +257,7 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
       end)
 
       # Verify all killmails are tracked
-      assert {:ok, final_killmails} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, final_killmails} = Helper.list_system_killmails(@test_system_id)
       assert length(final_killmails) == length(killmail_ids)
 
       # All original killmail IDs should be present
@@ -281,8 +281,8 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
       assert {:ok, true} = Helper.add_active_system(system_2)
 
       # Verify systems maintain independent state
-      assert {:ok, [111]} = Helper.get_system_killmails(@test_system_id)
-      assert {:ok, [222]} = Helper.get_system_killmails(system_2)
+      assert {:ok, [111]} = Helper.list_system_killmails(@test_system_id)
+      assert {:ok, [222]} = Helper.list_system_killmails(system_2)
 
       assert {:ok, 1} = Helper.get(:systems, "kill_count:#{@test_system_id}")
       assert {:ok, 2} = Helper.get(:systems, "kill_count:#{system_2}")
@@ -304,7 +304,7 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
 
       # All operations should handle invalid IDs without crashing
       assert {:error, %WandererKills.Support.Error{type: :not_found}} =
-               Helper.get_system_killmails(invalid_system_id)
+               Helper.list_system_killmails(invalid_system_id)
 
       assert {:ok, true} = Helper.add_system_killmail(invalid_system_id, 999)
 
@@ -317,7 +317,7 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
     test "handles empty and nil data appropriately" do
       # Empty killmail list
       assert {:ok, true} = Helper.put(:systems, "killmails:#{@test_system_id}", [])
-      assert {:ok, []} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, []} = Helper.list_system_killmails(@test_system_id)
 
       # Empty cached killmails
       assert {:ok, true} = Helper.put(:systems, "cached_killmails:#{@test_system_id}", [])
@@ -334,7 +334,7 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
       assert {:ok, true} = Helper.add_system_killmail(@test_system_id, 999)
 
       # Should now have clean data
-      assert {:ok, [999]} = Helper.get_system_killmails(@test_system_id)
+      assert {:ok, [999]} = Helper.list_system_killmails(@test_system_id)
     end
   end
 end

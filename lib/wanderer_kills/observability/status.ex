@@ -17,7 +17,7 @@ defmodule WandererKills.Observability.Status do
       cache_stats: get_cache_stats(),
       active_subscriptions: get_active_subscription_count(),
       websocket_connected: websocket_connected?(),
-      last_kill_received: get_last_kill_time(),
+      last_killmail_received: get_last_killmail_time(),
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
@@ -34,10 +34,10 @@ defmodule WandererKills.Observability.Status do
   end
 
   @doc """
-  Get the last kill time from the system.
+  Get the last killmail time from the system.
   """
-  @spec get_last_kill_time() :: String.t() | nil
-  def get_last_kill_time do
+  @spec get_last_killmail_time() :: String.t() | nil
+  def get_last_killmail_time do
     # In a real implementation, this would query the KillStore
     # For now, return nil as placeholder
     nil

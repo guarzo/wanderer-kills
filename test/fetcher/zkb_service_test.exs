@@ -129,7 +129,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
     end
   end
 
-  describe "get_system_kill_count/1" do
+  describe "get_system_killmail_count/1" do
     test "successfully gets kill count" do
       system_id = 30_000_142
       expected_count = 42
@@ -143,7 +143,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
           {:ok, %{status: 200, body: Jason.encode!(kill_list)}}
       end)
 
-      assert {:ok, ^expected_count} = ZKB.get_system_kill_count(system_id)
+      assert {:ok, ^expected_count} = ZKB.get_system_killmail_count(system_id)
     end
 
     test "handles client errors" do
@@ -155,17 +155,17 @@ defmodule WandererKills.Killmails.ZkbClientTest do
           {:error, :not_found}
       end)
 
-      assert {:error, :not_found} = ZKB.get_system_kill_count(system_id)
+      assert {:error, :not_found} = ZKB.get_system_killmail_count(system_id)
     end
 
     test "validates system ID format" do
-      assert {:error, error} = ZKB.get_system_kill_count("invalid")
+      assert {:error, error} = ZKB.get_system_killmail_count("invalid")
       assert error.domain == :validation
       assert String.contains?(error.message, "Invalid system ID format")
     end
 
     test "validates positive system ID" do
-      assert {:error, error} = ZKB.get_system_kill_count(-1)
+      assert {:error, error} = ZKB.get_system_killmail_count(-1)
       assert error.domain == :validation
     end
   end

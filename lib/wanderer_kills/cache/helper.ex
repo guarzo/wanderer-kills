@@ -144,10 +144,10 @@ defmodule WandererKills.Cache.Helper do
   # ============================================================================
 
   @doc """
-  Get killmail IDs for a system.
+  List killmail IDs for a system.
   """
-  @spec get_system_killmails(integer()) :: {:ok, [integer()]} | error()
-  def get_system_killmails(system_id) do
+  @spec list_system_killmails(integer()) :: {:ok, [integer()]} | error()
+  def list_system_killmails(system_id) do
     get(:systems, "killmails:#{system_id}")
   end
 
@@ -156,7 +156,7 @@ defmodule WandererKills.Cache.Helper do
   """
   @spec add_system_killmail(integer(), integer()) :: {:ok, boolean()} | error()
   def add_system_killmail(system_id, killmail_id) do
-    case get_system_killmails(system_id) do
+    case list_system_killmails(system_id) do
       {:ok, existing_ids} ->
         if killmail_id in existing_ids do
           {:ok, true}

@@ -11,8 +11,8 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
   import WandererKills.Support.Logger
 
   alias WandererKills.Support.Error
-  alias WandererKills.Killmails.FieldNormalizer
-  alias WandererKills.Killmails.Pipeline.{UnifiedValidator, Normalizer, DataBuilder, ESIFetcher}
+  alias WandererKills.Killmails.Transformations
+  alias WandererKills.Killmails.Pipeline.{UnifiedValidator, DataBuilder, ESIFetcher}
   alias WandererKills.Killmails.Enrichment.BatchEnricher
   alias WandererKills.Storage.KillmailStore
   alias WandererKills.Observability.Monitoring
@@ -44,7 +44,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
   @spec process_killmail(map(), DateTime.t(), process_options()) :: process_result()
   def process_killmail(killmail, cutoff_time, opts \\ []) when is_map(killmail) do
     # Normalize field names first
-    normalized = FieldNormalizer.normalize_killmail(killmail)
+    normalized = Transformations.normalize_field_names(killmail)
 
     # Determine if this is a partial or full killmail
     result =
@@ -94,7 +94,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
     # Process all killmails through validation and data building first
     validated_killmails =
       killmails
-      |> Enum.map(&FieldNormalizer.normalize_killmail/1)
+      |> Enum.map(&Transformations.normalize_field_names/1)
       |> Enum.map(&validate_and_build_killmail(&1, cutoff_time))
       |> collect_valid_killmails()
 
@@ -136,7 +136,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
     # Full killmails have the required ESI fields
     Map.has_key?(killmail, "victim") and
       Map.has_key?(killmail, "attackers") and
-      Map.has_key?(killmail, "solar_system_id")
+      (Map.has_key?(killmail, "system_id") or Map.has_key?(killmail, "solar_system_id"))
   end
 
   defp process_partial(partial, cutoff_time, opts) do
@@ -144,35 +144,10 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
       {id, zkb} when is_integer(id) and is_map(zkb) ->
         log_debug("Processing partial killmail", killmail_id: id)
 
-        with {:ok, full_data} <- ESIFetcher.fetch_full_killmail(id, zkb) do
-          log_debug("ESI data fetched", 
-            killmail_id: id,
-            esi_keys: Map.keys(full_data) |> Enum.sort(),
-            has_killmail_time: Map.has_key?(full_data, "killmail_time"),
-            has_kill_time: Map.has_key?(full_data, "kill_time")
-          )
-          
-          # Normalize field names before merging
-          normalized_data = FieldNormalizer.normalize_killmail(full_data)
-          
-          log_debug("After normalization",
-            killmail_id: id,
-            normalized_keys: Map.keys(normalized_data) |> Enum.sort(),
-            has_kill_time: Map.has_key?(normalized_data, "kill_time")
-          )
-          
-          case DataBuilder.merge_killmail_data(normalized_data, partial) do
-            {:ok, merged} ->
-              log_debug("After merge",
-                killmail_id: id,
-                merged_keys: Map.keys(merged) |> Enum.sort(),
-                has_kill_time: Map.has_key?(merged, "kill_time")
-              )
-              process_full(merged, cutoff_time, opts)
-            {:error, reason} ->
-              {:error, reason}
-          end
-        else
+        case fetch_and_merge_partial(id, zkb, partial) do
+          {:ok, merged} ->
+            process_full(merged, cutoff_time, opts)
+
           {:error, reason} ->
             log_error("Failed to fetch full killmail data",
               killmail_id: id,
@@ -196,7 +171,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
     enrich? = Keyword.get(opts, :enrich, true)
     validate_only? = Keyword.get(opts, :validate_only, false)
 
-    killmail_id = Normalizer.get_killmail_id(killmail)
+    killmail_id = Transformations.get_killmail_id(killmail)
 
     log_debug("Processing full killmail",
       killmail_id: killmail_id,
@@ -316,6 +291,32 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
     case enriched_list do
       [enriched_killmail] -> {:ok, enriched_killmail}
       [] -> {:error, :enrichment_failed}
+    end
+  end
+
+  defp fetch_and_merge_partial(id, zkb, partial) do
+    case ESIFetcher.fetch_full_killmail(id, zkb) do
+      {:ok, full_data} ->
+        log_debug("ESI data fetched",
+          killmail_id: id,
+          esi_keys: Map.keys(full_data) |> Enum.sort(),
+          has_killmail_time: Map.has_key?(full_data, "killmail_time"),
+          has_kill_time: Map.has_key?(full_data, "kill_time")
+        )
+
+        # Normalize field names before merging
+        normalized_data = Transformations.normalize_field_names(full_data)
+
+        log_debug("After normalization",
+          killmail_id: id,
+          normalized_keys: Map.keys(normalized_data) |> Enum.sort(),
+          has_kill_time: Map.has_key?(normalized_data, "kill_time")
+        )
+
+        DataBuilder.merge_killmail_data(normalized_data, partial)
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

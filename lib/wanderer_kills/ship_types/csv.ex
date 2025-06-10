@@ -322,7 +322,7 @@ defmodule WandererKills.ShipTypes.CSV do
   # Ship Type Update Pipeline
   # ============================================================================
 
-  @eve_db_dump_url "https://www.fuzzwork.co.uk/dump/latest"
+  @eve_db_dump_url WandererKills.Config.services().eve_db_dump_url
   @required_files ["invGroups.csv", "invTypes.csv"]
 
   @doc """
@@ -341,11 +341,13 @@ defmodule WandererKills.ShipTypes.CSV do
 
     with {:ok, raw_data} <- download_csv_files(opts),
          {:ok, parsed_data} <- parse_ship_type_csvs(raw_data) do
-      Logger.debug("Ship type update from CSV completed successfully, storing #{map_size(parsed_data)} ship types")
-      
+      Logger.debug(
+        "Ship type update from CSV completed successfully, storing #{map_size(parsed_data)} ship types"
+      )
+
       # Store each ship type in the cache
       store_ship_types_in_cache(parsed_data)
-      
+
       :ok
     else
       {:error, reason} ->
@@ -516,7 +518,7 @@ defmodule WandererKills.ShipTypes.CSV do
   defp download_files(file_names, data_dir) do
     download_fn = fn file_name -> download_single_file(file_name, data_dir) end
 
-    case BatchProcessor.process_parallel(file_names, download_fn,
+    case BatchProcessor.process_parallel_async(file_names, download_fn,
            timeout: :timer.minutes(5),
            description: "CSV file downloads"
          ) do
@@ -674,10 +676,57 @@ defmodule WandererKills.ShipTypes.CSV do
     # 1283 - Expedition Frigate, 1305 - Tactical Destroyer
     # 1527 - Logistics Frigate, 1534 - Command Destroyer
     ship_group_ids = [
-      6, 7, 9, 11, 16, 17, 23, 25, 26, 27, 28, 29, 30, 31, 237,
-      324, 358, 380, 419, 420, 463, 485, 513, 540, 541, 543, 547,
-      659, 830, 831, 832, 833, 834, 863, 864, 883, 893, 894, 898,
-      900, 902, 906, 941, 963, 1022, 1201, 1202, 1283, 1305, 1527, 1534
+      6,
+      7,
+      9,
+      11,
+      16,
+      17,
+      23,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      237,
+      324,
+      358,
+      380,
+      419,
+      420,
+      463,
+      485,
+      513,
+      540,
+      541,
+      543,
+      547,
+      659,
+      830,
+      831,
+      832,
+      833,
+      834,
+      863,
+      864,
+      883,
+      893,
+      894,
+      898,
+      900,
+      902,
+      906,
+      941,
+      963,
+      1022,
+      1201,
+      1202,
+      1283,
+      1305,
+      1527,
+      1534
     ]
 
     groups_map = build_groups_map(groups)
@@ -771,16 +820,17 @@ defmodule WandererKills.ShipTypes.CSV do
   # Store ship types in the cache
   defp store_ship_types_in_cache(ship_types_map) when is_map(ship_types_map) do
     Logger.debug("Storing #{map_size(ship_types_map)} ship types in cache")
-    
+
     Enum.each(ship_types_map, fn {type_id, ship_type} ->
       case Helper.put(:ship_types, type_id, ship_type) do
         {:ok, _} ->
           Logger.debug("Stored ship type #{type_id}: #{ship_type.name}")
+
         {:error, reason} ->
           Logger.error("Failed to store ship type #{type_id}: #{inspect(reason)}")
       end
     end)
-    
+
     Logger.debug("Ship types stored in cache successfully")
   end
 end

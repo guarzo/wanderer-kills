@@ -263,9 +263,12 @@ defmodule WandererKills.Preloader do
 
           # Broadcast kill count update after successful preload
           if kills_count > 0 do
-            WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, kills_count)
+            WandererKills.SubscriptionManager.broadcast_killmail_count_update_async(
+              system_id,
+              kills_count
+            )
 
-            Logger.debug("Broadcasted kill count update from preloader",
+            Logger.debug("Broadcasted killmail count update from preloader",
               system_id: system_id,
               count: kills_count
             )

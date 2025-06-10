@@ -57,7 +57,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   require Logger
   alias WandererKills.Support.Error
   alias WandererKills.Killmails.Pipeline.Parser
-  alias WandererKills.Killmails.FieldNormalizer
+  alias WandererKills.Killmails.Transformations
   alias WandererKills.Storage.KillmailStore
 
   @type killmail :: map()
@@ -280,7 +280,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
           {:ok, killmail()} | {:ok, :kill_skipped} | :older | {:error, Error.t()}
   def parse_partial(partial, cutoff) when is_map(partial) do
     # Normalize field names first
-    normalized = FieldNormalizer.normalize_killmail(partial)
+    normalized = Transformations.normalize_field_names(partial)
     do_parse_partial(normalized, cutoff)
   end
 

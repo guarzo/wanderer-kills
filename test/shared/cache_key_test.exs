@@ -33,10 +33,10 @@ defmodule WandererKills.CacheKeyTest do
 
       # No killmails initially - returns error when not found
       assert {:error, %WandererKills.Support.Error{type: :not_found}} =
-               Helper.get_system_killmails(456)
+               Helper.list_system_killmails(456)
 
       assert {:ok, true} = Helper.add_system_killmail(456, 123)
-      assert {:ok, [123]} = Helper.get_system_killmails(456)
+      assert {:ok, [123]} = Helper.list_system_killmails(456)
 
       # Kill count functions don't exist in simplified API
       # Test removed as these functions are no longer part of the API

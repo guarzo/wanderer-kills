@@ -99,7 +99,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
 
       # Test empty system initially - should return not found error
       assert {:error, %WandererKills.Support.Error{type: :not_found}} =
-               Helper.get_system_killmails(system_id)
+               Helper.list_system_killmails(system_id)
 
       # Add killmails to system
       Enum.each(killmail_ids, fn killmail_id ->
@@ -107,7 +107,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       end)
 
       # Verify killmails are associated
-      assert {:ok, retrieved_ids} = Helper.get_system_killmails(system_id)
+      assert {:ok, retrieved_ids} = Helper.list_system_killmails(system_id)
       assert length(retrieved_ids) == length(killmail_ids)
 
       # All original IDs should be present (order may vary)
@@ -294,7 +294,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       assert {:error, _} = Helper.get(:ship_types, 999_999_999)
 
       assert {:error, %WandererKills.Support.Error{type: :not_found}} =
-               Helper.get_system_killmails(999_999_999)
+               Helper.list_system_killmails(999_999_999)
     end
 
     test "fallback function errors are handled correctly" do

@@ -28,7 +28,7 @@ config :wanderer_kills,
 
   # HTTP client configuration
   http_client: WandererKills.Http.Client,
-  
+
   # Storage configuration
   storage: [
     enable_event_streaming: true

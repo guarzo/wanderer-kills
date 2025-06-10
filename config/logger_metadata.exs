@@ -54,6 +54,7 @@ defmodule LoggerMetadata do
     :ship_type_id,
     :victim_character,
     :victim_corp,
+    :victim_ship,
     :attacker_count,
     :total_value,
     :npc_kill
@@ -86,7 +87,16 @@ defmodule LoggerMetadata do
     :no_kills_polls,
     :errors,
     :active_systems,
-    :total_polls
+    :total_polls,
+    :requested_count,
+    :returned_count,
+    :total_killmails,
+    :filtered_killmails,
+    :returned_killmails,
+    :killmail_ids_count,
+    :filter_recent,
+    :total_cached_killmails,
+    :sample_killmail_keys
   ]
 
   # WebSocket and connection metadata
@@ -218,7 +228,17 @@ defmodule LoggerMetadata do
     :kill_time,
     :kill_time_type,
     :kill_time_value,
-    :cutoff
+    :cutoff,
+    :has_kill_time,
+    :current_time,
+    :hours_back,
+    :kill_time_string,
+    :kill_time_parsed,
+    :comparison_result,
+    :is_recent,
+    :error_type,
+    :error_message,
+    :has_killmail_time
   ]
 
   # Subscription metadata

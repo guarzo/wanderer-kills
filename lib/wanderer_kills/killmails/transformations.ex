@@ -36,7 +36,8 @@ defmodule WandererKills.Killmails.Transformations do
   @field_mappings %{
     "killID" => "killmail_id",
     "killmail_time" => "kill_time",
-    "solarSystemID" => "solar_system_id",
+    "solarSystemID" => "system_id",
+    "solar_system_id" => "system_id",
     "moonID" => "moon_id",
     "warID" => "war_id"
   }
@@ -131,6 +132,36 @@ defmodule WandererKills.Killmails.Transformations do
   def normalize_attackers_data(attackers) when is_list(attackers) do
     normalized = Enum.map(attackers, &Map.merge(@attacker_defaults, &1))
     {normalized, length(normalized)}
+  end
+
+  @doc """
+  Normalizes attackers data structure with defaults (list only).
+
+  Applies default values to each attacker without calculating count.
+
+  ## Parameters
+  - `attackers` - List of raw attacker data maps
+
+  ## Returns
+  - Normalized attackers list
+  """
+  @spec normalize_attackers(list()) :: list()
+  def normalize_attackers(attackers) when is_list(attackers) do
+    Enum.map(attackers, &Map.merge(@attacker_defaults, &1))
+  end
+
+  @doc """
+  Normalizes victim data structure with defaults (alias for normalize_victim_data).
+
+  ## Parameters
+  - `victim` - Raw victim data map
+
+  ## Returns
+  - Normalized victim map with defaults applied
+  """
+  @spec normalize_victim(map()) :: map()
+  def normalize_victim(victim) when is_map(victim) do
+    normalize_victim_data(victim)
   end
 
   # ============================================================================
@@ -257,20 +288,20 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Enriches killmail with ship names for victim and attackers.
-  
+
   This function adds "ship_name" fields to the victim and all attackers
   by looking up ship type IDs in the ship types cache.
-  
+
   ## Parameters
   - `killmail` - Killmail to enrich with ship names
-  
+
   ## Returns
   - `{:ok, enriched_killmail}` - Killmail with ship names added
   """
   @spec enrich_with_ship_names(map()) :: {:ok, map()}
   def enrich_with_ship_names(killmail) when is_map(killmail) do
     Logger.debug("Starting ship name enrichment for killmail #{killmail["killmail_id"]}")
-    
+
     with {:ok, killmail} <- add_victim_ship_name(killmail),
          {:ok, killmail} <- add_attackers_ship_names(killmail) do
       Logger.debug("Completed ship name enrichment for killmail #{killmail["killmail_id"]}")
@@ -345,49 +376,85 @@ defmodule WandererKills.Killmails.Transformations do
   end
 
   # Gets ship name from ship type ID using cached data
-  defp get_ship_name(nil), do: {:error, Error.ship_types_error(:no_ship_type_id, "No ship type ID provided")}
+  defp get_ship_name(nil),
+    do: {:error, Error.ship_types_error(:no_ship_type_id, "No ship type ID provided")}
 
   defp get_ship_name(ship_type_id) when is_integer(ship_type_id) do
     try do
       Logger.debug("Looking up ship name for type ID: #{ship_type_id}")
-      
+
       case WandererKills.ShipTypes.Info.get_ship_type(ship_type_id) do
-        {:ok, %{"name" => ship_name}} when is_binary(ship_name) -> 
+        {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
           Logger.debug("Found ship name: #{ship_name} for type ID: #{ship_type_id}")
           {:ok, ship_name}
-          
-        {:ok, ship_data} -> 
-          Logger.warning("Ship data missing name field for type ID: #{ship_type_id}, data: #{inspect(ship_data)}")
+
+        {:ok, ship_data} ->
+          Logger.warning(
+            "Ship data missing name field for type ID: #{ship_type_id}, data: #{inspect(ship_data)}"
+          )
+
           {:error, Error.ship_types_error(:invalid_ship_data, "Ship data missing name field")}
-          
-        {:error, %Error{type: :not_found}} -> 
+
+        {:error, %Error{type: :not_found}} ->
           # Try to fetch from ESI if not in cache
           Logger.debug("Ship type not in cache, fetching from ESI for type ID: #{ship_type_id}")
-          
+
           case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
             {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
               Logger.debug("Found ship name from ESI: #{ship_name} for type ID: #{ship_type_id}")
               {:ok, ship_name}
-              
+
             {:ok, _} ->
               Logger.warning("ESI data missing name field for type ID: #{ship_type_id}")
               {:error, Error.ship_types_error(:invalid_ship_data, "ESI data missing name field")}
-              
+
             {:error, reason} ->
-              Logger.warning("Failed to fetch from ESI for type ID: #{ship_type_id}, error: #{inspect(reason)}")
+              Logger.warning(
+                "Failed to fetch from ESI for type ID: #{ship_type_id}, error: #{inspect(reason)}"
+              )
+
               {:error, Error.ship_types_error(:ship_name_not_found, "Ship type not found")}
           end
-          
-        {:error, reason} -> 
-          Logger.warning("Ship type lookup failed for type ID: #{ship_type_id}, error: #{inspect(reason)}")
+
+        {:error, reason} ->
+          Logger.warning(
+            "Ship type lookup failed for type ID: #{ship_type_id}, error: #{inspect(reason)}"
+          )
+
           {:error, Error.ship_types_error(:ship_name_not_found, "Ship type lookup failed")}
       end
     rescue
-      error -> 
-        Logger.error("Exception while looking up ship name for type ID: #{ship_type_id}, error: #{inspect(error)}")
+      error ->
+        Logger.error(
+          "Exception while looking up ship name for type ID: #{ship_type_id}, error: #{inspect(error)}"
+        )
+
         {:error, error}
     end
   end
 
-  defp get_ship_name(_), do: {:error, Error.ship_types_error(:invalid_ship_type_id, "Invalid ship type ID format")}
+  defp get_ship_name(_),
+    do: {:error, Error.ship_types_error(:invalid_ship_type_id, "Invalid ship type ID format")}
+
+  # ============================================================================
+  # Utility Functions
+  # ============================================================================
+
+  @doc """
+  Extracts the killmail time field from a killmail.
+
+  Handles different field name variations.
+  """
+  @spec get_killmail_time(map()) :: String.t() | nil
+  def get_killmail_time(killmail) when is_map(killmail) do
+    # ESI returns "killmail_time", but after normalization it might be "kill_time"
+    killmail["killmail_time"] || killmail["kill_time"]
+  end
+
+  @doc """
+  Extracts the killmail ID from a killmail safely.
+  """
+  @spec get_killmail_id(map()) :: integer() | nil
+  def get_killmail_id(%{"killmail_id" => id}) when is_integer(id), do: id
+  def get_killmail_id(_), do: nil
 end

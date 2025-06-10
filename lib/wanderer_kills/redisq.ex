@@ -208,10 +208,11 @@ defmodule WandererKills.RedisQ do
 
     if total_activity > 0 or stats.errors > 0 do
       # Get websocket stats
-      ws_stats = case WandererKillsWeb.KillmailChannel.get_stats() do
-        {:ok, stats} -> stats
-        _ -> %{kills_sent: %{total: 0, realtime: 0, preload: 0}}
-      end
+      ws_stats =
+        case WandererKillsWeb.KillmailChannel.get_stats() do
+          {:ok, stats} -> stats
+          _ -> %{kills_sent: %{total: 0, realtime: 0, preload: 0}}
+        end
 
       Logger.info(
         "📊 REDISQ SUMMARY (#{duration}s): " <>
@@ -305,7 +306,7 @@ defmodule WandererKills.RedisQ do
         Logger.debug("[RedisQ] Successfully parsed & stored new killmail.")
 
         # Broadcast kill update via PubSub using the enriched killmail
-        broadcast_kill_update_enriched(enriched_killmail)
+        broadcast_killmail_update_enriched(enriched_killmail)
 
         {:ok, :kill_received}
 
@@ -438,9 +439,11 @@ defmodule WandererKills.RedisQ do
     start_listening()
   end
 
-  # Broadcast kill update to PubSub subscribers using enriched killmail
-  defp broadcast_kill_update_enriched(enriched_killmail) do
-    system_id = Map.get(enriched_killmail, "solar_system_id")
+  # Broadcast killmail update to PubSub subscribers using enriched killmail
+  defp broadcast_killmail_update_enriched(enriched_killmail) do
+    system_id =
+      Map.get(enriched_killmail, "solar_system_id") || Map.get(enriched_killmail, "system_id")
+
     killmail_id = Map.get(enriched_killmail, "killmail_id")
 
     if system_id do
@@ -448,12 +451,14 @@ defmodule WandererKills.RedisQ do
       send(self(), {:track_system, system_id})
 
       # Broadcast detailed kill update
-      WandererKills.SubscriptionManager.broadcast_kill_update(system_id, [enriched_killmail])
+      WandererKills.SubscriptionManager.broadcast_killmail_update_async(system_id, [
+        enriched_killmail
+      ])
 
       # Also broadcast kill count update (increment by 1)
-      WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, 1)
+      WandererKills.SubscriptionManager.broadcast_killmail_count_update_async(system_id, 1)
     else
-      Logger.warning("[RedisQ] Cannot broadcast kill update - missing solar_system_id",
+      Logger.warning("[RedisQ] Cannot broadcast killmail update - missing system_id",
         killmail_id: killmail_id
       )
     end

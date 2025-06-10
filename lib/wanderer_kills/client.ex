@@ -17,30 +17,30 @@ defmodule WandererKills.Client do
   alias WandererKills.Support.Error
 
   @impl true
-  def fetch_system_kills(system_id, since_hours, limit) do
-    Logger.debug("Fetching system kills via WandererKills.Client",
+  def fetch_system_killmails(system_id, since_hours, limit) do
+    Logger.debug("Fetching system killmails via WandererKills.Client",
       system_id: system_id,
       since_hours: since_hours,
       limit: limit
     )
 
     case ZkbClient.fetch_system_killmails(system_id, limit, since_hours) do
-      {:ok, kills} ->
+      {:ok, killmails} ->
         # Filter by time window if needed (since ZKB API doesn't support time filtering directly)
-        filtered_kills = filter_kills_by_time(kills, since_hours)
-        limited_kills = Enum.take(filtered_kills, limit)
+        filtered_killmails = filter_killmails_by_time(killmails, since_hours)
+        limited_killmails = Enum.take(filtered_killmails, limit)
 
-        Logger.debug("Successfully fetched system kills",
+        Logger.debug("Successfully fetched system killmails",
           system_id: system_id,
-          total_kills: length(kills),
-          filtered_kills: length(filtered_kills),
-          returned_kills: length(limited_kills)
+          total_killmails: length(killmails),
+          filtered_killmails: length(filtered_killmails),
+          returned_killmails: length(limited_killmails)
         )
 
-        {:ok, limited_kills}
+        {:ok, limited_killmails}
 
       {:error, reason} ->
-        Logger.error("Failed to fetch system kills",
+        Logger.error("Failed to fetch system killmails",
           system_id: system_id,
           since_hours: since_hours,
           limit: limit,
@@ -52,19 +52,19 @@ defmodule WandererKills.Client do
   end
 
   @impl true
-  def fetch_systems_kills(system_ids, since_hours, limit) do
-    Logger.debug("Fetching kills for multiple systems",
+  def fetch_systems_killmails(system_ids, since_hours, limit) do
+    Logger.debug("Fetching killmails for multiple systems",
       system_ids: system_ids,
       since_hours: since_hours,
       limit: limit
     )
 
-    # Batch fetch kills for all systems
+    # Batch fetch killmails for all systems
     tasks =
       system_ids
       |> Enum.map(fn system_id ->
         Task.async(fn ->
-          {system_id, fetch_system_kills(system_id, since_hours, limit)}
+          {system_id, fetch_system_killmails(system_id, since_hours, limit)}
         end)
       end)
 
@@ -74,42 +74,42 @@ defmodule WandererKills.Client do
       |> Enum.map(&Task.await(&1, 30_000))
       |> Enum.reduce(%{}, fn {system_id, result}, acc ->
         case result do
-          {:ok, kills} -> Map.put(acc, system_id, kills)
+          {:ok, killmails} -> Map.put(acc, system_id, killmails)
           {:error, _reason} -> Map.put(acc, system_id, [])
         end
       end)
 
-    total_kills =
+    total_killmails =
       case results do
         res when is_map(res) -> res |> Map.values() |> List.flatten() |> length()
         res when is_list(res) -> res |> List.flatten() |> length()
         _ -> 0
       end
 
-    Logger.debug("Fetched kills for multiple systems",
+    Logger.debug("Fetched killmails for multiple systems",
       requested_systems: length(system_ids),
       successful_systems: map_size(results),
-      total_kills: total_kills
+      total_killmails: total_killmails
     )
 
     {:ok, results}
   end
 
   @impl true
-  def fetch_cached_kills(system_id) do
-    Logger.debug("Fetching cached kills", system_id: system_id)
+  def fetch_cached_killmails(system_id) do
+    Logger.debug("Fetching cached killmails", system_id: system_id)
 
-    case Helper.get_system_killmails(system_id) do
-      {:ok, kills} when is_list(kills) ->
-        Logger.debug("Retrieved cached kills",
+    case Helper.list_system_killmails(system_id) do
+      {:ok, killmails} when is_list(killmails) ->
+        Logger.debug("Retrieved cached killmails",
           system_id: system_id,
-          kill_count: length(kills)
+          killmail_count: length(killmails)
         )
 
-        kills
+        killmails
 
       {:error, reason} ->
-        Logger.warning("Failed to fetch cached kills",
+        Logger.warning("Failed to fetch cached killmails",
           system_id: system_id,
           error: reason
         )
@@ -119,31 +119,31 @@ defmodule WandererKills.Client do
   end
 
   @impl true
-  def fetch_cached_kills_for_systems(system_ids) do
-    Logger.debug("Fetching cached kills for multiple systems",
+  def fetch_cached_killmails_for_systems(system_ids) do
+    Logger.debug("Fetching cached killmails for multiple systems",
       system_ids: system_ids
     )
 
     results =
       system_ids
       |> Enum.map(fn system_id ->
-        {system_id, fetch_cached_kills(system_id)}
+        {system_id, fetch_cached_killmails(system_id)}
       end)
       |> Map.new()
 
-    total_kills = results |> Map.values() |> List.flatten() |> length()
+    total_killmails = results |> Map.values() |> List.flatten() |> length()
 
-    Logger.debug("Retrieved cached kills for multiple systems",
+    Logger.debug("Retrieved cached killmails for multiple systems",
       requested_systems: length(system_ids),
-      total_cached_kills: total_kills
+      total_cached_killmails: total_killmails
     )
 
     results
   end
 
   @impl true
-  def subscribe_to_kills(subscriber_id, system_ids, callback_url \\ nil) do
-    Logger.debug("Creating kill subscription",
+  def subscribe_to_killmails(subscriber_id, system_ids, callback_url \\ nil) do
+    Logger.debug("Creating killmail subscription",
       subscriber_id: subscriber_id,
       system_ids: system_ids,
       has_callback: !is_nil(callback_url)
@@ -151,7 +151,7 @@ defmodule WandererKills.Client do
 
     case SubscriptionManager.subscribe(subscriber_id, system_ids, callback_url) do
       {:ok, subscription_id} ->
-        Logger.debug("Kill subscription created",
+        Logger.debug("Killmail subscription created",
           subscriber_id: subscriber_id,
           subscription_id: subscription_id,
           system_count: length(system_ids)
@@ -160,7 +160,7 @@ defmodule WandererKills.Client do
         {:ok, subscription_id}
 
       {:error, reason} ->
-        Logger.error("Failed to create kill subscription",
+        Logger.error("Failed to create killmail subscription",
           subscriber_id: subscriber_id,
           error: reason
         )
@@ -170,16 +170,16 @@ defmodule WandererKills.Client do
   end
 
   @impl true
-  def unsubscribe_from_kills(subscriber_id) do
-    Logger.debug("Removing kill subscription", subscriber_id: subscriber_id)
+  def unsubscribe_from_killmails(subscriber_id) do
+    Logger.debug("Removing killmail subscription", subscriber_id: subscriber_id)
 
     case SubscriptionManager.unsubscribe(subscriber_id) do
       :ok ->
-        Logger.debug("Kill subscription removed", subscriber_id: subscriber_id)
+        Logger.debug("Killmail subscription removed", subscriber_id: subscriber_id)
         :ok
 
       {:error, reason} ->
-        Logger.error("Failed to remove kill subscription",
+        Logger.error("Failed to remove killmail subscription",
           subscriber_id: subscriber_id,
           error: reason
         )
@@ -208,14 +208,14 @@ defmodule WandererKills.Client do
   end
 
   @impl true
-  def get_system_kill_count(system_id) do
-    Logger.debug("Fetching system kill count", system_id: system_id)
+  def get_system_killmail_count(system_id) do
+    Logger.debug("Fetching system killmail count", system_id: system_id)
 
-    case Helper.get_system_killmails(system_id) do
+    case Helper.list_system_killmails(system_id) do
       {:ok, killmail_ids} when is_list(killmail_ids) ->
         count = length(killmail_ids)
 
-        Logger.debug("Retrieved system kill count",
+        Logger.debug("Retrieved system killmail count",
           system_id: system_id,
           count: count
         )
@@ -229,55 +229,55 @@ defmodule WandererKills.Client do
 
   # Private helper functions
 
-  defp filter_kills_by_time(kills, since_hours) do
+  defp filter_killmails_by_time(killmails, since_hours) do
     cutoff_time = DateTime.utc_now() |> DateTime.add(-since_hours * 3600, :second)
 
-    Enum.filter(kills, fn kill ->
-      case get_kill_time(kill) do
-        {:ok, kill_time} -> DateTime.compare(kill_time, cutoff_time) != :lt
+    Enum.filter(killmails, fn killmail ->
+      case get_killmail_time(killmail) do
+        {:ok, killmail_time} -> DateTime.compare(killmail_time, cutoff_time) != :lt
         {:error, _} -> false
       end
     end)
   end
 
-  defp get_kill_time(kill) do
-    case extract_time_from_killmail(kill) do
+  defp get_killmail_time(killmail) do
+    case extract_time_from_killmail(killmail) do
       {:ok, time} ->
         {:ok, time}
 
-      {:continue, kill} ->
-        case extract_time_from_kill_time(kill) do
+      {:continue, killmail} ->
+        case extract_time_from_killmail_time(killmail) do
           {:ok, time} -> {:ok, time}
-          {:continue, kill} -> extract_time_from_zkb(kill)
+          {:continue, killmail} -> extract_time_from_zkb(killmail)
         end
     end
   end
 
-  defp extract_time_from_killmail(kill) do
-    if is_map(kill) and Map.has_key?(kill, "killmail_time") do
-      case parse_datetime(kill["killmail_time"]) do
+  defp extract_time_from_killmail(killmail) do
+    if is_map(killmail) and Map.has_key?(killmail, "killmail_time") do
+      case parse_datetime(killmail["killmail_time"]) do
         {:ok, datetime} -> {:ok, datetime}
-        {:error, _} -> {:continue, kill}
+        {:error, _} -> {:continue, killmail}
       end
     else
-      {:continue, kill}
+      {:continue, killmail}
     end
   end
 
-  defp extract_time_from_kill_time(kill) do
-    if is_map(kill) and Map.has_key?(kill, "kill_time") do
-      case parse_datetime(kill["kill_time"]) do
+  defp extract_time_from_killmail_time(killmail) do
+    if is_map(killmail) and Map.has_key?(killmail, "kill_time") do
+      case parse_datetime(killmail["kill_time"]) do
         {:ok, datetime} -> {:ok, datetime}
-        {:error, _} -> {:continue, kill}
+        {:error, _} -> {:continue, killmail}
       end
     else
-      {:continue, kill}
+      {:continue, killmail}
     end
   end
 
-  defp extract_time_from_zkb({:continue, kill}) do
-    if is_map(kill) and Map.has_key?(kill, "zkb") do
-      extract_time_from_zkb_metadata(kill["zkb"])
+  defp extract_time_from_zkb({:continue, killmail}) do
+    if is_map(killmail) and Map.has_key?(killmail, "zkb") do
+      extract_time_from_zkb_metadata(killmail["zkb"])
     else
       {:error, Error.time_error(:no_time_found, "No time field found in killmail")}
     end
@@ -291,7 +291,8 @@ defmodule WandererKills.Client do
     end
   end
 
-  defp extract_time_from_zkb_metadata(_), do: {:error, Error.validation_error(:invalid_zkb_data, "Invalid zkb metadata format")}
+  defp extract_time_from_zkb_metadata(_),
+    do: {:error, Error.validation_error(:invalid_zkb_data, "Invalid zkb metadata format")}
 
   defp parse_datetime(datetime_string) when is_binary(datetime_string) do
     case DateTime.from_iso8601(datetime_string) do
@@ -304,21 +305,21 @@ defmodule WandererKills.Client do
   defp parse_datetime(_), do: {:error, :invalid_datetime_format}
 
   @doc """
-  Convenience function to broadcast kill updates to subscribers.
-  This would typically be called by background processes when new kills are detected.
+  Convenience function to broadcast killmail updates to subscribers.
+  This would typically be called by background processes when new killmails are detected.
   """
-  @spec broadcast_kill_update(integer(), [map()]) :: :ok
-  def broadcast_kill_update(system_id, kills) do
-    SubscriptionManager.broadcast_kill_update(system_id, kills)
+  @spec broadcast_killmail_update(integer(), [map()]) :: :ok
+  def broadcast_killmail_update(system_id, killmails) do
+    SubscriptionManager.broadcast_killmail_update(system_id, killmails)
   end
 
   @doc """
-  Convenience function to broadcast kill count updates to subscribers.
-  This would typically be called by background processes when kill counts change.
+  Convenience function to broadcast killmail count updates to subscribers.
+  This would typically be called by background processes when killmail counts change.
   """
-  @spec broadcast_kill_count_update(integer(), integer()) :: :ok
-  def broadcast_kill_count_update(system_id, count) do
-    SubscriptionManager.broadcast_kill_count_update(system_id, count)
+  @spec broadcast_killmail_count_update(integer(), integer()) :: :ok
+  def broadcast_killmail_count_update(system_id, count) do
+    SubscriptionManager.broadcast_killmail_count_update(system_id, count)
   end
 
   @doc """

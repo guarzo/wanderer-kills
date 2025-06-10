@@ -2,7 +2,7 @@
 
 Based on the code review conducted on 2025-06-10, this document outlines a structured approach to address identified issues while minimizing risk and maximizing code quality improvements.
 
-**Last Updated**: 2025-06-10 (Phase 1 Complete, Runtime Issues Resolved, Phase 2 Ready)
+**Last Updated**: 2025-06-10 (Phase 1 & 2 Substantially Complete)
 
 ## Overview
 
@@ -16,12 +16,19 @@ The refactoring will be executed in phases, prioritizing high-impact changes tha
 3. **HTTP Client Centralization** ✅ - Replaced direct Req usage with centralized HTTP client, added POST support
 4. **Store Behaviours** ✅ - Added behaviour definitions for better testability
 
-### ✅ Additional Completed Tasks
-5. **Ship Name Enrichment Fix** ✅ - Fixed CSV ship type loading and added ESI fallback
-6. **Logging Cleanup** ✅ - Reduced verbose info-level logs to debug level
+### ✅ Completed Tasks (Phase 2 - Naming Standardization)
+5. **Killmail Naming Standardization** ✅ - Changed "kill" to "killmail" throughout codebase
+6. **Fetch/Get Naming Conventions** ✅ - Implemented get_* (local) vs fetch_* (external) pattern
+7. **System ID Standardization** ✅ - Use system_id internally, handle solar_system_id at API boundaries
 
-### 🚧 Ready to Resume
-- **Killmail Naming Standardization** - Partially complete (30%), ready to continue
+### ✅ Additional Runtime Fixes
+8. **Ship Name Enrichment Fix** ✅ - Fixed CSV ship type loading (86 → 1000s) and added ESI fallback
+9. **Logging Cleanup** ✅ - Reduced verbose info-level logs to debug level
+
+### 📋 Remaining Tasks (Lower Priority)
+- **Consolidate Normalization Logic** - Merge scattered normalization modules
+- **Add _async Suffixes** - Clarify asynchronous operations
+- **Centralize Configuration Access** - Single config access point
 
 ## Phase 1: Critical Issues (Week 1-2)
 

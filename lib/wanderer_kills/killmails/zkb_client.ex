@@ -14,9 +14,9 @@ defmodule WandererKills.Killmails.ZkbClientBehaviour do
   @callback fetch_system_killmails(integer()) :: {:ok, [map()]} | {:error, term()}
 
   @doc """
-  Gets the kill count for a system.
+  Gets the killmail count for a system.
   """
-  @callback get_system_kill_count(integer()) :: {:ok, integer()} | {:error, term()}
+  @callback get_system_killmail_count(integer()) :: {:ok, integer()} | {:error, term()}
 end
 
 defmodule WandererKills.Killmails.ZkbClient do
@@ -35,6 +35,7 @@ defmodule WandererKills.Killmails.ZkbClient do
   alias WandererKills.Support.Error
   alias WandererKills.Http.{Client, ClientProvider}
   alias WandererKills.Observability.Telemetry
+  alias WandererKills.Config
 
   @base_url Application.compile_env(:wanderer_kills, :zkb_base_url)
 
@@ -62,7 +63,7 @@ defmodule WandererKills.Killmails.ZkbClient do
       ClientProvider.build_request_opts(
         params: [no_items: true],
         headers: ClientProvider.eve_api_headers(),
-        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
+        timeout: Config.timeouts().zkb_request_ms
       )
 
     request_opts = Keyword.put(request_opts, :operation, :fetch_killmail)
@@ -244,7 +245,7 @@ defmodule WandererKills.Killmails.ZkbClient do
       ClientProvider.build_request_opts(
         params: [no_items: true],
         headers: ClientProvider.eve_api_headers(),
-        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
+        timeout: Config.timeouts().zkb_request_ms
       )
 
     request_opts = Keyword.put(request_opts, :operation, :"fetch_#{entity_type}_killmails")
@@ -265,7 +266,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     request_opts =
       ClientProvider.build_request_opts(
         headers: ClientProvider.eve_api_headers(),
-        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
+        timeout: Config.timeouts().zkb_request_ms
       )
 
     request_opts = Keyword.put(request_opts, :operation, :fetch_system_killmails_esi)
@@ -296,14 +297,14 @@ defmodule WandererKills.Killmails.ZkbClient do
   end
 
   @doc """
-  Gets the kill count for a system from zKillboard with telemetry.
+  Gets the killmail count for a system from zKillboard with telemetry.
   Returns {:ok, count} or {:error, reason}.
   """
-  @spec get_system_kill_count(system_id()) :: {:ok, integer()} | {:error, term()}
-  def get_system_kill_count(system_id) when is_integer(system_id) and system_id > 0 do
-    Logger.debug("Fetching system kill count from ZKB",
+  @spec get_system_killmail_count(system_id()) :: {:ok, integer()} | {:error, term()}
+  def get_system_killmail_count(system_id) when is_integer(system_id) and system_id > 0 do
+    Logger.debug("Fetching system killmail count from ZKB",
       system_id: system_id,
-      operation: :get_system_kill_count,
+      operation: :get_system_killmail_count,
       step: :start
     )
 
@@ -312,10 +313,10 @@ defmodule WandererKills.Killmails.ZkbClient do
     request_opts =
       ClientProvider.build_request_opts(
         headers: ClientProvider.eve_api_headers(),
-        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
+        timeout: Config.timeouts().zkb_request_ms
       )
 
-    request_opts = Keyword.put(request_opts, :operation, :get_system_kill_count)
+    request_opts = Keyword.put(request_opts, :operation, :get_system_killmail_count)
 
     case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
@@ -323,10 +324,10 @@ defmodule WandererKills.Killmails.ZkbClient do
           {:ok, data} when is_list(data) ->
             count = length(data)
 
-            Logger.debug("Successfully fetched system kill count from ZKB",
+            Logger.debug("Successfully fetched system killmail count from ZKB",
               system_id: system_id,
-              kill_count: count,
-              operation: :get_system_kill_count,
+              killmail_count: count,
+              operation: :get_system_killmail_count,
               step: :success
             )
 
@@ -336,13 +337,13 @@ defmodule WandererKills.Killmails.ZkbClient do
             error_reason =
               Error.zkb_error(
                 :unexpected_response,
-                "Expected list data for kill count but got different format",
+                "Expected list data for killmail count but got different format",
                 false
               )
 
-            Logger.error("Failed to fetch system kill count from ZKB",
+            Logger.error("Failed to fetch system killmail count from ZKB",
               system_id: system_id,
-              operation: :get_system_kill_count,
+              operation: :get_system_killmail_count,
               error: error_reason,
               step: :error
             )
@@ -350,9 +351,9 @@ defmodule WandererKills.Killmails.ZkbClient do
             {:error, error_reason}
 
           {:error, reason} ->
-            Logger.error("Failed to fetch system kill count from ZKB",
+            Logger.error("Failed to fetch system killmail count from ZKB",
               system_id: system_id,
-              operation: :get_system_kill_count,
+              operation: :get_system_killmail_count,
               error: reason,
               step: :error
             )
@@ -361,9 +362,9 @@ defmodule WandererKills.Killmails.ZkbClient do
         end
 
       {:error, reason} ->
-        Logger.error("Failed to fetch system kill count from ZKB",
+        Logger.error("Failed to fetch system killmail count from ZKB",
           system_id: system_id,
-          operation: :get_system_kill_count,
+          operation: :get_system_killmail_count,
           error: reason,
           step: :error
         )
@@ -372,7 +373,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     end
   end
 
-  def get_system_kill_count(invalid_id) do
+  def get_system_killmail_count(invalid_id) do
     {:error,
      Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
@@ -408,7 +409,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     request_opts =
       ClientProvider.build_request_opts(
         headers: ClientProvider.eve_api_headers(),
-        timeout: Application.get_env(:wanderer_kills, :zkb_request_timeout_ms, 15_000)
+        timeout: Config.timeouts().zkb_request_ms
       )
 
     request_opts = Keyword.put(request_opts, :operation, :fetch_active_systems)

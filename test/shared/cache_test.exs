@@ -39,23 +39,23 @@ defmodule WandererKills.CacheTest do
       assert {:ok, true} = Helper.put(:killmails, 456, killmail2)
       assert {:ok, true} = Helper.add_system_killmail(789, 123)
       assert {:ok, true} = Helper.add_system_killmail(789, 456)
-      assert {:ok, killmail_ids} = Helper.get_system_killmails(789)
+      assert {:ok, killmail_ids} = Helper.list_system_killmails(789)
       assert 123 in killmail_ids
       assert 456 in killmail_ids
     end
 
     test "returns empty list for system with no killmails" do
       # For a system with no killmails, we get an error
-      assert {:error, %{type: :not_found}} = Helper.get_system_killmails(999)
+      assert {:error, %{type: :not_found}} = Helper.list_system_killmails(999)
     end
 
     test "can manage system killmails" do
       killmail = TestHelpers.create_test_killmail(123)
       assert {:ok, true} = Helper.put(:killmails, 123, killmail)
       assert {:ok, true} = Helper.add_system_killmail(789, 123)
-      assert {:ok, killmail_ids} = Helper.get_system_killmails(789)
+      assert {:ok, killmail_ids} = Helper.list_system_killmails(789)
       assert 123 in killmail_ids
-      assert {:ok, killmail_ids} = Helper.get_system_killmails(789)
+      assert {:ok, killmail_ids} = Helper.list_system_killmails(789)
       assert 123 in killmail_ids
     end
   end

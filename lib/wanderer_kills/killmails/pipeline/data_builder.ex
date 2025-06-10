@@ -8,7 +8,7 @@ defmodule WandererKills.Killmails.Pipeline.DataBuilder do
 
   require Logger
   alias WandererKills.Support.Error
-  alias WandererKills.Killmails.Pipeline.Normalizer
+  alias WandererKills.Killmails.Transformations
 
   @type killmail :: map()
 
@@ -23,9 +23,9 @@ defmodule WandererKills.Killmails.Pipeline.DataBuilder do
     structured = %{
       "killmail_id" => killmail["killmail_id"],
       "kill_time" => killmail["parsed_kill_time"],
-      "solar_system_id" => killmail["solar_system_id"],
-      "victim" => Normalizer.normalize_victim(killmail["victim"]),
-      "attackers" => Normalizer.normalize_attackers(killmail["attackers"]),
+      "system_id" => killmail["solar_system_id"] || killmail["system_id"],
+      "victim" => Transformations.normalize_victim(killmail["victim"]),
+      "attackers" => Transformations.normalize_attackers(killmail["attackers"]),
       "zkb" => killmail["zkb"] || %{},
       "total_value" => get_in(killmail, ["zkb", "totalValue"]) || 0,
       "npc" => get_in(killmail, ["zkb", "npc"]) || false
@@ -51,18 +51,19 @@ defmodule WandererKills.Killmails.Pipeline.DataBuilder do
   @spec merge_killmail_data(killmail(), map()) :: {:ok, killmail()} | {:error, Error.t()}
   def merge_killmail_data(%{"killmail_id" => id} = esi_data, %{"zkb" => zkb})
       when is_integer(id) and is_map(zkb) do
-    kill_time = Normalizer.get_kill_time(esi_data)
+    kill_time = Transformations.get_killmail_time(esi_data)
 
     if kill_time do
       merged =
         esi_data
         |> Map.put("zkb", zkb)
         |> Map.put("kill_time", kill_time)
-        |> Map.put("killmail_time", kill_time)  # Keep both for compatibility
+        # Keep both for compatibility
+        |> Map.put("killmail_time", kill_time)
 
       {:ok, merged}
     else
-      {:error, Error.killmail_error(:missing_kill_time, "Kill time not found in ESI data")}
+      {:error, Error.killmail_error(:missing_kill_time, "Killmail time not found in ESI data")}
     end
   end
 

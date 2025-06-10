@@ -27,10 +27,10 @@ defmodule WandererKills.Support.BatchProcessor do
   ```elixir
   # Parallel processing (recommended)
   items = [1, 2, 3, 4, 5]
-  {:ok, results} = BatchProcessor.process_parallel(items, &fetch_data/1)
+  {:ok, results} = BatchProcessor.process_parallel_async(items, &fetch_data/1)
 
   # With custom options
-  {:ok, results} = BatchProcessor.process_parallel(items, &fetch_data/1,
+  {:ok, results} = BatchProcessor.process_parallel_async(items, &fetch_data/1,
     max_concurrency: 5,
     timeout: 60_000,
     description: "Fetching ship data"
@@ -71,8 +71,9 @@ defmodule WandererKills.Support.BatchProcessor do
   - `{:partial, results, failures}` - If some items failed
   - `{:error, reason}` - If processing failed entirely
   """
-  @spec process_parallel([term()], (term() -> task_result()), batch_opts()) :: batch_result()
-  def process_parallel(items, process_fn, opts \\ []) when is_list(items) do
+  @spec process_parallel_async([term()], (term() -> task_result()), batch_opts()) ::
+          batch_result()
+  def process_parallel_async(items, process_fn, opts \\ []) when is_list(items) do
     max_concurrency = Keyword.get(opts, :max_concurrency, Config.batch().concurrency_default)
     timeout = Keyword.get(opts, :timeout, Config.timeouts().default_request_ms)
     supervisor = Keyword.get(opts, :supervisor, WandererKills.TaskSupervisor)
@@ -161,7 +162,12 @@ defmodule WandererKills.Support.BatchProcessor do
 
       {0, ^total_count} ->
         Logger.error("Failed to process all #{total_count} #{description} in #{duration_ms}ms")
-        {:error, Error.system_error(:batch_failed, "All items failed to process", false, %{total: total_count, description: description})}
+
+        {:error,
+         Error.system_error(:batch_failed, "All items failed to process", false, %{
+           total: total_count,
+           description: description
+         })}
 
       {_, _} ->
         Logger.warning(
@@ -189,5 +195,15 @@ defmodule WandererKills.Support.BatchProcessor do
         Logger.warning("Unexpected async_stream result format: #{inspect(other)}")
         {successes, [{:unexpected, other} | failures]}
     end)
+  end
+
+  @doc """
+  Alias for process_parallel_async/3 for backward compatibility.
+
+  @deprecated Use process_parallel_async/3 instead
+  """
+  @spec process_parallel([term()], (term() -> task_result()), batch_opts()) :: batch_result()
+  def process_parallel(items, process_fn, opts \\ []) do
+    process_parallel_async(items, process_fn, opts)
   end
 end

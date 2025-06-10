@@ -84,12 +84,12 @@ defmodule WandererKills.Http.Client do
 
   @doc """
   Makes a POST request with JSON payload.
-  
+
   ## Parameters
   - `url` - The URL to post to
   - `body` - The JSON payload (will be encoded automatically)
   - `options` - Request options (headers, timeout, etc.)
-  
+
   ## Returns
   - `{:ok, response}` - On success
   - `{:error, reason}` - On failure
@@ -99,10 +99,13 @@ defmodule WandererKills.Http.Client do
     default_headers = [{"content-type", "application/json"}]
     headers = Keyword.get(options, :headers, []) ++ default_headers
     opts = Keyword.put(options, :headers, headers)
-    
-    Retry.retry_with_backoff(fn ->
-      do_post(url, body, opts)
-    end, operation_name: "HTTP POST #{url}")
+
+    Retry.retry_with_backoff(
+      fn ->
+        do_post(url, body, opts)
+      end,
+      operation_name: "HTTP POST #{url}"
+    )
   end
 
   # ============================================================================
@@ -236,37 +239,37 @@ defmodule WandererKills.Http.Client do
   @spec do_post(url(), map(), opts()) :: {:ok, term()} | {:error, term()}
   defp do_post(url, body, opts) do
     start_time = System.monotonic_time()
-    
+
     Telemetry.http_request_start("POST", url)
-    
+
     headers = Keyword.get(opts, :headers, [])
     timeout = Keyword.get(opts, :timeout, 10_000)
-    
+
     result =
       case Req.post(url, json: body, headers: headers, receive_timeout: timeout) do
         {:ok, %Req.Response{status: status, body: body}} ->
           handle_status_code(status, %{status: status, body: body})
-        
+
         {:error, %{reason: :timeout}} ->
           {:error, %TimeoutError{message: "Request to #{url} timed out"}}
-        
+
         {:error, %{reason: :econnrefused}} ->
           {:error, %ConnectionError{message: "Connection refused for #{url}"}}
-        
+
         {:error, reason} ->
           {:error, reason}
       end
-    
+
     duration = System.monotonic_time() - start_time
-    
+
     case result do
       {:ok, %{status: status}} ->
         Telemetry.http_request_stop("POST", url, duration, status)
-      
+
       {:error, reason} ->
         Telemetry.http_request_error("POST", url, duration, reason)
     end
-    
+
     result
   end
 

@@ -67,7 +67,7 @@ defmodule WandererKills.ShipTypes.Updater do
   String URL for downloading EVE DB dump files
   """
   @spec eve_db_dump_url() :: String.t()
-  def eve_db_dump_url, do: "https://www.fuzzwork.co.uk/dump/latest"
+  def eve_db_dump_url, do: WandererKills.Config.services().eve_db_dump_url
 
   @doc """
   Lists the required CSV files for ship type data.

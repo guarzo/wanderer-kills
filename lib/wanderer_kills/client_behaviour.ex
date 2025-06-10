@@ -6,7 +6,7 @@ defmodule WandererKills.ClientBehaviour do
   including fetching killmails, managing subscriptions, and accessing cached data.
   """
 
-  @type kill :: map()
+  @type killmail :: map()
   @type system_id :: integer()
   @type subscriber_id :: String.t()
 
@@ -19,15 +19,15 @@ defmodule WandererKills.ClientBehaviour do
   - limit: Maximum number of kills to return
 
   ## Returns
-  - {:ok, [kill()]} - List of killmail data
+  - {:ok, [killmail()]} - List of killmail data
   - {:error, term()} - Error occurred during fetch
   """
-  @callback fetch_system_kills(
+  @callback fetch_system_killmails(
               system_id :: integer(),
               since_hours :: integer(),
               limit :: integer()
             ) ::
-              {:ok, [kill()]} | {:error, term()}
+              {:ok, [killmail()]} | {:error, term()}
 
   @doc """
   Fetches killmails for multiple systems within the given time window.
@@ -38,15 +38,15 @@ defmodule WandererKills.ClientBehaviour do
   - limit: Maximum number of kills to return per system
 
   ## Returns
-  - {:ok, %{integer() => [kill()]}} - Map of system_id to killmail lists
+  - {:ok, %{integer() => [killmail()]}} - Map of system_id to killmail lists
   - {:error, term()} - Error occurred during fetch
   """
-  @callback fetch_systems_kills(
+  @callback fetch_systems_killmails(
               system_ids :: [integer()],
               since_hours :: integer(),
               limit :: integer()
             ) ::
-              {:ok, %{integer() => [kill()]}} | {:error, term()}
+              {:ok, %{integer() => [killmail()]}} | {:error, term()}
 
   @doc """
   Retrieves cached killmails for a specific system.
@@ -55,9 +55,9 @@ defmodule WandererKills.ClientBehaviour do
   - system_id: The solar system ID to get cached kills for
 
   ## Returns
-  - [kill()] - List of cached killmail data (empty list if none cached)
+  - [killmail()] - List of cached killmail data (empty list if none cached)
   """
-  @callback fetch_cached_kills(system_id :: integer()) :: [kill()]
+  @callback fetch_cached_killmails(system_id :: integer()) :: [killmail()]
 
   @doc """
   Retrieves cached killmails for multiple systems.
@@ -66,9 +66,11 @@ defmodule WandererKills.ClientBehaviour do
   - system_ids: List of solar system IDs to get cached kills for
 
   ## Returns
-  - %{integer() => [kill()]} - Map of system_id to cached killmail lists
+  - %{integer() => [killmail()]} - Map of system_id to cached killmail lists
   """
-  @callback fetch_cached_kills_for_systems(system_ids :: [integer()]) :: %{integer() => [kill()]}
+  @callback fetch_cached_killmails_for_systems(system_ids :: [integer()]) :: %{
+              integer() => [killmail()]
+            }
 
   @doc """
   Subscribes to kill updates for specified systems.
@@ -82,7 +84,7 @@ defmodule WandererKills.ClientBehaviour do
   - {:ok, subscription_id} - Subscription created successfully
   - {:error, term()} - Error occurred during subscription
   """
-  @callback subscribe_to_kills(
+  @callback subscribe_to_killmails(
               subscriber_id :: String.t(),
               system_ids :: [integer()],
               callback_url :: String.t() | nil
@@ -99,7 +101,7 @@ defmodule WandererKills.ClientBehaviour do
   - :ok - Successfully unsubscribed
   - {:error, term()} - Error occurred during unsubscription
   """
-  @callback unsubscribe_from_kills(subscriber_id :: String.t()) :: :ok | {:error, term()}
+  @callback unsubscribe_from_killmails(subscriber_id :: String.t()) :: :ok | {:error, term()}
 
   @doc """
   Retrieves a specific killmail by ID.
@@ -108,10 +110,10 @@ defmodule WandererKills.ClientBehaviour do
   - killmail_id: The killmail ID to retrieve
 
   ## Returns
-  - kill() - The killmail data if found
+  - killmail() - The killmail data if found
   - nil - Killmail not found
   """
-  @callback get_killmail(killmail_id :: integer()) :: kill() | nil
+  @callback get_killmail(killmail_id :: integer()) :: killmail() | nil
 
   @doc """
   Gets the current kill count for a system.
@@ -122,5 +124,5 @@ defmodule WandererKills.ClientBehaviour do
   ## Returns
   - integer() - Current kill count for the system
   """
-  @callback get_system_kill_count(system_id :: integer()) :: integer()
+  @callback get_system_killmail_count(system_id :: integer()) :: integer()
 end

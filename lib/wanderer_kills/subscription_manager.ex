@@ -5,7 +5,7 @@ defmodule WandererKills.SubscriptionManager do
   This module handles:
   - Tracking active subscriptions
   - Managing subscriber notifications via webhooks and PubSub
-  - Broadcasting kill updates to subscribers
+  - Broadcasting killmail updates to subscribers
   """
 
   use GenServer
@@ -44,7 +44,7 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   @doc """
-  Subscribes to kill updates for specified systems.
+  Subscribes to killmail updates for specified systems.
   """
   @spec subscribe(subscriber_id(), [system_id()], String.t() | nil) ::
           {:ok, subscription_id()} | {:error, term()}
@@ -53,7 +53,7 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   @doc """
-  Unsubscribes from all kill updates for a subscriber.
+  Unsubscribes from all killmail updates for a subscriber.
   """
   @spec unsubscribe(subscriber_id()) :: :ok | {:error, term()}
   def unsubscribe(subscriber_id) do
@@ -69,19 +69,19 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   @doc """
-  Broadcasts a kill update to all relevant subscribers.
+  Broadcasts a killmail update to all relevant subscribers asynchronously.
   """
-  @spec broadcast_kill_update(system_id(), [Types.kill()]) :: :ok
-  def broadcast_kill_update(system_id, kills) do
-    GenServer.cast(__MODULE__, {:broadcast_kill_update, system_id, kills})
+  @spec broadcast_killmail_update_async(system_id(), [Types.killmail()]) :: :ok
+  def broadcast_killmail_update_async(system_id, kills) do
+    GenServer.cast(__MODULE__, {:broadcast_killmail_update, system_id, kills})
   end
 
   @doc """
-  Broadcasts a kill count update to all relevant subscribers.
+  Broadcasts a killmail count update to all relevant subscribers asynchronously.
   """
-  @spec broadcast_kill_count_update(system_id(), integer()) :: :ok
-  def broadcast_kill_count_update(system_id, count) do
-    GenServer.cast(__MODULE__, {:broadcast_kill_count_update, system_id, count})
+  @spec broadcast_killmail_count_update_async(system_id(), integer()) :: :ok
+  def broadcast_killmail_count_update_async(system_id, count) do
+    GenServer.cast(__MODULE__, {:broadcast_killmail_count_update, system_id, count})
   end
 
   @doc """
@@ -106,6 +106,26 @@ defmodule WandererKills.SubscriptionManager do
   @spec remove_websocket_subscription(String.t()) :: :ok
   def remove_websocket_subscription(subscription_id) do
     GenServer.cast(__MODULE__, {:remove_websocket_subscription, subscription_id})
+  end
+
+  @doc """
+  Broadcasts a killmail update to all relevant subscribers.
+
+  @deprecated Use broadcast_killmail_update_async/2 instead
+  """
+  @spec broadcast_killmail_update(system_id(), [Types.killmail()]) :: :ok
+  def broadcast_killmail_update(system_id, kills) do
+    broadcast_killmail_update_async(system_id, kills)
+  end
+
+  @doc """
+  Broadcasts a killmail count update to all relevant subscribers.
+
+  @deprecated Use broadcast_killmail_count_update_async/2 instead
+  """
+  @spec broadcast_killmail_count_update(system_id(), integer()) :: :ok
+  def broadcast_killmail_count_update(system_id, count) do
+    broadcast_killmail_count_update_async(system_id, count)
   end
 
   # Server callbacks
@@ -147,7 +167,7 @@ defmodule WandererKills.SubscriptionManager do
           has_callback: !is_nil(callback_url)
         )
 
-        # Preload and send recent kills for the subscribed systems
+        # Preload and send recent killmails for the subscribed systems
         Task.start(fn ->
           try do
             preload_kills_for_new_subscriber(subscription, system_ids)
@@ -212,7 +232,7 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   @impl true
-  def handle_cast({:broadcast_kill_update, system_id, kills}, state) do
+  def handle_cast({:broadcast_killmail_update, system_id, kills}, state) do
     # Find all subscribers interested in this system
     interested_subscriptions =
       state.subscriptions
@@ -228,7 +248,7 @@ defmodule WandererKills.SubscriptionManager do
 
       # Send webhook notifications
       Task.start(fn ->
-        send_webhook_notifications(interested_subscriptions, system_id, kills, :kill_update)
+        send_webhook_notifications(interested_subscriptions, system_id, kills, :killmail_update)
       end)
     end
 
@@ -236,7 +256,7 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   @impl true
-  def handle_cast({:broadcast_kill_count_update, system_id, count}, state) do
+  def handle_cast({:broadcast_killmail_count_update, system_id, count}, state) do
     # Find all subscribers interested in this system
     interested_subscriptions =
       state.subscriptions
@@ -251,7 +271,7 @@ defmodule WandererKills.SubscriptionManager do
         send_webhook_count_notifications(interested_subscriptions, system_id, count)
       end)
 
-      Logger.debug("Kill count update broadcasted",
+      Logger.debug("Killmail count update broadcasted",
         system_id: system_id,
         count: count,
         subscriber_count: length(interested_subscriptions)
@@ -359,7 +379,7 @@ defmodule WandererKills.SubscriptionManager do
   defp broadcast_pubsub_update(pubsub_name, system_id, kills, type) do
     timestamp = DateTime.utc_now()
 
-    # Global kill updates
+    # Global killmail updates
     Phoenix.PubSub.broadcast(pubsub_name, "zkb:detailed_kills:updated", %{
       type: type,
       solar_system_id: system_id,
@@ -386,9 +406,9 @@ defmodule WandererKills.SubscriptionManager do
   defp broadcast_pubsub_count_update(pubsub_name, system_id, count) do
     timestamp = DateTime.utc_now()
 
-    # Global kill count updates
+    # Global killmail count updates
     Phoenix.PubSub.broadcast(pubsub_name, "zkb:kills:updated", %{
-      type: :kill_count_update,
+      type: :killmail_count_update,
       solar_system_id: system_id,
       kills: count,
       timestamp: timestamp
@@ -396,7 +416,7 @@ defmodule WandererKills.SubscriptionManager do
 
     # System-specific updates
     Phoenix.PubSub.broadcast(pubsub_name, PubSubTopics.system_topic(system_id), %{
-      type: :kill_count_update,
+      type: :killmail_count_update,
       solar_system_id: system_id,
       kills: count,
       timestamp: timestamp
@@ -469,7 +489,7 @@ defmodule WandererKills.SubscriptionManager do
 
   defp send_webhook_count_notification(subscription, system_id, count) do
     payload = %{
-      type: "kill_count_update",
+      type: "killmail_count_update",
       data: %{
         solar_system_id: system_id,
         count: count,
@@ -613,11 +633,11 @@ defmodule WandererKills.SubscriptionManager do
   # Helper function to broadcast preload kills
   defp broadcast_preload_kills(subscription, system_id, kills) do
     # Send via PubSub
-    broadcast_pubsub_update(WandererKills.PubSub, system_id, kills, :preload_kill_update)
+    broadcast_pubsub_update(WandererKills.PubSub, system_id, kills, :preload_killmail_update)
 
     # Send via webhook if configured
     if subscription.callback_url do
-      send_webhook_notification(subscription, system_id, kills, :preload_kill_update)
+      send_webhook_notification(subscription, system_id, kills, :preload_killmail_update)
     end
   end
 end

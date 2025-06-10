@@ -41,12 +41,11 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
   alias WandererKills.Killmails.Pipeline.{
     Enricher,
     Validator,
-    Normalizer,
     DataBuilder,
     ESIFetcher
   }
 
-  alias WandererKills.Killmails.FieldNormalizer
+  alias WandererKills.Killmails.Transformations
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -71,8 +70,8 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
   @spec parse_full_killmail(killmail(), DateTime.t()) :: parse_result()
   def parse_full_killmail(killmail, cutoff_time) when is_map(killmail) do
     # Normalize field names first
-    killmail = FieldNormalizer.normalize_killmail(killmail)
-    killmail_id = Normalizer.get_killmail_id(killmail)
+    killmail = Transformations.normalize_field_names(killmail)
+    killmail_id = Transformations.get_killmail_id(killmail)
 
     Logger.debug("Parsing full killmail",
       killmail_id: killmail_id,
@@ -94,7 +93,7 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
 
       {:error, reason} ->
         Logger.error("Failed to parse killmail",
-          killmail_id: Normalizer.get_killmail_id(killmail),
+          killmail_id: Transformations.get_killmail_id(killmail),
           error: reason,
           step: Validator.determine_failure_step(reason),
           killmail_sample: inspect(killmail, limit: 3, printable_limit: 100)
@@ -119,7 +118,7 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
   @spec parse_partial_killmail(raw_killmail(), DateTime.t()) :: parse_result()
   def parse_partial_killmail(partial, cutoff_time) do
     # Normalize field names first
-    normalized = FieldNormalizer.normalize_killmail(partial)
+    normalized = Transformations.normalize_field_names(partial)
 
     case {normalized["killmail_id"], normalized["zkb"]} do
       {id, zkb} when is_integer(id) and is_map(zkb) ->
