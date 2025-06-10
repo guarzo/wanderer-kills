@@ -171,11 +171,13 @@ defmodule WandererKills.RedisQ do
       errors: state.stats.errors,
       no_kills_polls: state.stats.no_kills_count,
       active_systems: MapSet.size(state.stats.systems_active),
-      total_polls: state.stats.kills_received + state.stats.kills_older + 
-                   state.stats.kills_skipped + state.stats.legacy_kills + 
-                   state.stats.no_kills_count + state.stats.errors,
+      total_polls:
+        state.stats.kills_received + state.stats.kills_older +
+          state.stats.kills_skipped + state.stats.legacy_kills +
+          state.stats.no_kills_count + state.stats.errors,
       last_reset: state.stats.last_reset
     }
+
     {:reply, {:ok, stats}, state}
   end
 

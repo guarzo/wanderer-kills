@@ -426,12 +426,13 @@ defmodule WandererKills.Observability.WebSocketStats do
     try do
       case Cachex.stats(:wanderer_cache) do
         {:ok, stats} ->
-          hit_rate = WandererKills.Observability.Statistics.calculate_hit_rate(
-            Map.get(stats, :hits, 0),
-            Map.get(stats, :hits, 0) + Map.get(stats, :misses, 0)
-          )
+          hit_rate =
+            WandererKills.Observability.Statistics.calculate_hit_rate(
+              Map.get(stats, :hits, 0),
+              Map.get(stats, :hits, 0) + Map.get(stats, :misses, 0)
+            )
 
-          total_size = 
+          total_size =
             case Cachex.size(:wanderer_cache) do
               {:ok, size} -> size
               _ -> 0

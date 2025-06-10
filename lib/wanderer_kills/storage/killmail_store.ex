@@ -419,7 +419,8 @@ defmodule WandererKills.Storage.KillmailStore do
     if killmail_id do
       put(killmail_id, killmail)
     else
-      {:error, Error.validation_error(:missing_killmail_id, "Killmail missing required killmail_id field")}
+      {:error,
+       Error.validation_error(:missing_killmail_id, "Killmail missing required killmail_id field")}
     end
   end
 
