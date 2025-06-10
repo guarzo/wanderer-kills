@@ -380,8 +380,7 @@ defmodule WandererKills.Observability.WebSocketStats do
       websocket_connections_per_minute: Float.round(stats.rates.connections_per_minute, 2),
       redisq_kills_processed: Map.get(redisq_stats, :kills_processed, 0),
       redisq_active_systems: Map.get(redisq_stats, :active_systems, 0),
-      cache_hit_rate: Map.get(cache_stats, :hit_rate, 0.0),
-      cache_total_size: Map.get(cache_stats, :total_size, 0),
+      cache_size: Map.get(cache_stats, :size, 0),
       store_total_killmails: Map.get(store_stats, :total_killmails, 0),
       store_unique_systems: Map.get(store_stats, :unique_systems, 0)
     )
@@ -422,36 +421,14 @@ defmodule WandererKills.Observability.WebSocketStats do
   end
 
   defp get_cache_stats do
-    # Get cache statistics from Cachex
+    # Get cache size from Cachex
     try do
-      case Cachex.stats(:wanderer_cache) do
-        {:ok, stats} ->
-          hit_rate =
-            WandererKills.Observability.Statistics.calculate_hit_rate(
-              Map.get(stats, :hits, 0),
-              Map.get(stats, :hits, 0) + Map.get(stats, :misses, 0)
-            )
-
-          total_size =
-            case Cachex.size(:wanderer_cache) do
-              {:ok, size} -> size
-              _ -> 0
-            end
-
-          %{
-            hit_rate: Float.round(hit_rate, 1),
-            hits: Map.get(stats, :hits, 0),
-            misses: Map.get(stats, :misses, 0),
-            operations: Map.get(stats, :hits, 0) + Map.get(stats, :misses, 0),
-            evictions: Map.get(stats, :evictions, 0),
-            total_size: total_size
-          }
-
-        _ ->
-          %{}
+      case Cachex.size(:wanderer_cache) do
+        {:ok, size} -> %{size: size}
+        _ -> %{size: 0}
       end
     catch
-      _, _ -> %{}
+      _, _ -> %{size: 0}
     end
   end
 
@@ -481,7 +458,10 @@ defmodule WandererKills.Observability.WebSocketStats do
 
   defp format_redisq_stats(stats) when map_size(stats) == 0 do
     "🔄 REDISQ ACTIVITY:\n" <>
-      "   Status: Not available"
+      "   Kills Processed: 0\n" <>
+      "   Older Kills: 0 | Skipped: 0\n" <>
+      "   Active Systems: 0\n" <>
+      "   Total Polls: 0 | Errors: 0"
   end
 
   defp format_redisq_stats(stats) do
@@ -492,17 +472,9 @@ defmodule WandererKills.Observability.WebSocketStats do
       "   Total Polls: #{Map.get(stats, :total_polls, 0)} | Errors: #{Map.get(stats, :errors, 0)}"
   end
 
-  defp format_cache_stats(stats) when map_size(stats) == 0 do
-    "💾 CACHE PERFORMANCE:\n" <>
-      "   Status: Not available"
-  end
-
   defp format_cache_stats(stats) do
-    "💾 CACHE PERFORMANCE:\n" <>
-      "   Hit Rate: #{Map.get(stats, :hit_rate, 0.0)}%\n" <>
-      "   Total Operations: #{Map.get(stats, :operations, 0)} (Hits: #{Map.get(stats, :hits, 0)}, Misses: #{Map.get(stats, :misses, 0)})\n" <>
-      "   Cache Size: #{Map.get(stats, :total_size, 0)} entries\n" <>
-      "   Evictions: #{Map.get(stats, :evictions, 0)}"
+    "💾 CACHE:\n" <>
+      "   Total Entries: #{Map.get(stats, :size, 0)}"
   end
 
   defp format_store_stats(stats) when map_size(stats) == 0 do

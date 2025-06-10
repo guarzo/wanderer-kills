@@ -20,9 +20,12 @@ defmodule WandererKills.Killmails.Pipeline.DataBuilder do
   """
   @spec build_killmail_data(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
   def build_killmail_data(killmail) do
+    # Use the original string time, not the parsed DateTime
+    kill_time = killmail["kill_time"] || killmail["killmail_time"]
+
     structured = %{
       "killmail_id" => killmail["killmail_id"],
-      "kill_time" => killmail["parsed_kill_time"],
+      "kill_time" => kill_time,
       "system_id" => killmail["solar_system_id"] || killmail["system_id"],
       "victim" => Transformations.normalize_victim(killmail["victim"]),
       "attackers" => Transformations.normalize_attackers(killmail["attackers"]),

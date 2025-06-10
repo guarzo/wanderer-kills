@@ -70,7 +70,9 @@ defmodule WandererKills.App.Application do
           interval: :timer.seconds(60),
           default: default_ttl_ms,
           lazy: true
-        )
+        ),
+      # Enable statistics tracking
+      stats: true
     ]
 
     [

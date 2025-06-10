@@ -96,7 +96,14 @@ defmodule WandererKills.RedisQ do
       errors: 0,
       no_kills_count: 0,
       last_reset: DateTime.utc_now(),
-      systems_active: MapSet.new()
+      systems_active: MapSet.new(),
+      # Cumulative stats that don't reset
+      total_kills_received: 0,
+      total_kills_older: 0,
+      total_kills_skipped: 0,
+      total_legacy_kills: 0,
+      total_errors: 0,
+      total_no_kills_count: 0
     }
 
     state = %State{queue_id: queue_id, backoff_ms: initial_backoff, stats: stats}
@@ -164,17 +171,18 @@ defmodule WandererKills.RedisQ do
   @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
-      kills_processed: state.stats.kills_received,
-      kills_older: state.stats.kills_older,
-      kills_skipped: state.stats.kills_skipped,
-      legacy_kills: state.stats.legacy_kills,
-      errors: state.stats.errors,
-      no_kills_polls: state.stats.no_kills_count,
+      # Use cumulative stats for the 5-minute report
+      kills_processed: state.stats.total_kills_received,
+      kills_older: state.stats.total_kills_older,
+      kills_skipped: state.stats.total_kills_skipped,
+      legacy_kills: state.stats.total_legacy_kills,
+      errors: state.stats.total_errors,
+      no_kills_polls: state.stats.total_no_kills_count,
       active_systems: MapSet.size(state.stats.systems_active),
       total_polls:
-        state.stats.kills_received + state.stats.kills_older +
-          state.stats.kills_skipped + state.stats.legacy_kills +
-          state.stats.no_kills_count + state.stats.errors,
+        state.stats.total_kills_received + state.stats.total_kills_older +
+          state.stats.total_kills_skipped + state.stats.total_legacy_kills +
+          state.stats.total_no_kills_count + state.stats.total_errors,
       last_reset: state.stats.last_reset
     }
 
@@ -200,23 +208,35 @@ defmodule WandererKills.RedisQ do
 
   # Updates statistics based on poll result
   defp update_stats(stats, {:ok, :kill_received}) do
-    %{stats | kills_received: stats.kills_received + 1}
+    %{
+      stats
+      | kills_received: stats.kills_received + 1,
+        total_kills_received: stats.total_kills_received + 1
+    }
   end
 
   defp update_stats(stats, {:ok, :kill_older}) do
-    %{stats | kills_older: stats.kills_older + 1}
+    %{stats | kills_older: stats.kills_older + 1, total_kills_older: stats.total_kills_older + 1}
   end
 
   defp update_stats(stats, {:ok, :kill_skipped}) do
-    %{stats | kills_skipped: stats.kills_skipped + 1}
+    %{
+      stats
+      | kills_skipped: stats.kills_skipped + 1,
+        total_kills_skipped: stats.total_kills_skipped + 1
+    }
   end
 
   defp update_stats(stats, {:ok, :no_kills}) do
-    %{stats | no_kills_count: stats.no_kills_count + 1}
+    %{
+      stats
+      | no_kills_count: stats.no_kills_count + 1,
+        total_no_kills_count: stats.total_no_kills_count + 1
+    }
   end
 
   defp update_stats(stats, {:error, _reason}) do
-    %{stats | errors: stats.errors + 1}
+    %{stats | errors: stats.errors + 1, total_errors: stats.total_errors + 1}
   end
 
   # Track active systems

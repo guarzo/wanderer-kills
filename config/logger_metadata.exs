@@ -143,8 +143,7 @@ defmodule LoggerMetadata do
     :websocket_connections_per_minute,
     :redisq_kills_processed,
     :redisq_active_systems,
-    :cache_hit_rate,
-    :cache_total_size,
+    :cache_size,
     :store_total_killmails,
     :store_unique_systems
   ]
