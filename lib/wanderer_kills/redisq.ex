@@ -57,6 +57,13 @@ defmodule WandererKills.RedisQ do
   end
 
   @doc """
+  Gets current RedisQ statistics.
+  """
+  def get_stats do
+    GenServer.call(__MODULE__, :get_stats)
+  end
+
+  @doc """
   Starts listening to RedisQ killmail stream.
   """
   def start_listening do
@@ -152,6 +159,24 @@ defmodule WandererKills.RedisQ do
     Logger.debug("[RedisQ] Manual poll requested (queue ID: #{qid})")
     reply = do_poll(qid)
     {:reply, reply, state}
+  end
+
+  @impl true
+  def handle_call(:get_stats, _from, state) do
+    stats = %{
+      kills_processed: state.stats.kills_received,
+      kills_older: state.stats.kills_older,
+      kills_skipped: state.stats.kills_skipped,
+      legacy_kills: state.stats.legacy_kills,
+      errors: state.stats.errors,
+      no_kills_polls: state.stats.no_kills_count,
+      active_systems: MapSet.size(state.stats.systems_active),
+      total_polls: state.stats.kills_received + state.stats.kills_older + 
+                   state.stats.kills_skipped + state.stats.legacy_kills + 
+                   state.stats.no_kills_count + state.stats.errors,
+      last_reset: state.stats.last_reset
+    }
+    {:reply, {:ok, stats}, state}
   end
 
   @impl true

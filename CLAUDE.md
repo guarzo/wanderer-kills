@@ -54,12 +54,12 @@ docker-compose up        # Start with Redis and all services
 2. **Data Flow Pipeline**:
    - `RedisQ` → Real-time killmail stream consumer
    - `ZkbClient` → Historical data fetcher
-   - `Pipeline` (Coordinator → Parser → Enricher) → Process killmails
-   - `KillStore` → ETS-based storage with event streaming
+   - `UnifiedProcessor` → Handles both full and partial killmails
+   - `Storage.KillmailStore` → Unified ETS-based storage with optional event streaming
    - `ESI.DataFetcher` → Enrichment with EVE API data
 
 3. **Caching Strategy**:
-   - Single Cachex instance with namespace support
+   - Single Cachex instance (`:wanderer_cache`) with namespace support
    - Different TTLs: killmails (5min), systems (1hr), ESI data (24hr)
    - Cache warming for ship type data from CSV files
 
@@ -67,6 +67,12 @@ docker-compose up        # Start with Redis and all services
    - REST endpoints via Phoenix Router
    - WebSocket channels for real-time subscriptions
    - Standardized JSON responses with comprehensive error handling
+
+5. **Monitoring & Observability**:
+   - Comprehensive 5-minute status reports via WebSocketStats
+   - Telemetry events throughout the application
+   - Structured logging with extensive metadata
+   - Health check endpoints
 
 ### Key Design Patterns
 
@@ -165,12 +171,21 @@ docker-compose up        # Start with Redis and all services
 ### Error Handling
 
 - Use pattern matching and guard clauses
-- Return `{:ok, result}` or `{:error, reason}` tuples
+- Return `{:ok, result}` or `{:error, %Error{}}` tuples using Support.Error module
 - Favor explicit error handling over exceptions
 - Implement fail-fast error handling
 - Let processes crash when appropriate with supervision
+- Special cases like `{:ok, :kill_older}` are preserved where semantically meaningful
 
 ## Project-Specific Patterns
+
+### Naming Conventions
+- Always use `killmail` (not `kill`) for consistency
+- Use `get_*` for local/cache operations
+- Use `fetch_*` for external API calls
+- Use `list_*` for operations returning collections
+- Use `_async` suffix for asynchronous operations
+- Use `system_id` internally (normalized from `solar_system_id`)
 
 ### Cache Key Conventions
 - Killmails: `"killmail:{id}"`
@@ -178,20 +193,27 @@ docker-compose up        # Start with Redis and all services
 - ESI data: `"esi:{type}:{id}"`
 
 ### Event Streaming
-- KillStore publishes events with client offset tracking
+- Storage.KillmailStore publishes events with client offset tracking (when enabled)
 - Supports both polling and push-based consumption
 - Events include full killmail data and metadata
+- Configured via `:storage, :enable_event_streaming` (default: true)
 
 ### Configuration
 - Main config in `config/config.exs`
 - Environment-specific in `config/{env}.exs`
 - Runtime config in `config/runtime.exs`
 - Test environment uses mocked clients
+- All configuration access through Config module
 
 ### Monitoring and Observability
+- Comprehensive 5-minute status reports showing:
+  - WebSocket activity (connections, subscriptions, delivery rates)
+  - RedisQ processing statistics
+  - Cache performance metrics
+  - Storage utilization
 - Telemetry events throughout the application
 - Health check endpoint at `/health`
-- Extensive logging with metadata
+- Extensive logging with structured metadata
 - Prometheus metrics support
 
 ## Common Development Tasks
@@ -210,7 +232,20 @@ docker-compose up        # Start with Redis and all services
 
 ### Modifying Kill Processing
 1. Pipeline stages are in `lib/wanderer_kills/killmails/pipeline/`
-2. Coordinator manages the flow
+2. UnifiedProcessor handles both full and partial killmails
 3. Parser handles initial validation
 4. Enricher adds additional data
 5. All stages use behaviours for testability
+
+## Recent Refactoring (2025-01-06)
+
+The codebase has undergone significant refactoring to improve consistency and maintainability:
+
+1. **Consolidated Storage**: Merged Store and KillStore into Storage.KillmailStore
+2. **Standardized Errors**: All errors now use Support.Error module
+3. **Unified HTTP Client**: All HTTP requests go through Http.Client
+4. **Consistent Naming**: Standardized on killmail terminology and naming patterns
+5. **Consolidated Normalization**: All field normalization in Transformations module
+6. **Enhanced Monitoring**: Added comprehensive 5-minute status reports
+
+See CODE_REVIEW.md for detailed documentation of all changes.

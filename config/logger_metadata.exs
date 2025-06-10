@@ -131,7 +131,22 @@ defmodule LoggerMetadata do
     :subscribed_systems_count,
     :disconnect_reason,
     :connection_duration_seconds,
-    :socket_transport
+    :socket_transport,
+    # Status report metadata
+    :websocket_active_connections,
+    :websocket_kills_sent_total,
+    :websocket_kills_sent_realtime,
+    :websocket_kills_sent_preload,
+    :websocket_active_subscriptions,
+    :websocket_total_systems,
+    :websocket_kills_per_minute,
+    :websocket_connections_per_minute,
+    :redisq_kills_processed,
+    :redisq_active_systems,
+    :cache_hit_rate,
+    :cache_total_size,
+    :store_total_killmails,
+    :store_unique_systems
   ]
 
   # Retry and timeout metadata

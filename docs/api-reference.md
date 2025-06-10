@@ -30,6 +30,12 @@ No authentication required for current version.
 | DELETE | `/subscriptions/{subscriber_id}` | Remove subscription |
 | GET    | `/subscriptions`                 | List subscriptions  |
 
+### WebSocket
+
+| Endpoint | Description                      |
+| -------- | -------------------------------- |
+| `/ws`    | WebSocket connection for updates |
+
 ### System
 
 | Method | Endpoint  | Description    |
@@ -42,7 +48,7 @@ No authentication required for current version.
 ### GET /kills/system/{system_id}
 
 - `since_hours` (required) - Hours to look back
-- `limit` (optional) - Max kills to return
+- `limit` (optional) - Max kills to return (default: 100)
 
 ### POST /kills/systems
 
@@ -71,8 +77,7 @@ No authentication required for current version.
 ```json
 {
   "data": { ... },
-  "timestamp": "2024-01-15T15:00:00Z",
-  "error": null
+  "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
 
@@ -80,10 +85,12 @@ No authentication required for current version.
 
 ```json
 {
-  "data": null,
-  "error": "Error message",
-  "code": "ERROR_CODE",
-  "details": { ... },
+  "error": {
+    "type": "not_found",
+    "message": "Resource not found",
+    "code": "NOT_FOUND",
+    "details": { ... }
+  },
   "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
@@ -94,19 +101,26 @@ No authentication required for current version.
 {
   "killmail_id": 123456789,
   "kill_time": "2024-01-15T14:30:00Z",
-  "solar_system_id": 30000142,
+  "system_id": 30000142,
   "victim": {
     "character_id": 987654321,
+    "character_name": "Victim Name",
     "corporation_id": 123456789,
+    "corporation_name": "Victim Corp",
     "alliance_id": 456789123,
+    "alliance_name": "Victim Alliance",
     "ship_type_id": 671,
+    "ship_name": "Raven",
     "damage_taken": 2847
   },
   "attackers": [
     {
       "character_id": 111222333,
+      "character_name": "Attacker Name",
       "corporation_id": 444555666,
+      "corporation_name": "Attacker Corp",
       "ship_type_id": 17918,
+      "ship_name": "Rattlesnake",
       "weapon_type_id": 2456,
       "damage_done": 2847,
       "final_blow": true
@@ -125,6 +139,49 @@ No authentication required for current version.
 }
 ```
 
+## WebSocket Messages
+
+### Connection
+
+Connect to `/ws` endpoint to receive real-time updates.
+
+### Subscribe Message
+
+```json
+{
+  "action": "subscribe",
+  "systems": [30000142, 30000144]
+}
+```
+
+### Kill Update Message
+
+```json
+{
+  "type": "killmail_update",
+  "system_id": 30000142,
+  "killmail": {
+    "killmail_id": 123456789,
+    "kill_time": "2024-01-15T14:30:00Z",
+    "system_id": 30000142,
+    "victim": {...},
+    "attackers": [...],
+    "zkb": {...}
+  }
+}
+```
+
+### System Update Message
+
+```json
+{
+  "type": "system_update",
+  "system_id": 30000142,
+  "kill_count": 48,
+  "timestamp": "2024-01-15T15:00:00Z"
+}
+```
+
 ## HTTP Status Codes
 
 | Code | Description    |
@@ -135,15 +192,20 @@ No authentication required for current version.
 | 429  | Rate Limited   |
 | 500  | Internal Error |
 
-## Error Codes
+## Error Types
 
-| Code                | Description               |
-| ------------------- | ------------------------- |
-| `INVALID_PARAMETER` | Invalid request parameter |
-| `NOT_FOUND`         | Resource not found        |
-| `RATE_LIMITED`      | Rate limit exceeded       |
-| `INTERNAL_ERROR`    | Server error              |
-| `TIMEOUT`           | Request timeout           |
+| Type                   | Description                      |
+| ---------------------- | -------------------------------- |
+| `invalid_parameter`    | Invalid request parameter        |
+| `not_found`            | Resource not found               |
+| `rate_limit_exceeded`  | Rate limit exceeded              |
+| `internal_error`       | Server error                     |
+| `timeout`              | Request timeout                  |
+| `external_api_error`   | External API failure             |
+| `validation_error`     | Data validation failed           |
+| `missing_killmail_id`  | Killmail ID missing              |
+| `invalid_format`       | Invalid data format              |
+| `kill_too_old`         | Killmail outside time window     |
 
 ## Webhook Payload
 
@@ -151,7 +213,7 @@ No authentication required for current version.
 
 ```json
 {
-  "type": "detailed_kill_update",
+  "type": "killmail_update",
   "data": {
     "solar_system_id": 30000142,
     "kills": [...],
@@ -164,7 +226,7 @@ No authentication required for current version.
 
 ```json
 {
-  "type": "kill_count_update",
+  "type": "killmail_count_update",
   "data": {
     "solar_system_id": 30000142,
     "count": 48,
@@ -190,6 +252,7 @@ No authentication required for current version.
 - **Per-IP**: 1000 requests/minute
 - **Burst**: 100 requests/10 seconds
 - **WebSocket**: 10 connections/IP
+- **Subscription Limit**: 100 systems per subscription
 
 ## cURL Examples
 
@@ -220,3 +283,39 @@ curl -X POST http://localhost:4004/api/v1/subscriptions \
 ```bash
 curl http://localhost:4004/health
 ```
+
+### WebSocket Connection (wscat)
+
+```bash
+# Install wscat: npm install -g wscat
+wscat -c ws://localhost:4004/ws
+
+# After connection, subscribe to systems:
+{"action": "subscribe", "systems": [30000142, 30000144]}
+```
+
+## Field Normalization
+
+The API normalizes field names for consistency:
+
+- `solar_system_id` → `system_id`
+- `killID` → `killmail_id`
+- `killmail_time` → `kill_time`
+
+All timestamps are in ISO 8601 format (UTC).
+
+## Cache Behavior
+
+- Killmails are cached for 5 minutes
+- System data is cached for 1 hour
+- ESI enrichment data is cached for 24 hours
+- Use `/kills/cached/` endpoints to retrieve only cached data
+
+## Best Practices
+
+1. **Use bulk endpoints** when fetching data for multiple systems
+2. **Implement exponential backoff** for rate limit errors
+3. **Subscribe to WebSocket** for real-time updates instead of polling
+4. **Cache responses** client-side to reduce API calls
+5. **Use structured error handling** based on error types
+6. **Monitor health endpoint** for service availability
