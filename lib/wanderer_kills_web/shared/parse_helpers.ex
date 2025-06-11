@@ -21,7 +21,7 @@ defmodule WandererKillsWeb.Shared.ParseHelpers do
       500
 
   """
-  @spec parse_int(String.t(), integer()) :: integer()
+  @spec parse_int(term(), integer()) :: integer()
   def parse_int(string, default \\ 0)
 
   def parse_int(string, default) when is_binary(string) do

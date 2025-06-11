@@ -38,31 +38,38 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
     entity_ids = collect_entity_ids(killmails)
 
     # Step 2: Fetch all entities in batch (risky external calls)
-    entity_cache =
-      try do
-        fetch_entities_batch(entity_ids)
-      rescue
-        error ->
-          Logger.error("Failed to fetch entities batch",
-            error: error,
-            stacktrace: __STACKTRACE__,
-            entity_ids: entity_ids
-          )
+    with {:ok, entity_cache} <- safely_fetch_entities_batch(entity_ids) do
+      # Step 3: Apply enrichment using the cache
+      safely_apply_enrichment(killmails, entity_cache)
+    end
+  end
 
-          reraise error, __STACKTRACE__
-      catch
-        kind, reason ->
-          Logger.error("Failed to fetch entities batch",
-            kind: kind,
-            reason: reason,
-            stacktrace: __STACKTRACE__,
-            entity_ids: entity_ids
-          )
+  defp safely_fetch_entities_batch(entity_ids) do
+    try do
+      {:ok, fetch_entities_batch(entity_ids)}
+    rescue
+      error ->
+        Logger.error("Failed to fetch entities batch",
+          error: error,
+          stacktrace: __STACKTRACE__,
+          entity_ids: entity_ids
+        )
 
-          :erlang.raise(kind, reason, __STACKTRACE__)
-      end
+        {:error, %{type: :enrichment_error, reason: Exception.message(error)}}
+    catch
+      kind, reason ->
+        Logger.error("Failed to fetch entities batch",
+          kind: kind,
+          reason: reason,
+          stacktrace: __STACKTRACE__,
+          entity_ids: entity_ids
+        )
 
-    # Step 3: Apply enrichment using the cache
+        {:error, %{type: :enrichment_error, reason: inspect({kind, reason})}}
+    end
+  end
+
+  defp safely_apply_enrichment(killmails, entity_cache) do
     try do
       enriched = Enum.map(killmails, &enrich_killmail_with_cache(&1, entity_cache))
       {:ok, enriched}
@@ -74,7 +81,7 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
           killmail_count: length(killmails)
         )
 
-        {:error, {:exception, error}}
+        {:error, %{type: :enrichment_error, reason: Exception.message(error)}}
     catch
       kind, reason ->
         Logger.error("Failed to apply enrichment",
@@ -84,7 +91,7 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
           killmail_count: length(killmails)
         )
 
-        {:error, {kind, reason}}
+        {:error, %{type: :enrichment_error, reason: inspect({kind, reason})}}
     end
   end
 
