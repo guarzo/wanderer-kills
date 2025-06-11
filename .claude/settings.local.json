@@ -25,7 +25,9 @@
       "Bash(sed:*)",
       "Bash(chmod:*)",
       "Bash(MIX_ENV=test mix test --max-failures=5)",
-      "Bash(mix credo:*)"
+      "Bash(mix credo:*)",
+      "Bash(MIX_ENV=test mix test --exclude integration)",
+      "Bash(MIX_ENV=test mix compile)"
     ],
     "deny": []
   }

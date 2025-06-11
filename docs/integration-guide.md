@@ -8,15 +8,14 @@ The WandererKills service provides real-time EVE Online killmail data through mu
 
 The service runs on `http://localhost:4004` by default and provides:
 
-- **REST API** - Fetch kill data and manage subscriptions
-- **WebSocket** - Real-time kill notifications
-- **Webhooks** - HTTP callbacks for external services
+- **REST API** - Fetch kill data
+- **WebSocket Channels** - Real-time kill notifications via Phoenix channels
 - **Phoenix PubSub** - Direct message broadcasting for Elixir applications
 - **Client Library** - Elixir behaviour for direct integration
 
 ## Authentication
 
-Currently, the service does not require authentication for read operations. Subscription management endpoints may require API keys in production deployments.
+Currently, the service does not require authentication.
 
 ## REST API Integration
 
@@ -167,215 +166,94 @@ GET /api/v1/kills/count/{system_id}
 }
 ```
 
-### Subscription Management
-
-#### Create Subscription
-
-Subscribe to real-time updates for specific systems.
-
-```http
-POST /api/v1/subscriptions
-Content-Type: application/json
-
-{
-  "subscriber_id": "my-service-v1",
-  "system_ids": [30000142, 30000144],
-  "callback_url": "https://my-service.com/webhooks/kills"
-}
-```
-
-**Example Response:**
-
-```json
-{
-  "data": {
-    "subscription_id": "abc123def456",
-    "status": "active"
-  },
-  "timestamp": "2024-01-15T15:00:00Z"
-}
-```
-
-#### Remove Subscription
-
-Cancel an existing subscription.
-
-```http
-DELETE /api/v1/subscriptions/{subscriber_id}
-```
-
-#### List Active Subscriptions
-
-Get all active subscriptions.
-
-```http
-GET /api/v1/subscriptions
-```
 
 ## WebSocket Integration
 
-Connect to the WebSocket endpoint for real-time kill notifications.
+Connect to the WebSocket endpoint for real-time kill notifications using Phoenix channels.
 
 ### Connection
 
 ```
-ws://localhost:4004/ws
+ws://localhost:4004/socket
 ```
 
-### Subscribe to Systems
+### Phoenix Socket Client Example (JavaScript)
 
-After connecting, send a subscription message:
+```javascript
+import { Socket } from 'phoenix';
+
+// Connect to the socket
+const socket = new Socket('ws://localhost:4004/socket', {
+  params: { client_identifier: 'my-app' }
+});
+
+socket.connect();
+
+// Join a killmail channel for a specific system
+const channel = socket.channel('killmails:system:30000142', {});
+
+channel.join()
+  .receive('ok', resp => { 
+    console.log('Joined successfully', resp);
+  })
+  .receive('error', resp => { 
+    console.log('Unable to join', resp);
+  });
+
+// Listen for kill events
+channel.on('new_kill', payload => {
+  console.log('New kill:', payload.killmail_id);
+  // Process the kill data
+});
+
+channel.on('system_stats', payload => {
+  console.log(`System ${payload.system_id} has ${payload.kill_count} kills`);
+});
+
+// Subscribe to multiple systems
+const systems = [30000142, 30000144];
+channel.push('subscribe', { systems: systems })
+  .receive('ok', resp => { 
+    console.log('Subscribed to systems', resp);
+  })
+  .receive('error', resp => { 
+    console.log('Failed to subscribe', resp);
+  });
+
+// Handle disconnections
+socket.onError(() => console.log('Socket error'));
+socket.onClose(() => console.log('Socket closed'));
+```
+
+### Channel Events
+
+#### new_kill
+
+Received when a new kill is detected:
 
 ```json
 {
-  "action": "subscribe",
-  "systems": [30000142, 30000144]
-}
-```
-
-### Receiving Updates
-
-#### Kill Update
-
-```json
-{
-  "type": "killmail_update",
+  "killmail_id": 123456789,
+  "kill_time": "2024-01-15T14:30:00Z",
   "system_id": 30000142,
-  "killmail": {
-    "killmail_id": 123456789,
-    "kill_time": "2024-01-15T14:30:00Z",
-    "system_id": 30000142,
-    "victim": {...},
-    "attackers": [...],
-    "zkb": {...}
-  }
+  "victim": {...},
+  "attackers": [...],
+  "zkb": {...}
 }
 ```
 
-#### System Update
+#### system_stats
+
+Received when system statistics are updated:
 
 ```json
 {
-  "type": "system_update",
   "system_id": 30000142,
   "kill_count": 48,
   "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
 
-### WebSocket Client Example (JavaScript)
-
-```javascript
-const ws = new WebSocket('ws://localhost:4004/ws');
-
-ws.onopen = () => {
-  console.log('Connected to WandererKills');
-  
-  // Subscribe to systems
-  ws.send(JSON.stringify({
-    action: 'subscribe',
-    systems: [30000142, 30000144]
-  }));
-};
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  
-  switch(data.type) {
-    case 'killmail_update':
-      console.log('New kill:', data.killmail.killmail_id);
-      break;
-    case 'system_update':
-      console.log(`System ${data.system_id} has ${data.kill_count} kills`);
-      break;
-  }
-};
-
-ws.onerror = (error) => {
-  console.error('WebSocket error:', error);
-};
-```
-
-## Webhook Integration
-
-When you create a subscription with a `callback_url`, the service will send HTTP POST requests to your endpoint when new kills are detected.
-
-### Webhook Payload Formats
-
-#### Kill Update Notification
-
-```json
-{
-  "type": "killmail_update",
-  "data": {
-    "solar_system_id": 30000142,
-    "kills": [
-      {
-        "killmail_id": 123456789,
-        "kill_time": "2024-01-15T14:30:00Z",
-        "system_id": 30000142,
-        "victim": {...},
-        "attackers": [...],
-        "zkb": {...}
-      }
-    ],
-    "timestamp": "2024-01-15T15:00:00Z"
-  }
-}
-```
-
-#### Kill Count Update
-
-```json
-{
-  "type": "killmail_count_update",
-  "data": {
-    "solar_system_id": 30000142,
-    "count": 48,
-    "timestamp": "2024-01-15T15:00:00Z"
-  }
-}
-```
-
-### Webhook Endpoint Requirements
-
-Your webhook endpoint should:
-
-- Accept HTTP POST requests
-- Respond with 2xx status codes for successful processing
-- Handle timeouts gracefully (10-second timeout)
-- Implement idempotency (same kill may be sent multiple times)
-
-**Example Webhook Handler (Python Flask):**
-
-```python
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-@app.route('/webhooks/kills', methods=['POST'])
-def handle_kill_webhook():
-    data = request.get_json()
-
-    if data['type'] == 'killmail_update':
-        for kill in data['data']['kills']:
-            process_kill(kill)
-    elif data['type'] == 'killmail_count_update':
-        update_system_count(
-            data['data']['solar_system_id'],
-            data['data']['count']
-        )
-
-    return jsonify({'status': 'received'}), 200
-
-def process_kill(kill):
-    # Your kill processing logic here
-    print(f"New kill: {kill['killmail_id']} in system {kill['system_id']}")
-
-def update_system_count(system_id, count):
-    # Your count update logic here
-    print(f"System {system_id} now has {count} kills")
-```
 
 ## Real-time Integration (Elixir Applications)
 
@@ -444,15 +322,6 @@ alias WandererKills.Client
 
 # Get cached data
 cached_kills = Client.get_cached_killmails(30000142)
-
-# Manage subscriptions
-{:ok, subscription_id} = Client.subscribe_to_kills(
-  "my-app",
-  [30000142],
-  "https://my-app.com/webhooks"
-)
-
-:ok = Client.unsubscribe_from_kills("my-app")
 ```
 
 ### Implementing Your Own Client
@@ -594,14 +463,6 @@ class WandererKillsClient {
     }
   }
 
-  async createSubscription(subscriberId, systemIds, callbackUrl) {
-    const response = await axios.post(`${this.baseUrl}/subscriptions`, {
-      subscriber_id: subscriberId,
-      system_ids: systemIds,
-      callback_url: callbackUrl,
-    });
-    return response.data.data;
-  }
 }
 
 // Usage
@@ -629,31 +490,11 @@ class WandererKillsClient:
 
         return response.json()['data']['kills']
 
-    def create_subscription(self, subscriber_id, system_ids, callback_url=None):
-        url = f"{self.base_url}/subscriptions"
-        data = {
-            'subscriber_id': subscriber_id,
-            'system_ids': system_ids,
-            'callback_url': callback_url
-        }
-
-        response = requests.post(url, json=data)
-        response.raise_for_status()
-
-        return response.json()['data']
 
 # Usage
 client = WandererKillsClient()
 kills = client.get_system_kills(30000142, since_hours=24, limit=50)
 print(f"Found {len(kills)} kills")
-
-# Subscribe to updates
-subscription = client.create_subscription(
-    "my-python-app",
-    [30000142, 30000144],
-    "https://my-app.com/webhooks/kills"
-)
-print(f"Created subscription: {subscription['subscription_id']}")
 ```
 
 ## Best Practices

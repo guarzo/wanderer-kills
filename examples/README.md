@@ -182,7 +182,7 @@ python websocket_client.py
 
 ### Elixir
 
-See: [`websocket_client.ex`](./websocket_client.ex)
+See: [`websocket_client.exs`](./websocket_client.exs)
 
 **Dependencies**: Add to your `mix.exs`:
 
@@ -225,34 +225,26 @@ Here are some popular system IDs for testing:
 - **Connection Authentication**: None required - anonymous connections
 - **Rate Limiting**: Applied per connection
 
-## 🔄 Migration from HTTP Webhooks
+## 🔄 WebSocket Usage
 
-If you were using the previous HTTP webhook system, here's how to migrate:
-
-### Before (HTTP Webhooks)
-
-```http
-POST /api/v1/subscribe
-{
-  "subscriber_id": "my-app",
-  "system_ids": [30000142, 30002187],
-  "callback_url": "https://my-app.com/webhook"
-}
-```
-
-### After (WebSockets)
+The service provides real-time updates via Phoenix WebSocket channels:
 
 ```javascript
 const socket = new Socket("/socket", {});
-const channel = socket.channel("killmails:lobby", {});
+const channel = socket.channel("killmails:lobby", { systems: [30000142, 30002187] });
 
-channel.join().receive("ok", () => {
-  channel.push("subscribe_systems", { systems: [30000142, 30002187] });
-});
+channel.join()
+  .receive("ok", resp => console.log("Joined successfully", resp))
+  .receive("error", resp => console.log("Unable to join", resp));
 
+// Listen for killmail updates
 channel.on("killmail_update", (payload) => {
-  // Handle real-time killmail updates
+  console.log("New killmails:", payload.killmails);
 });
+
+// Add or remove system subscriptions
+channel.push("subscribe_systems", { systems: [30000144] });
+channel.push("unsubscribe_systems", { systems: [30000142] });
 ```
 
 ## 🛠️ Development & Testing

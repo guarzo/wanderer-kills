@@ -7,7 +7,6 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
   the killmail type and processes accordingly.
   """
 
-  require Logger
   import WandererKills.Support.Logger
 
   alias WandererKills.Support.Error
@@ -102,16 +101,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
       {:ok, validated_killmails}
     else
       # Batch enrich all valid killmails if enrichment is enabled
-      final_killmails =
-        if enrich? and not Enum.empty?(validated_killmails) do
-          {:ok, enriched} = BatchEnricher.enrich_killmails_batch(validated_killmails)
-          # Cache all enriched killmails
-          Enum.each(enriched, &ESIFetcher.cache_enriched_killmail/1)
-          enriched
-        else
-          Enum.each(validated_killmails, &ESIFetcher.cache_enriched_killmail/1)
-          validated_killmails
-        end
+      final_killmails = apply_enrichment(validated_killmails, enrich?)
 
       # Store killmails if requested
       if store? do
@@ -318,5 +308,33 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @doc false
+  defp apply_enrichment(validated_killmails, enrich?) do
+    # Determine which killmails to return and cache
+    {killmails_to_cache, killmails_to_return} =
+      if enrich? and not Enum.empty?(validated_killmails) do
+        case BatchEnricher.enrich_killmails_batch(validated_killmails) do
+          {:ok, enriched} ->
+            {enriched, enriched}
+
+          {:error, reason} ->
+            log_error("Failed to enrich killmails batch",
+              error: reason,
+              batch_size: length(validated_killmails)
+            )
+
+            # Fall back to unenriched killmails
+            {validated_killmails, validated_killmails}
+        end
+      else
+        {validated_killmails, validated_killmails}
+      end
+
+    # Cache all killmails once
+    Enum.each(killmails_to_cache, &ESIFetcher.cache_enriched_killmail/1)
+
+    killmails_to_return
   end
 end

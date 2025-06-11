@@ -2,11 +2,11 @@ defmodule WandererKills.Observability.WebSocketStats do
   @moduledoc """
   Dedicated GenServer for tracking WebSocket connection and message statistics.
 
-  This module consolidates WebSocket statistics tracking that was previously 
+  This module consolidates WebSocket statistics tracking that was previously
   scattered across the channel implementation. It provides:
 
   - Connection metrics (active connections, total connections)
-  - Message metrics (kills sent, preload counts, realtime counts)  
+  - Message metrics (kills sent, preload counts, realtime counts)
   - Subscription metrics (active subscriptions, system counts)
   - Performance metrics (message rates, connection duration)
 
@@ -363,9 +363,12 @@ defmodule WandererKills.Observability.WebSocketStats do
         "\n" <>
         "#{format_redisq_stats(redisq_stats)}" <>
         "\n" <>
+        "\n" <>
         "#{format_cache_stats(cache_stats)}" <>
         "\n" <>
+        "\n" <>
         "#{format_store_stats(store_stats)}" <>
+        "\n" <>
         "\n" <>
         "⏰ Report Generated: #{stats.timestamp}\n" <>
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",

@@ -20,7 +20,8 @@ defmodule WandererKills.Killmails.Pipeline.ESIFetcher do
   """
   @spec fetch_full_killmail(integer(), map()) :: {:ok, killmail()} | {:error, Error.t()}
   def fetch_full_killmail(killmail_id, zkb) do
-    with {:hash, hash} when not is_nil(hash) <- {:hash, Map.get(zkb, "hash")},
+    with {:hash, hash} when is_binary(hash) and byte_size(hash) > 0 <-
+           {:hash, Map.get(zkb, "hash")},
          {:cache, {:error, %WandererKills.Support.Error{type: :not_found}}} <-
            {:cache, Helper.get(:killmails, killmail_id)},
          {:esi, {:ok, esi_data}} when is_map(esi_data) <-
@@ -29,8 +30,9 @@ defmodule WandererKills.Killmails.Pipeline.ESIFetcher do
       Helper.put(:killmails, killmail_id, esi_data)
       {:ok, esi_data}
     else
-      {:hash, nil} ->
-        {:error, Error.killmail_error(:missing_hash, "Killmail hash not found in zkb data")}
+      {:hash, hash} when is_nil(hash) or hash == "" ->
+        {:error,
+         Error.killmail_error(:missing_hash, "Killmail hash not found or empty in zkb data")}
 
       {:cache, {:ok, full_data}} ->
         {:ok, full_data}

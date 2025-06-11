@@ -99,13 +99,7 @@ defmodule WandererKillsWeb.KillsController do
         Logger.debug("Fetching cached kills", system_id: system_id)
 
         killmails = Client.fetch_cached_killmails(system_id)
-
-        response = %{
-          kills: killmails,
-          timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-          error: nil
-        }
-
+        response = build_cached_response(killmails)
         render_success(conn, response)
 
       {:error, %Error{}} ->
@@ -166,5 +160,15 @@ defmodule WandererKillsWeb.KillsController do
   """
   def not_found(conn, _params) do
     render_error(conn, 404, "Not Found", "NOT_FOUND")
+  end
+
+  # Private helper functions
+
+  defp build_cached_response(killmails) do
+    %{
+      kills: killmails,
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+      error: nil
+    }
   end
 end

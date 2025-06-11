@@ -22,19 +22,12 @@ No authentication required for current version.
 | GET    | `/killmail/{killmail_id}`   | Get specific killmail       |
 | GET    | `/kills/count/{system_id}`  | Get kill count for system   |
 
-### Subscriptions
-
-| Method | Endpoint                         | Description         |
-| ------ | -------------------------------- | ------------------- |
-| POST   | `/subscriptions`                 | Create subscription |
-| DELETE | `/subscriptions/{subscriber_id}` | Remove subscription |
-| GET    | `/subscriptions`                 | List subscriptions  |
-
 ### WebSocket
 
-| Endpoint | Description                      |
-| -------- | -------------------------------- |
-| `/ws`    | WebSocket connection for updates |
+| Endpoint   | Description                                    |
+| ---------- | ---------------------------------------------- |
+| `/socket`  | Phoenix WebSocket endpoint for real-time data  |
+| `/websocket` | WebSocket connection information (REST)      |
 
 ### System
 
@@ -60,15 +53,6 @@ No authentication required for current version.
 }
 ```
 
-### POST /subscriptions
-
-```json
-{
-  "subscriber_id": "my-service",
-  "system_ids": [30000142],
-  "callback_url": "https://my-service.com/webhook"
-}
-```
 
 ## Response Format
 
@@ -143,39 +127,45 @@ No authentication required for current version.
 
 ### Connection
 
-Connect to `/ws` endpoint to receive real-time updates.
+Connect to `/socket` endpoint using Phoenix Socket protocol. You'll need a Phoenix Socket client library.
 
-### Subscribe Message
+### Channel Subscription
+
+Join a channel for a specific system:
+- Channel name: `killmails:system:{system_id}`
+- Example: `killmails:system:30000142`
+
+### Subscribe to Multiple Systems
+
+After joining a channel, push a subscribe message:
 
 ```json
 {
-  "action": "subscribe",
   "systems": [30000142, 30000144]
 }
 ```
 
-### Kill Update Message
+### Kill Update Event
+
+Received as `new_kill` event on the channel:
 
 ```json
 {
-  "type": "killmail_update",
+  "killmail_id": 123456789,
+  "kill_time": "2024-01-15T14:30:00Z",
   "system_id": 30000142,
-  "killmail": {
-    "killmail_id": 123456789,
-    "kill_time": "2024-01-15T14:30:00Z",
-    "system_id": 30000142,
-    "victim": {...},
-    "attackers": [...],
-    "zkb": {...}
-  }
+  "victim": {...},
+  "attackers": [...],
+  "zkb": {...}
 }
 ```
 
-### System Update Message
+### System Update Event
+
+Received as `system_stats` event on the channel:
 
 ```json
 {
-  "type": "system_update",
   "system_id": 30000142,
   "kill_count": 48,
   "timestamp": "2024-01-15T15:00:00Z"
@@ -207,33 +197,6 @@ Connect to `/ws` endpoint to receive real-time updates.
 | `invalid_format`       | Invalid data format              |
 | `kill_too_old`         | Killmail outside time window     |
 
-## Webhook Payload
-
-### Kill Update
-
-```json
-{
-  "type": "killmail_update",
-  "data": {
-    "solar_system_id": 30000142,
-    "kills": [...],
-    "timestamp": "2024-01-15T15:00:00Z"
-  }
-}
-```
-
-### Count Update
-
-```json
-{
-  "type": "killmail_count_update",
-  "data": {
-    "solar_system_id": 30000142,
-    "count": 48,
-    "timestamp": "2024-01-15T15:00:00Z"
-  }
-}
-```
 
 ## PubSub Topics (Elixir Apps)
 
@@ -270,13 +233,6 @@ curl -X POST http://localhost:4004/api/v1/kills/systems \
   -d '{"system_ids":[30000142,30000144],"since_hours":24,"limit":50}'
 ```
 
-### Create Subscription
-
-```bash
-curl -X POST http://localhost:4004/api/v1/subscriptions \
-  -H "Content-Type: application/json" \
-  -d '{"subscriber_id":"test","system_ids":[30000142],"callback_url":"https://example.com/hook"}'
-```
 
 ### Health Check
 
@@ -284,14 +240,22 @@ curl -X POST http://localhost:4004/api/v1/subscriptions \
 curl http://localhost:4004/health
 ```
 
-### WebSocket Connection (wscat)
+### WebSocket Connection (JavaScript)
 
-```bash
-# Install wscat: npm install -g wscat
-wscat -c ws://localhost:4004/ws
+```javascript
+// Using Phoenix Socket library
+import { Socket } from 'phoenix';
 
-# After connection, subscribe to systems:
-{"action": "subscribe", "systems": [30000142, 30000144]}
+const socket = new Socket('ws://localhost:4004/socket');
+socket.connect();
+
+const channel = socket.channel('killmails:system:30000142');
+channel.join()
+  .receive('ok', resp => console.log('Joined successfully'))
+  .receive('error', resp => console.log('Unable to join'));
+
+// Listen for new kills
+channel.on('new_kill', kill => console.log('New kill:', kill));
 ```
 
 ## Field Normalization
