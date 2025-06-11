@@ -50,22 +50,21 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
     rescue
       error ->
         Logger.error("Failed to fetch entities batch",
-          error: error,
-          stacktrace: __STACKTRACE__,
+          error: Exception.format(:error, error, __STACKTRACE__),
           entity_ids: entity_ids
         )
 
-        {:error, %{type: :enrichment_error, reason: Exception.message(error)}}
+        {:error,
+         %{type: :enrichment_error, reason: Exception.format(:error, error, __STACKTRACE__)}}
     catch
       kind, reason ->
         Logger.error("Failed to fetch entities batch",
-          kind: kind,
-          reason: reason,
-          stacktrace: __STACKTRACE__,
+          error: Exception.format(kind, reason, __STACKTRACE__),
           entity_ids: entity_ids
         )
 
-        {:error, %{type: :enrichment_error, reason: inspect({kind, reason})}}
+        {:error,
+         %{type: :enrichment_error, reason: Exception.format(kind, reason, __STACKTRACE__)}}
     end
   end
 
@@ -76,22 +75,21 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
     rescue
       error ->
         Logger.error("Failed to apply enrichment",
-          error: error,
-          stacktrace: __STACKTRACE__,
+          error: Exception.format(:error, error, __STACKTRACE__),
           killmail_count: length(killmails)
         )
 
-        {:error, %{type: :enrichment_error, reason: Exception.message(error)}}
+        {:error,
+         %{type: :enrichment_error, reason: Exception.format(:error, error, __STACKTRACE__)}}
     catch
       kind, reason ->
         Logger.error("Failed to apply enrichment",
-          kind: kind,
-          reason: reason,
-          stacktrace: __STACKTRACE__,
+          error: Exception.format(kind, reason, __STACKTRACE__),
           killmail_count: length(killmails)
         )
 
-        {:error, %{type: :enrichment_error, reason: inspect({kind, reason})}}
+        {:error,
+         %{type: :enrichment_error, reason: Exception.format(kind, reason, __STACKTRACE__)}}
     end
   end
 

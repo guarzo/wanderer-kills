@@ -157,12 +157,17 @@ defmodule WandererKillsWeb.KillsController do
 
   # Private helper functions
 
-  defp build_cached_response(killmails, cached) do
-    %{
+  defp build_cached_response(killmails, cached, error \\ nil) do
+    base_response = %{
       kills: killmails,
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-      error: nil,
       cached: cached
     }
+
+    if error do
+      Map.put(base_response, :error, error)
+    else
+      base_response
+    end
   end
 end
