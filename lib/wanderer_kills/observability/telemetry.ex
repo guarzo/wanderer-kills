@@ -18,6 +18,7 @@ defmodule WandererKills.Observability.Telemetry do
   HTTP events:
   - `[:wanderer_kills, :http, :request, :start]` - When an HTTP request starts
   - `[:wanderer_kills, :http, :request, :stop]` - When an HTTP request completes
+  - `[:wanderer_kills, :http, :request, :error]` - When an HTTP request fails with exception
 
   Fetch events:
   - `[:wanderer_kills, :fetch, :killmail, :success]` - When a killmail is successfully fetched
@@ -28,7 +29,16 @@ defmodule WandererKills.Observability.Telemetry do
   Parser events:
   - `[:wanderer_kills, :parser, :stored]` - When killmails are stored
   - `[:wanderer_kills, :parser, :skipped]` - When killmails are skipped
+  - `[:wanderer_kills, :parser, :failed]` - When killmail parsing fails
   - `[:wanderer_kills, :parser, :summary]` - Parser summary statistics
+
+  WebSocket events:
+  - `[:wanderer_kills, :websocket, :kills_sent]` - When killmails are sent via WebSocket
+  - `[:wanderer_kills, :websocket, :connection]` - When WebSocket connections change
+  - `[:wanderer_kills, :websocket, :subscription]` - When WebSocket subscriptions change
+
+  ZKB events:
+  - `[:wanderer_kills, :zkb, :format]` - When ZKB format is detected
 
   System events:
   - `[:wanderer_kills, :system, :memory]` - Memory usage metrics
@@ -204,6 +214,18 @@ defmodule WandererKills.Observability.Telemetry do
   end
 
   @doc """
+  Executes parser failed telemetry.
+  """
+  @spec parser_failed(integer()) :: :ok
+  def parser_failed(count \\ 1) do
+    :telemetry.execute(
+      [:wanderer_kills, :parser, :failed],
+      %{count: count},
+      %{}
+    )
+  end
+
+  @doc """
   Executes parser summary telemetry.
   """
   @spec parser_summary(integer(), integer()) :: :ok
@@ -212,6 +234,55 @@ defmodule WandererKills.Observability.Telemetry do
       [:wanderer_kills, :parser, :summary],
       %{stored: stored, skipped: skipped},
       %{}
+    )
+  end
+
+  @doc """
+  Executes WebSocket kills sent telemetry.
+  """
+  @spec websocket_kills_sent(atom(), integer()) :: :ok
+  def websocket_kills_sent(type, count) when type in [:realtime, :preload] do
+    :telemetry.execute(
+      [:wanderer_kills, :websocket, :kills_sent],
+      %{count: count},
+      %{type: type}
+    )
+  end
+
+  @doc """
+  Executes WebSocket connection telemetry.
+  """
+  @spec websocket_connection(atom(), map()) :: :ok
+  def websocket_connection(event, metadata \\ %{}) when event in [:connected, :disconnected] do
+    :telemetry.execute(
+      [:wanderer_kills, :websocket, :connection],
+      %{count: 1},
+      Map.put(metadata, :event, event)
+    )
+  end
+
+  @doc """
+  Executes WebSocket subscription telemetry.
+  """
+  @spec websocket_subscription(atom(), integer(), map()) :: :ok
+  def websocket_subscription(event, system_count, metadata \\ %{})
+      when event in [:added, :updated, :removed] do
+    :telemetry.execute(
+      [:wanderer_kills, :websocket, :subscription],
+      %{system_count: system_count},
+      Map.put(metadata, :event, event)
+    )
+  end
+
+  @doc """
+  Executes ZKB format detection telemetry.
+  """
+  @spec zkb_format(atom(), map()) :: :ok
+  def zkb_format(format_type, metadata \\ %{}) do
+    :telemetry.execute(
+      [:wanderer_kills, :zkb, :format],
+      %{count: 1},
+      Map.put(metadata, :format, format_type)
     )
   end
 
@@ -244,7 +315,8 @@ defmodule WandererKills.Observability.Telemetry do
       "wanderer-kills-http-handler",
       [
         [:wanderer_kills, :http, :request, :start],
-        [:wanderer_kills, :http, :request, :stop]
+        [:wanderer_kills, :http, :request, :stop],
+        [:wanderer_kills, :http, :request, :error]
       ],
       &WandererKills.Observability.Telemetry.handle_http_event/4,
       nil
@@ -271,9 +343,32 @@ defmodule WandererKills.Observability.Telemetry do
       [
         [:wanderer_kills, :parser, :stored],
         [:wanderer_kills, :parser, :skipped],
+        [:wanderer_kills, :parser, :failed],
         [:wanderer_kills, :parser, :summary]
       ],
       &WandererKills.Observability.Telemetry.handle_parser_event/4,
+      nil
+    )
+
+    # WebSocket handlers
+    :telemetry.attach_many(
+      "wanderer-kills-websocket-handler",
+      [
+        [:wanderer_kills, :websocket, :kills_sent],
+        [:wanderer_kills, :websocket, :connection],
+        [:wanderer_kills, :websocket, :subscription]
+      ],
+      &WandererKills.Observability.Telemetry.handle_websocket_event/4,
+      nil
+    )
+
+    # ZKB handlers  
+    :telemetry.attach_many(
+      "wanderer-kills-zkb-handler",
+      [
+        [:wanderer_kills, :zkb, :format]
+      ],
+      &WandererKills.Observability.Telemetry.handle_zkb_event/4,
       nil
     )
 
@@ -303,6 +398,8 @@ defmodule WandererKills.Observability.Telemetry do
     :telemetry.detach("wanderer-kills-http-handler")
     :telemetry.detach("wanderer-kills-fetch-handler")
     :telemetry.detach("wanderer-kills-parser-handler")
+    :telemetry.detach("wanderer-kills-websocket-handler")
+    :telemetry.detach("wanderer-kills-zkb-handler")
     :telemetry.detach("wanderer-kills-system-handler")
     :ok
   end
@@ -354,6 +451,11 @@ defmodule WandererKills.Observability.Telemetry do
               "[HTTP] Failed request: #{metadata.method} #{metadata.url} (#{inspect(reason)})"
             )
         end
+
+      :error ->
+        Logger.error(
+          "[HTTP] Exception in request: #{metadata.method} #{metadata.url} (#{inspect(metadata.error)})"
+        )
     end
   end
 
@@ -403,10 +505,46 @@ defmodule WandererKills.Observability.Telemetry do
       :skipped ->
         Logger.debug("[Parser] Skipped #{measurements.count} killmails")
 
+      :failed ->
+        Logger.debug("[Parser] Failed to parse #{measurements.count} killmails")
+
       :summary ->
         Logger.info(
           "[Parser] Summary - Stored: #{measurements.stored}, Skipped: #{measurements.skipped}"
         )
+    end
+  end
+
+  @doc """
+  Handles WebSocket telemetry events.
+  """
+  def handle_websocket_event(
+        [:wanderer_kills, :websocket, event],
+        measurements,
+        metadata,
+        _config
+      ) do
+    case event do
+      :kills_sent ->
+        Logger.debug("[WebSocket] Sent #{measurements.count} #{metadata.type} killmails")
+
+      :connection ->
+        Logger.debug("[WebSocket] Connection #{metadata.event} (count: #{measurements.count})")
+
+      :subscription ->
+        Logger.debug(
+          "[WebSocket] Subscription #{metadata.event} with #{measurements.system_count} systems"
+        )
+    end
+  end
+
+  @doc """
+  Handles ZKB telemetry events.
+  """
+  def handle_zkb_event([:wanderer_kills, :zkb, event], measurements, metadata, _config) do
+    case event do
+      :format ->
+        Logger.debug("[ZKB] Format detected: #{metadata.format} (count: #{measurements.count})")
     end
   end
 

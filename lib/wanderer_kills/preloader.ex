@@ -129,24 +129,15 @@ defmodule WandererKills.Preloader do
     """
     @spec add_system(integer()) :: :ok
     def add_system(system_id) when is_integer(system_id) do
-      Logger.info("Adding system to active list",
+      Logger.debug("Adding system to active list",
         system_id: system_id,
         operation: :add_system,
         step: :start
       )
 
-      case Helper.system_add_active(system_id) do
-        {:ok, :added} ->
-          Logger.info("Successfully added system to active list",
-            system_id: system_id,
-            operation: :add_system,
-            status: :success
-          )
-
-          :ok
-
-        {:ok, :already_exists} ->
-          Logger.info("System already in active list",
+      case Helper.add_active_system(system_id) do
+        {:ok, true} ->
+          Logger.debug("System already in active list",
             system_id: system_id,
             operation: :add_system,
             status: :already_exists
@@ -154,15 +145,14 @@ defmodule WandererKills.Preloader do
 
           :ok
 
-        {:error, reason} ->
-          Logger.error("Failed to add system to active list",
+        {:ok, _} ->
+          Logger.debug("Successfully added system to active list",
             system_id: system_id,
             operation: :add_system,
-            error: reason,
-            status: :error
+            status: :success
           )
 
-          {:error, reason}
+          :ok
       end
     end
 
@@ -178,19 +168,15 @@ defmodule WandererKills.Preloader do
 
     @impl true
     def handle_cast(:run_expanded_pass, %{max_concurrency: _max} = state) do
-      case Helper.system_get_active_systems() do
+      case Helper.get_active_systems() do
         {:ok, systems} when is_list(systems) ->
-          Logger.info("Starting preload pass for #{length(systems)} systems")
+          Logger.debug("Starting preload pass for #{length(systems)} systems")
 
           for system_id <- systems do
             Logger.debug("Processing system in preload pass", system_id: system_id)
             # Add any system-specific processing here
           end
 
-          {:noreply, state}
-
-        {:error, reason} ->
-          Logger.error("Failed to get active systems: #{inspect(reason)}")
           {:noreply, state}
       end
     end
@@ -229,45 +215,34 @@ defmodule WandererKills.Preloader do
     defp do_pass(pass_type, max_concurrency) do
       %{hours: hours, limit: limit} = Map.get(@passes, pass_type)
 
-      Logger.info("Starting #{pass_type} preload pass",
+      Logger.debug("Starting #{pass_type} preload pass",
         hours: hours,
         limit: limit,
         max_concurrency: max_concurrency
       )
 
-      case Helper.system_get_active_systems() do
+      case Helper.get_active_systems() do
         {:ok, systems} when is_list(systems) and length(systems) > 0 ->
-          Logger.info("Processing #{length(systems)} active systems")
+          Logger.debug("Processing #{length(systems)} active systems")
 
           # Take only the limit number of systems for this pass
           systems_to_process = Enum.take(systems, limit)
 
-          # Process systems with limited concurrency
+          # Process systems with limited concurrency using Flow
           systems_to_process
-          |> Task.async_stream(
-            fn system_id -> preload_system(system_id, pass_type) end,
-            max_concurrency: max_concurrency,
-            timeout: 30_000,
-            on_timeout: :kill_task
-          )
-          |> Enum.each(fn
-            {:ok, result} ->
-              Logger.debug("System preload completed", result: result)
-
-            {:exit, reason} ->
-              Logger.warning("System preload task exited", reason: reason)
+          |> Flow.from_enumerable(max_demand: max_concurrency)
+          |> Flow.map(fn system_id -> preload_system(system_id, pass_type) end)
+          |> Flow.partition()
+          |> Enum.each(fn result ->
+            Logger.debug("System preload completed", result: result)
           end)
 
-          Logger.info("Completed #{pass_type} preload pass")
+          Logger.debug("Completed #{pass_type} preload pass")
           :ok
 
         {:ok, []} ->
-          Logger.info("No active systems to preload")
+          Logger.debug("No active systems to preload")
           {:error, :no_active_systems}
-
-        {:error, reason} ->
-          Logger.error("Failed to get active systems for preload", reason: reason)
-          {:error, reason}
       end
     end
 
@@ -288,9 +263,12 @@ defmodule WandererKills.Preloader do
 
           # Broadcast kill count update after successful preload
           if kills_count > 0 do
-            WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, kills_count)
+            WandererKills.SubscriptionManager.broadcast_killmail_count_update_async(
+              system_id,
+              kills_count
+            )
 
-            Logger.debug("Broadcasted kill count update from preloader",
+            Logger.debug("Broadcasted killmail count update from preloader",
               system_id: system_id,
               count: kills_count
             )
@@ -319,7 +297,7 @@ defmodule WandererKills.Preloader do
             Enum.map(kills, fn kill -> Map.get(kill, "killID") || Map.get(kill, "killmail_id") end)
             |> Enum.filter(&(&1 != nil))
 
-          case Helper.system_put_killmails(system_id, killmail_ids) do
+          case Helper.put(:systems, "killmails:#{system_id}", killmail_ids) do
             {:ok, _} ->
               Logger.debug("Cached #{length(kills)} kills for system",
                 system_id: system_id,

@@ -43,7 +43,7 @@ defmodule WandererKills.Observability.Monitoring do
 
   use GenServer
   require Logger
-  alias WandererKills.Infrastructure.Clock
+  alias WandererKills.Support.Clock
 
   @cache_names [:wanderer_cache]
   @health_check_interval :timer.minutes(5)
@@ -154,29 +154,32 @@ defmodule WandererKills.Observability.Monitoring do
 
   @doc """
   Increments the count of successfully stored killmails.
+  Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_stored() :: :ok
-  def increment_stored do
-    :telemetry.execute([:wanderer_kills, :parser, :stored], %{count: 1}, %{})
+  def increment_stored() do
     GenServer.cast(__MODULE__, {:increment, :stored})
+    WandererKills.Observability.Metrics.increment_stored()
   end
 
   @doc """
   Increments the count of skipped killmails (too old).
+  Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_skipped() :: :ok
-  def increment_skipped do
-    :telemetry.execute([:wanderer_kills, :parser, :skipped], %{count: 1}, %{})
+  def increment_skipped() do
     GenServer.cast(__MODULE__, {:increment, :skipped})
+    WandererKills.Observability.Metrics.increment_skipped()
   end
 
   @doc """
   Increments the count of failed killmail parsing attempts.
+  Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_failed() :: :ok
-  def increment_failed do
-    :telemetry.execute([:wanderer_kills, :parser, :failed], %{count: 1}, %{})
+  def increment_failed() do
     GenServer.cast(__MODULE__, {:increment, :failed})
+    WandererKills.Observability.Metrics.increment_failed()
   end
 
   @doc """

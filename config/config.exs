@@ -1,8 +1,6 @@
 import Config
 
 config :wanderer_kills,
-  port: String.to_integer(System.get_env("PORT") || "4004"),
-
   # Cache configuration
   cache_killmails_ttl: 3600,
   cache_system_ttl: 1800,
@@ -29,13 +27,18 @@ config :wanderer_kills,
   # HTTP client configuration
   http_client: WandererKills.Http.Client,
 
+  # Storage configuration
+  storage: [
+    enable_event_streaming: true
+  ],
+
   # Request timeout configuration (missing from original config)
   esi_request_timeout_ms: 30_000,
   zkb_request_timeout_ms: 15_000,
   http_request_timeout_ms: 10_000,
   default_request_timeout_ms: 10_000,
 
-  # Batch concurrency configuration (missing from original config)
+  # Batch concurrency configuration
   esi_batch_concurrency: 10,
   zkb_batch_concurrency: 5,
   default_batch_concurrency: 5,
@@ -68,7 +71,16 @@ config :wanderer_kills,
 
   # Service startup configuration
   start_preloader: true,
-  start_redisq: true
+  start_redisq: true,
+
+  # WebSocket configuration
+  websocket_degraded_threshold: 1000
+
+# Configure the Phoenix endpoint
+config :wanderer_kills, WandererKillsWeb.Endpoint,
+  http: [port: 4004, ip: {0, 0, 0, 0}],
+  server: true,
+  pubsub_server: WandererKills.PubSub
 
 # Cachex default configuration
 config :cachex, :default_ttl, :timer.hours(24)
@@ -82,183 +94,7 @@ config :logger,
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [
-    # Standard Elixir metadata
-    :request_id,
-    :application,
-    :module,
-    :function,
-    :line,
-
-    # Core application metadata
-    :system_id,
-    :killmail_id,
-    :operation,
-    :step,
-    :status,
-    :error,
-    :duration,
-    :source,
-    :reason,
-
-    # HTTP and API metadata
-    :url,
-    :response_time,
-    :method,
-    :service,
-    :endpoint,
-
-    # EVE Online entity metadata
-    :character_id,
-    :corporation_id,
-    :alliance_id,
-    :type_id,
-    :solar_system_id,
-    :ship_type_id,
-
-    # Cache metadata
-    :cache,
-    :cache_key,
-    :cache_type,
-    :ttl,
-
-    # Processing metadata
-    :killmail_count,
-    :count,
-    :result,
-    :data_source,
-
-    # Retry and timeout metadata
-    :attempt,
-    :max_attempts,
-    :remaining_attempts,
-    :delay_ms,
-    :timeout,
-    :request_type,
-    :raw_count,
-    :parsed_count,
-    :enriched_count,
-    :since_hours,
-    :provided_id,
-    :types,
-    :groups,
-    :file,
-    :path,
-    :pass_type,
-    :hours,
-    :limit,
-    :max_concurrency,
-    :purpose,
-    :format,
-    :percentage,
-    :description,
-    :unit,
-    :value,
-    :count,
-    :total,
-    :processed,
-    :skipped,
-    :error,
-    :total_killmails_analyzed,
-    :format_distribution,
-    :system_distribution,
-    :ship_distribution,
-    :character_distribution,
-    :corporation_distribution,
-    :alliance_distribution,
-    :ship_type_distribution,
-    :purpose,
-    :sample_index,
-    :sample_size,
-    :sample_type,
-    :sample_value,
-    :sample_unit,
-    :sample_value,
-    :sample_structure,
-    :data_type,
-    :raw_keys,
-    :has_full_data,
-    :needs_esi_fetch,
-    :byte_size,
-    :tasks,
-    :group_ids,
-    :error_count,
-    :total_groups,
-    :success_count,
-    :type_count,
-    :cutoff_time,
-    :killmail_sample,
-    :required_fields,
-    :missing_fields,
-    :available_keys,
-    :killmail_sample,
-    :raw_structure,
-    :parsed_structure,
-    :enriched_structure,
-    :killmail_id,
-    :system_id,
-    :ship_type_id,
-    :character_id,
-    :killmail_keys,
-    :kill_count,
-    :hash,
-    :has_solar_system_id,
-    :has_kill_count,
-    :has_hash,
-    :has_killmail_id,
-    :has_system_id,
-    :has_ship_type_id,
-    :has_character_id,
-    :has_victim,
-    :has_attackers,
-    :has_zkb,
-    :killmail_keys,
-    :parser_type,
-    :killmail_hash,
-    :raw_structure,
-    :recommendation,
-    :structure,
-    :kill_time,
-    :cutoff,
-    :subscriber_id,
-    :system_ids,
-    :callback_url,
-    :subscription_id,
-    :status,
-    :error,
-    :system_count,
-    :has_callback,
-    :error_count,
-    :success_count,
-    :total_subscriptions,
-    :active_subscriptions,
-    :removed_count,
-    :requested_systems,
-    :successful_systems,
-    :failed_systems,
-    :total_systems,
-    :system_ids,
-    :callback_url,
-    :subscription_id,
-    :status,
-    :kills_count,
-    :pubsub_name,
-    :pubsub_topic,
-    :pubsub_message,
-    :pubsub_metadata,
-    :pubsub_payload,
-    :pubsub_headers,
-    :pubsub_timestamp,
-    :total_kills,
-    :filtered_kills,
-    :subscriber_count,
-    :total_cached_kills,
-    :cache_error,
-    :returned_kills,
-    :unexpected_response,
-    :cached_count,
-    :total_kills_sent
-  ]
+  metadata: :all
 
 # Import environment specific config
 import_config "#{config_env()}.exs"

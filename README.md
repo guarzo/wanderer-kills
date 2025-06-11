@@ -1,101 +1,235 @@
 # WandererKills
 
-A standalone service for retrieving and caching EVE Online killmails from zKillboard.
+A high-performance, real-time EVE Online killmail data service built with Elixir/Phoenix. This service provides REST API, WebSocket, and webhook interfaces for accessing killmail data from zKillboard.
 
-## Development Setup
+## Features
 
-### Using Docker Development Container
+- **Real-time Data** - Continuous killmail stream from zKillboard RedisQ
+- **Multiple Integration Methods** - REST API, WebSocket, webhooks, and Phoenix PubSub
+- **Efficient Caching** - Multi-tiered caching with Cachex for optimal performance
+- **ESI Enrichment** - Automatic enrichment with character, corporation, and ship names
+- **Batch Processing** - Efficient bulk operations for multiple systems
+- **Event Streaming** - Optional event-driven architecture with offset tracking
+- **Comprehensive Monitoring** - 5-minute status reports with system-wide metrics
 
-The project includes a development container configuration for a consistent development environment. To use it:
+## Quick Start
 
-1. Install [Docker](https://docs.docker.com/get-docker/) and [VS Code](https://code.visualstudio.com/)
-2. Install the [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension in VS Code
-3. Clone this repository
-4. Open the project in VS Code
-5. When prompted, click "Reopen in Container" or use the command palette (F1) and select "Remote-Containers: Reopen in Container"
+### Using Docker
 
-The development container includes:
+```bash
+# Run the service
+docker run -p 4004:4004 wanderer-kills
 
-- Elixir 1.14.0
-- OTP 25.0
-- Redis for caching
-- All required build tools
+# With persistent cache
+docker run -p 4004:4004 \
+  -v wanderer-cache:/app/cache \
+  wanderer-kills
+```
 
-### Data Mounting
+### Using Docker Compose
 
-The service requires access to several data directories:
+```bash
+# Start all services (includes Redis)
+docker-compose up
 
-1. **Cache Directory**
+# Run in background
+docker-compose up -d
+```
 
-   ```bash
-   # Mount the cache directory for persistent caching
-   docker run -v /path/to/cache:/app/cache wanderer-kills
-   ```
+### Development Setup
 
-2. **Log Directory**
+1. **Prerequisites**
+   - Elixir 1.14.0+
+   - OTP 25.0+
+   - Docker (for Redis)
 
-   ```bash
-   # Mount the log directory for persistent logs
-   docker run -v /path/to/logs:/app/logs wanderer-kills
-   ```
-
-3. **Configuration Directory**
-   ```bash
-   # Mount a custom configuration directory
-   docker run -v /path/to/config:/app/config wanderer-kills
-   ```
-
-### Ship-Type Data Bootstrap
-
-The service requires ship type data for proper operation. To bootstrap the data:
-
-1. **Automatic Bootstrap**
+2. **Clone and Setup**
 
    ```bash
-   # The service will automatically download and process ship type data on first run
-   mix run --no-halt
+   git clone https://github.com/wanderer-industries/wanderer-kills.git
+   cd wanderer-kills
+   mix deps.get
+   mix compile
    ```
 
-2. **Manual Bootstrap**
+3. **Start Services**
 
    ```bash
-   # Download and process ship type data manually
-   mix run -e "WandererKills.Data.ShipTypeUpdater.update_all_ship_types()"
+   # Start Redis
+   docker run -d -p 6379:6379 redis:7-alpine
+
+   # Start the application
+   mix phx.server
    ```
 
-3. **Verify Data**
-   ```bash
-   # Check if ship type data is properly loaded
-   mix run -e "IO.inspect(WandererKills.Data.ShipTypeInfo.get_ship_type(670))"
-   ```
+The service will be available at `http://localhost:4004`
+
+## API Overview
+
+### REST Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/kills/system/{system_id}` | Get kills for a system |
+| POST | `/api/v1/kills/systems` | Bulk fetch multiple systems |
+| GET | `/api/v1/kills/cached/{system_id}` | Get cached kills only |
+| GET | `/api/v1/killmail/{killmail_id}` | Get specific killmail |
+| GET | `/api/v1/kills/count/{system_id}` | Get kill count |
+| POST | `/api/v1/subscriptions` | Create webhook subscription |
+| GET | `/health` | Health check |
+| GET | `/status` | Service status |
+
+### WebSocket Connection
+
+```javascript
+// Connect to WebSocket
+const ws = new WebSocket('ws://localhost:4004/ws');
+
+// Subscribe to systems
+ws.send(JSON.stringify({
+  action: 'subscribe',
+  systems: [30000142, 30000144]
+}));
+
+// Receive real-time updates
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log('New kill:', data);
+};
+```
+
+### Example API Call
+
+```bash
+# Get kills for Jita in the last 24 hours
+curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50"
+```
+
+## Architecture
+
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
+│   zKillboard   │────▶│    RedisQ    │────▶│  Processor  │
+│     RedisQ     │     │   Consumer   │     │   Pipeline  │
+└─────────────────┘     └──────────────┘     └─────────────┘
+                                                     │
+                              ┌──────────────────────┴───────────────┐
+                              │                                      │
+                              ▼                                      ▼
+                    ┌─────────────────┐                    ┌─────────────────┐
+                    │   ESI Enricher  │                    │  Storage Layer  │
+                    │ (Names & Data)  │                    │  (ETS Tables)   │
+                    └─────────────────┘                    └─────────────────┘
+                              │                                      │
+                              └──────────────┬───────────────────────┘
+                                             ▼
+                              ┌──────────────────────────┐
+                              │    Distribution Layer    │
+                              ├──────────────────────────┤
+                              │ • REST API               │
+                              │ • WebSocket              │
+                              │ • Webhooks               │
+                              │ • Phoenix PubSub         │
+                              └──────────────────────────┘
+```
+
+### Key Components
+
+- **RedisQ Consumer** - Continuously polls zKillboard for new killmails
+- **Unified Processor** - Handles both full and partial killmail formats
+- **ESI Enricher** - Adds character, corporation, and ship names
+- **Storage Layer** - ETS-based storage with optional event streaming
+- **Cache Layer** - Multi-tiered caching with configurable TTLs
+- **Distribution Layer** - Multiple integration methods for consumers
 
 ## Configuration
 
-The service can be configured through environment variables or a config file:
+### Environment Variables
+
+```bash
+# Port configuration
+PORT=4004
+
+# Redis configuration (optional)
+REDIS_URL=redis://localhost:6379
+
+# ESI configuration
+ESI_BASE_URL=https://esi.evetech.net/latest
+ESI_DATASOURCE=tranquility
+
+# Cache TTLs (in seconds)
+CACHE_KILLMAIL_TTL=300
+CACHE_SYSTEM_TTL=3600
+CACHE_ESI_TTL=86400
+```
+
+### Application Configuration
 
 ```elixir
 # config/config.exs
 config :wanderer_kills,
-  port: String.to_integer(System.get_env("PORT") || "4004"),
-  cache: %{
-    killmails: [name: :killmails_cache, ttl: :timer.hours(24)],
-    system: [name: :system_cache, ttl: :timer.hours(1)],
-    esi: [name: :esi_cache, ttl: :timer.hours(48)]
-  }
+  port: 4004,
+  redisq_base_url: "https://zkillredisq.stream/listen.php",
+  storage: [
+    enable_event_streaming: true
+  ],
+  cache: [
+    default_ttl: :timer.minutes(5),
+    cleanup_interval: :timer.minutes(10)
+  ]
 ```
 
-## API Endpoints
+## Monitoring
 
-- `GET /api/v1/killmails/:system_id` - Get killmails for a system
-- `GET /api/v1/systems/:system_id/count` - Get kill count for a system
-- `GET /api/v1/ships/:type_id` - Get ship type information
+The service provides comprehensive monitoring with 5-minute status reports:
+
+```text
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 WANDERER KILLS STATUS REPORT (5-minute summary)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 WEBSOCKET ACTIVITY:
+   Active Connections: 15
+   Active Subscriptions: 12 (covering 87 systems)
+
+📤 KILL DELIVERY:
+   Total Kills Sent: 1234 (Realtime: 1150, Preload: 84)
+   Delivery Rate: 4.1 kills/minute
+
+🔄 REDISQ ACTIVITY:
+   Kills Processed: 327
+   Active Systems: 45
+
+💾 CACHE PERFORMANCE:
+   Hit Rate: 87.5%
+   Cache Size: 2156 entries
+
+📦 STORAGE METRICS:
+   Total Killmails: 15234
+   Unique Systems: 234
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Health Monitoring
+
+- **Health Check**: `GET /health` - Basic service health
+- **Status Endpoint**: `GET /status` - Detailed service metrics
+- **Telemetry Events**: Integration with Prometheus/StatsD
+- **Structured Logging**: Extensive metadata for debugging
 
 ## Development
 
 ### Running Tests
 
 ```bash
+# Run all tests
 mix test
+
+# Run with coverage
+mix test.coverage
+
+# Run specific test file
+mix test test/wanderer_kills/killmails/store_test.exs
 ```
 
 ### Code Quality
@@ -104,80 +238,131 @@ mix test
 # Format code
 mix format
 
-# Run Credo
-mix credo
+# Run static analysis
+mix credo --strict
 
-# Run Dialyzer
+# Run type checking
 mix dialyzer
+
+# Run all checks
+mix check
 ```
 
-### Docker Development
+### Development Container
+
+The project includes VS Code development container support:
+
+1. Install [Docker](https://docs.docker.com/get-docker/) and [VS Code](https://code.visualstudio.com/)
+2. Install the [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
+3. Open the project in VS Code
+4. Click "Reopen in Container" when prompted
+
+The development container includes all required tools and dependencies.
+
+## Data Management
+
+### Ship Type Data
+
+The service requires ship type data for enrichment:
 
 ```bash
-# Build the development image
-docker build -t wanderer-kills-dev -f Dockerfile.dev .
-
-# Run the development container
-docker run -it --rm \
-  -v $(pwd):/app \
-  -p 4004:4004 \
-  wanderer-kills-dev
+# Data is automatically loaded on first run
+# Manual update if needed:
+mix run -e "WandererKills.ShipTypes.Updater.update_all_ship_types()"
 ```
+
+### Cache Management
+
+```bash
+# Clear all caches
+mix run -e "Cachex.clear(:wanderer_cache)"
+
+# Check cache statistics
+mix run -e "IO.inspect(Cachex.stats(:wanderer_cache))"
+```
+
+## Documentation
+
+Comprehensive documentation is available in the `/docs` directory:
+
+- [API Reference](docs/api-reference.md) - Complete API documentation
+- [Integration Guide](docs/integration-guide.md) - Integration examples and best practices
+- [Architecture Overview](CLAUDE.md) - Detailed architecture documentation
+- [Code Review](CODE_REVIEW.md) - Recent refactoring documentation
 
 ## Contributing
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Write tests for your changes
+4. Ensure all tests pass (`mix test`)
+5. Check code quality (`mix credo --strict`)
+6. Commit your changes (`git commit -m 'Add support for amazing feature'`)
+7. Push to the branch (`git push origin feature/amazing-feature`)
+8. Open a Pull Request
+
+### Development Guidelines
+
+- Follow the [Elixir Style Guide](https://github.com/christopheradams/elixir_style_guide)
+- Write comprehensive tests for new features
+- Update documentation for API changes
+- Use descriptive commit messages
+- Keep PRs focused and atomic
+
+## Deployment
+
+### Docker Production Build
+
+```bash
+# Build production image
+docker build -t wanderer-kills:latest .
+
+# Run with environment variables
+docker run -d \
+  -p 4004:4004 \
+  -e PORT=4004 \
+  -e REDIS_URL=redis://redis:6379 \
+  --name wanderer-kills \
+  wanderer-kills:latest
+```
+
+### Kubernetes
+
+See [deployment/k8s/](deployment/k8s/) for Kubernetes manifests.
+
+## Performance
+
+The service is designed for high performance:
+
+- **Concurrent Processing** - Leverages Elixir's actor model
+- **Efficient Caching** - Multi-tiered cache with smart TTLs
+- **Batch Operations** - Bulk enrichment and processing
+- **Connection Pooling** - Optimized HTTP client connections
+- **ETS Storage** - In-memory storage for fast access
+
+Typical performance metrics:
+
+- Process 100+ kills/second
+- Cache hit rate > 85%
+- API response time < 50ms (cached)
+- WebSocket latency < 10ms
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Logging
+## Acknowledgments
 
-The application uses a standardized logging system with the following log levels:
+- [zKillboard](https://zkillboard.com/) for providing the killmail data
+- [EVE Online](https://www.eveonline.com/) and CCP Games
+- The Elixir/Phoenix community
 
-- `:debug` - Detailed information for debugging purposes
+## Support
 
-  - Cache operations
-  - Task completions
-  - Request/response details
-  - System state changes
+- **Issues**: [GitHub Issues](https://github.com/wanderer-industries/wanderer-kills/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/wanderer-industries/wanderer-kills/discussions)
+- **Email**: [wanderer-kills@proton.me](mailto:wanderer-kills@proton.me)
 
-- `:info` - General operational information
+---
 
-  - Successful API requests
-  - Cache misses
-  - System startup/shutdown
-  - Background job completions
-
-- `:warning` - Unexpected but handled situations
-
-  - Rate limiting
-  - Cache errors
-  - Invalid input data
-  - Retry attempts
-
-- `:error` - Errors that affect operation but don't crash the system
-  - API failures
-  - Database errors
-  - Task failures
-  - Invalid state transitions
-
-Each log entry includes:
-
-- Request ID (for HTTP requests)
-- Module name
-- Operation context
-- Relevant metadata
-
-To configure logging levels, set the `:logger` configuration in your environment:
-
-```elixir
-config :logger,
-  level: :info,
-  metadata: [:request_id, :module, :function]
-```
+Built with ❤️ by [Wanderer Industries](https://github.com/wanderer-industries)

@@ -30,7 +30,7 @@ defmodule WandererKills.ShipTypes.CSVTest do
       File.write!(file_path, "invalid\"csv,\"content\nunclosed\"quote")
 
       result = CSV.read_file(file_path, parser)
-      assert {:error, %WandererKills.Infrastructure.Error{type: :parse_error}} = result
+      assert {:error, %WandererKills.Support.Error{type: :parse_error}} = result
 
       File.rm!(file_path)
     end
@@ -68,16 +68,16 @@ defmodule WandererKills.ShipTypes.CSVTest do
     end
 
     test "handles invalid integers" do
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Support.Error{type: :invalid_integer}} =
                CSV.parse_integer("abc")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Support.Error{type: :invalid_integer}} =
                CSV.parse_integer("12.5")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
                CSV.parse_integer("")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
                CSV.parse_integer(nil)
     end
   end
@@ -90,13 +90,13 @@ defmodule WandererKills.ShipTypes.CSVTest do
     end
 
     test "handles invalid floats" do
-      assert {:error, %WandererKills.Infrastructure.Error{type: :invalid_float}} =
+      assert {:error, %WandererKills.Support.Error{type: :invalid_float}} =
                CSV.parse_float("abc")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
                CSV.parse_float("")
 
-      assert {:error, %WandererKills.Infrastructure.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
                CSV.parse_float(nil)
     end
   end

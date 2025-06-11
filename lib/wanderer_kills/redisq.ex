@@ -12,11 +12,11 @@ defmodule WandererKills.RedisQ do
   use GenServer
   require Logger
 
-  alias WandererKills.Killmails.Coordinator
-  alias WandererKills.ESI.Client, as: EsiClient
-  alias WandererKills.Infrastructure.Clock
+  alias WandererKills.Killmails.UnifiedProcessor
+  alias WandererKills.ESI.DataFetcher, as: EsiClient
+  alias WandererKills.Support.Clock
   alias WandererKills.Http.Client, as: HttpClient
-  alias WandererKills.Infrastructure.Config
+  alias WandererKills.Config
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 
@@ -57,6 +57,13 @@ defmodule WandererKills.RedisQ do
   end
 
   @doc """
+  Gets current RedisQ statistics.
+  """
+  def get_stats do
+    GenServer.call(__MODULE__, :get_stats)
+  end
+
+  @doc """
   Starts listening to RedisQ killmail stream.
   """
   def start_listening do
@@ -89,17 +96,28 @@ defmodule WandererKills.RedisQ do
       errors: 0,
       no_kills_count: 0,
       last_reset: DateTime.utc_now(),
-      systems_active: MapSet.new()
+      systems_active: MapSet.new(),
+      # Cumulative stats that don't reset
+      total_kills_received: 0,
+      total_kills_older: 0,
+      total_kills_skipped: 0,
+      total_legacy_kills: 0,
+      total_errors: 0,
+      total_no_kills_count: 0
     }
 
-    Logger.info("[RedisQ] Initialized with queue ID: #{queue_id}")
+    state = %State{queue_id: queue_id, backoff_ms: initial_backoff, stats: stats}
+    {:ok, state, {:continue, :start_polling}}
+  end
+
+  @impl true
+  def handle_continue(:start_polling, state) do
+    Logger.info("[RedisQ] Starting polling with queue ID: #{state.queue_id}")
     # Schedule the very first poll after the idle interval
     schedule_poll(Config.redisq().idle_interval_ms)
     # Schedule the first summary log
     schedule_summary_log()
-
-    state = %State{queue_id: queue_id, backoff_ms: initial_backoff, stats: stats}
-    {:ok, state}
+    {:noreply, state}
   end
 
   @impl true
@@ -151,6 +169,27 @@ defmodule WandererKills.RedisQ do
   end
 
   @impl true
+  def handle_call(:get_stats, _from, state) do
+    stats = %{
+      # Use cumulative stats for the 5-minute report
+      kills_processed: state.stats.total_kills_received,
+      kills_older: state.stats.total_kills_older,
+      kills_skipped: state.stats.total_kills_skipped,
+      legacy_kills: state.stats.total_legacy_kills,
+      errors: state.stats.total_errors,
+      no_kills_polls: state.stats.total_no_kills_count,
+      active_systems: MapSet.size(state.stats.systems_active),
+      total_polls:
+        state.stats.total_kills_received + state.stats.total_kills_older +
+          state.stats.total_kills_skipped + state.stats.total_legacy_kills +
+          state.stats.total_no_kills_count + state.stats.total_errors,
+      last_reset: state.stats.last_reset
+    }
+
+    {:reply, {:ok, stats}, state}
+  end
+
+  @impl true
   def terminate(_reason, _state), do: :ok
 
   #
@@ -169,23 +208,35 @@ defmodule WandererKills.RedisQ do
 
   # Updates statistics based on poll result
   defp update_stats(stats, {:ok, :kill_received}) do
-    %{stats | kills_received: stats.kills_received + 1}
+    %{
+      stats
+      | kills_received: stats.kills_received + 1,
+        total_kills_received: stats.total_kills_received + 1
+    }
   end
 
   defp update_stats(stats, {:ok, :kill_older}) do
-    %{stats | kills_older: stats.kills_older + 1}
+    %{stats | kills_older: stats.kills_older + 1, total_kills_older: stats.total_kills_older + 1}
   end
 
   defp update_stats(stats, {:ok, :kill_skipped}) do
-    %{stats | kills_skipped: stats.kills_skipped + 1}
+    %{
+      stats
+      | kills_skipped: stats.kills_skipped + 1,
+        total_kills_skipped: stats.total_kills_skipped + 1
+    }
   end
 
   defp update_stats(stats, {:ok, :no_kills}) do
-    %{stats | no_kills_count: stats.no_kills_count + 1}
+    %{
+      stats
+      | no_kills_count: stats.no_kills_count + 1,
+        total_no_kills_count: stats.total_no_kills_count + 1
+    }
   end
 
   defp update_stats(stats, {:error, _reason}) do
-    %{stats | errors: stats.errors + 1}
+    %{stats | errors: stats.errors + 1, total_errors: stats.total_errors + 1}
   end
 
   # Track active systems
@@ -203,7 +254,24 @@ defmodule WandererKills.RedisQ do
       stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
 
     if total_activity > 0 or stats.errors > 0 do
-      Logger.info("📊 REDISQ SUMMARY (#{duration}s):",
+      # Get websocket stats from the observability module
+      ws_stats =
+        case WandererKills.Observability.WebSocketStats.get_stats() do
+          {:ok, stats} -> stats
+          _ -> %{kills_sent: %{total: 0, realtime: 0, preload: 0}}
+        end
+
+      Logger.info(
+        "📊 REDISQ SUMMARY (#{duration}s): " <>
+          "Kills processed: #{stats.kills_received}, " <>
+          "Older kills: #{stats.kills_older}, " <>
+          "Skipped: #{stats.kills_skipped}, " <>
+          "Legacy: #{stats.legacy_kills}, " <>
+          "No-kill polls: #{stats.no_kills_count}, " <>
+          "Errors: #{stats.errors}, " <>
+          "Active systems: #{MapSet.size(stats.systems_active)}, " <>
+          "Total polls: #{total_activity + stats.no_kills_count + stats.errors}, " <>
+          "WS kills sent: #{ws_stats.kills_sent.total} (RT: #{ws_stats.kills_sent.realtime}, PL: #{ws_stats.kills_sent.preload})",
         kills_processed: stats.kills_received,
         kills_older: stats.kills_older,
         kills_skipped: stats.kills_skipped,
@@ -274,7 +342,9 @@ defmodule WandererKills.RedisQ do
       "[RedisQ] Processing new format killmail (cutoff: #{DateTime.to_iso8601(cutoff)})"
     )
 
-    case Coordinator.parse_full_and_store(killmail, %{"zkb" => zkb}, cutoff) do
+    merged = Map.merge(killmail, %{"zkb" => zkb})
+
+    case UnifiedProcessor.process_killmail(merged, cutoff) do
       {:ok, :kill_older} ->
         Logger.debug("[RedisQ] Kill is older than cutoff → skipping.")
         {:ok, :kill_older}
@@ -283,7 +353,7 @@ defmodule WandererKills.RedisQ do
         Logger.debug("[RedisQ] Successfully parsed & stored new killmail.")
 
         # Broadcast kill update via PubSub using the enriched killmail
-        broadcast_kill_update_enriched(enriched_killmail)
+        broadcast_killmail_update_enriched(enriched_killmail)
 
         {:ok, :kill_received}
 
@@ -403,12 +473,12 @@ defmodule WandererKills.RedisQ do
 
   # Returns cutoff DateTime (e.g. "24 hours ago")
   defp get_cutoff_time do
-    Clock.hours_ago(24)
+    Clock.hours_ago(1)
   end
 
   defp handle_response(%{"package" => package}) do
     # Process the killmail package
-    Logger.info("Received killmail package: #{inspect(package)}")
+    Logger.debug("Received killmail package: #{inspect(package)}")
   end
 
   defp handle_response(_) do
@@ -416,9 +486,11 @@ defmodule WandererKills.RedisQ do
     start_listening()
   end
 
-  # Broadcast kill update to PubSub subscribers using enriched killmail
-  defp broadcast_kill_update_enriched(enriched_killmail) do
-    system_id = Map.get(enriched_killmail, "solar_system_id")
+  # Broadcast killmail update to PubSub subscribers using enriched killmail
+  defp broadcast_killmail_update_enriched(enriched_killmail) do
+    system_id =
+      Map.get(enriched_killmail, "solar_system_id") || Map.get(enriched_killmail, "system_id")
+
     killmail_id = Map.get(enriched_killmail, "killmail_id")
 
     if system_id do
@@ -426,12 +498,14 @@ defmodule WandererKills.RedisQ do
       send(self(), {:track_system, system_id})
 
       # Broadcast detailed kill update
-      WandererKills.SubscriptionManager.broadcast_kill_update(system_id, [enriched_killmail])
+      WandererKills.SubscriptionManager.broadcast_killmail_update_async(system_id, [
+        enriched_killmail
+      ])
 
       # Also broadcast kill count update (increment by 1)
-      WandererKills.SubscriptionManager.broadcast_kill_count_update(system_id, 1)
+      WandererKills.SubscriptionManager.broadcast_killmail_count_update_async(system_id, 1)
     else
-      Logger.warning("[RedisQ] Cannot broadcast kill update - missing solar_system_id",
+      Logger.warning("[RedisQ] Cannot broadcast killmail update - missing system_id",
         killmail_id: killmail_id
       )
     end

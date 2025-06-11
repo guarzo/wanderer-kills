@@ -6,9 +6,11 @@ defmodule WandererKillsWeb.KillsController do
   and kill counts as specified in the WandererKills API interface.
   """
 
+  use Phoenix.Controller, namespace: WandererKillsWeb
   import WandererKillsWeb.Api.Helpers
   require Logger
   alias WandererKills.Client
+  alias WandererKills.Support.Error
 
   @doc """
   Lists kills for a specific system with time filtering.
@@ -25,10 +27,10 @@ defmodule WandererKillsWeb.KillsController do
         limit: limit
       )
 
-      case Client.fetch_system_kills(system_id, since_hours, limit) do
-        {:ok, kills} ->
+      case Client.fetch_system_killmails(system_id, since_hours, limit) do
+        {:ok, killmails} ->
           response = %{
-            kills: kills,
+            kills: killmails,
             # This is a fresh fetch
             cached: false,
             timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -48,7 +50,7 @@ defmodule WandererKillsWeb.KillsController do
           })
       end
     else
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
     end
   end
@@ -69,19 +71,19 @@ defmodule WandererKillsWeb.KillsController do
         limit: limit
       )
 
-      {:ok, systems_kills} = Client.fetch_systems_kills(system_ids, since_hours, limit)
+      {:ok, systems_killmails} = Client.fetch_systems_killmails(system_ids, since_hours, limit)
 
       response = %{
-        systems_kills: systems_kills,
+        systems_kills: systems_killmails,
         timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
       }
 
       render_success(conn, response)
     else
-      {:error, :invalid_system_ids} ->
+      {:error, %Error{type: :invalid_system_ids}} ->
         render_error(conn, 400, "Invalid system IDs", "INVALID_SYSTEM_IDS")
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid parameters", "INVALID_PARAMETERS")
     end
   end
@@ -96,17 +98,17 @@ defmodule WandererKillsWeb.KillsController do
       {:ok, system_id} ->
         Logger.debug("Fetching cached kills", system_id: system_id)
 
-        kills = Client.fetch_cached_kills(system_id)
+        killmails = Client.fetch_cached_killmails(system_id)
 
         response = %{
-          kills: kills,
+          kills: killmails,
           timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
           error: nil
         }
 
         render_success(conn, response)
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
     end
   end
@@ -129,7 +131,7 @@ defmodule WandererKillsWeb.KillsController do
             render_success(conn, killmail)
         end
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid killmail ID format", "INVALID_KILLMAIL_ID")
     end
   end
@@ -144,7 +146,7 @@ defmodule WandererKillsWeb.KillsController do
       {:ok, system_id} ->
         Logger.debug("Fetching system kill count", system_id: system_id)
 
-        count = Client.get_system_kill_count(system_id)
+        count = Client.get_system_killmail_count(system_id)
 
         response = %{
           system_id: system_id,
@@ -154,8 +156,15 @@ defmodule WandererKillsWeb.KillsController do
 
         render_success(conn, response)
 
-      {:error, :invalid_format} ->
+      {:error, %Error{}} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
     end
+  end
+
+  @doc """
+  Handles undefined API routes.
+  """
+  def not_found(conn, _params) do
+    render_error(conn, 404, "Not Found", "NOT_FOUND")
   end
 end

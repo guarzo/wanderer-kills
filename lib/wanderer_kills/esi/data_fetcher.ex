@@ -1,87 +1,94 @@
 defmodule WandererKills.ESI.DataFetcher do
   @moduledoc """
-  Unified ESI data fetcher that consolidates all ESI API interactions.
+  Unified ESI (EVE Swagger Interface) API client.
 
-  This module replaces the individual fetcher modules (CharacterFetcher, TypeFetcher,
-  KillmailFetcher) with a single, clean implementation that handles all ESI data types.
+  This module provides data fetching capabilities for EVE Online's ESI API.
+  It handles caching, concurrent requests, error handling, and rate limiting
+  for all ESI operations including characters, corporations, alliances,
+  ship types, systems, and killmails.
+
+  This module serves as both the main interface for ESI operations and
+  the implementation, consolidating what was previously split between
+  ESI.Client and ESI.DataFetcher.
   """
 
-  require Logger
-  alias WandererKills.Behaviours.{DataFetcher, ESIClient}
-  alias WandererKills.Cache.Helper
-  alias WandererKills.Infrastructure.{Config, Error}
+  @behaviour WandererKills.ESI.ClientBehaviour
+  @behaviour WandererKills.ESI.DataFetcherBehaviour
 
-  @behaviour ESIClient
-  @behaviour DataFetcher
+  require Logger
+  import WandererKills.Support.Logger
+  alias WandererKills.Config
+  alias WandererKills.Cache.Helper
+  alias WandererKills.Support.Error
 
   # Default ship group IDs that contain ship types
   @ship_group_ids [6, 7, 9, 11, 16, 17, 23]
 
   # ============================================================================
-  # ESIClient Implementation
+  # ESI.ClientBehaviour Implementation
   # ============================================================================
 
-  @impl ESIClient
+  @impl true
   def get_character(character_id) when is_integer(character_id) do
-    Helper.character_get_or_set(character_id, fn ->
+    Helper.get_or_set(:characters, character_id, fn ->
       fetch_from_api(:character, character_id)
     end)
   end
 
-  @impl ESIClient
+  @impl true
   def get_character_batch(character_ids) when is_list(character_ids) do
     fetch_batch(:character, character_ids)
   end
 
-  @impl ESIClient
+  @impl true
   def get_corporation(corporation_id) when is_integer(corporation_id) do
-    Helper.corporation_get_or_set(corporation_id, fn ->
+    Helper.get_or_set(:corporations, corporation_id, fn ->
       fetch_from_api(:corporation, corporation_id)
     end)
   end
 
-  @impl ESIClient
+  @impl true
   def get_corporation_batch(corporation_ids) when is_list(corporation_ids) do
     fetch_batch(:corporation, corporation_ids)
   end
 
-  @impl ESIClient
+  @impl true
   def get_alliance(alliance_id) when is_integer(alliance_id) do
-    Helper.alliance_get_or_set(alliance_id, fn ->
+    Helper.get_or_set(:alliances, alliance_id, fn ->
       fetch_from_api(:alliance, alliance_id)
     end)
   end
 
-  @impl ESIClient
+  @impl true
   def get_alliance_batch(alliance_ids) when is_list(alliance_ids) do
     fetch_batch(:alliance, alliance_ids)
   end
 
-  @impl ESIClient
+  @impl true
   def get_type(type_id) when is_integer(type_id) do
-    Helper.ship_type_get_or_set(type_id, fn ->
+    Helper.get_or_set(:ship_types, type_id, fn ->
       fetch_from_api(:type, type_id)
     end)
   end
 
-  @impl ESIClient
+  @impl true
   def get_type_batch(type_ids) when is_list(type_ids) do
     fetch_batch(:type, type_ids)
   end
 
-  @impl ESIClient
+  @impl true
   def get_group(group_id) when is_integer(group_id) do
-    Helper.get_or_set("groups", to_string(group_id), fn ->
+    Helper.get_or_set(:ship_types, "group:#{group_id}", fn ->
       fetch_from_api(:group, group_id)
     end)
   end
 
-  @impl ESIClient
+  @impl true
   def get_group_batch(group_ids) when is_list(group_ids) do
     fetch_batch(:group, group_ids)
   end
 
-  @impl ESIClient
+  @impl true
   def get_system(system_id) when is_integer(system_id) do
     result = fetch_from_api(:system, system_id)
     {:ok, result}
@@ -90,16 +97,16 @@ defmodule WandererKills.ESI.DataFetcher do
       {:error, error}
   end
 
-  @impl ESIClient
+  @impl true
   def get_system_batch(system_ids) when is_list(system_ids) do
     fetch_batch(:system, system_ids)
   end
 
   # ============================================================================
-  # DataFetcher Implementation
+  # ESI.DataFetcherBehaviour Implementation
   # ============================================================================
 
-  @impl DataFetcher
+  @impl true
   def fetch({:character, character_id}), do: get_character(character_id)
   def fetch({:corporation, corporation_id}), do: get_corporation(corporation_id)
   def fetch({:alliance, alliance_id}), do: get_alliance(alliance_id)
@@ -109,12 +116,12 @@ defmodule WandererKills.ESI.DataFetcher do
   def fetch({:killmail, killmail_id, killmail_hash}), do: get_killmail(killmail_id, killmail_hash)
   def fetch(_), do: {:error, Error.esi_error(:unsupported, "Unsupported fetch operation")}
 
-  @impl DataFetcher
+  @impl true
   def fetch_many(fetch_args) when is_list(fetch_args) do
     Enum.map(fetch_args, &fetch/1)
   end
 
-  @impl DataFetcher
+  @impl true
   def supports?({:character, _}), do: true
   def supports?({:corporation, _}), do: true
   def supports?({:alliance, _}), do: true
@@ -133,7 +140,7 @@ defmodule WandererKills.ESI.DataFetcher do
   """
   def get_killmail(killmail_id, killmail_hash)
       when is_integer(killmail_id) and is_binary(killmail_hash) do
-    Helper.killmail_get_or_set(killmail_id, fn ->
+    Helper.get_or_set(:killmails, killmail_id, fn ->
       fetch_killmail_from_api(killmail_id, killmail_hash)
     end)
   end
@@ -143,21 +150,12 @@ defmodule WandererKills.ESI.DataFetcher do
   """
   def get_killmails_batch(killmail_specs) when is_list(killmail_specs) do
     killmail_specs
-    |> Task.async_stream(
-      fn {killmail_id, killmail_hash} ->
-        get_killmail(killmail_id, killmail_hash)
-      end,
-      max_concurrency: Config.batch().concurrency_esi,
-      timeout: Config.timeouts().esi_request_ms
-    )
-    |> Enum.to_list()
-    |> Enum.map(fn
-      {:ok, result} ->
-        result
-
-      {:exit, reason} ->
-        {:error, Error.esi_error(:timeout, "Killmail fetch timeout", false, %{reason: reason})}
+    |> Flow.from_enumerable(max_demand: Config.batch().concurrency_esi)
+    |> Flow.map(fn {killmail_id, killmail_hash} ->
+      get_killmail(killmail_id, killmail_hash)
     end)
+    |> Flow.partition()
+    |> Enum.to_list()
   end
 
   # ============================================================================
@@ -173,20 +171,26 @@ defmodule WandererKills.ESI.DataFetcher do
   Updates ship groups by fetching fresh data from ESI.
   """
   def update_ship_groups(group_ids \\ @ship_group_ids) when is_list(group_ids) do
-    Logger.info("Updating ship groups from ESI", group_ids: group_ids)
+    log_info("Updating ship groups from ESI", group_ids: group_ids)
 
-    results = Enum.map(group_ids, &get_group/1)
+    results =
+      group_ids
+      |> Flow.from_enumerable(max_demand: Config.batch().concurrency_esi)
+      |> Flow.map(&get_group/1)
+      |> Flow.partition()
+      |> Enum.to_list()
+
     errors = Enum.filter(results, &match?({:error, _}, &1))
 
     if length(errors) > 0 do
-      Logger.error("Failed to update some ship groups",
+      log_error("Failed to update some ship groups",
         error_count: length(errors),
         total_groups: length(group_ids)
       )
 
       {:error, {:partial_failure, errors}}
     else
-      Logger.info("Successfully updated all ship groups")
+      log_info("Successfully updated all ship groups")
       :ok
     end
   end
@@ -195,14 +199,14 @@ defmodule WandererKills.ESI.DataFetcher do
   Fetches types for specific groups and returns parsed ship data.
   """
   def fetch_ship_types_for_groups(group_ids \\ @ship_group_ids) when is_list(group_ids) do
-    Logger.info("Fetching ship types for groups", group_ids: group_ids)
+    log_info("Fetching ship types for groups", group_ids: group_ids)
 
     with {:ok, groups} <- fetch_groups(group_ids),
          {:ok, ship_types} <- extract_and_fetch_types(groups) do
       {:ok, ship_types}
     else
       {:error, reason} ->
-        Logger.error("Failed to fetch ship types: #{inspect(reason)}")
+        log_error("Failed to fetch ship types", error: reason)
         {:error, reason}
     end
   end
@@ -228,15 +232,20 @@ defmodule WandererKills.ESI.DataFetcher do
   # ============================================================================
 
   defp fetch_groups(group_ids) do
-    Logger.debug("Fetching groups from ESI", group_ids: group_ids)
+    log_debug("Fetching groups from ESI", group_ids: group_ids)
 
-    results = Enum.map(group_ids, &get_group/1)
+    results =
+      group_ids
+      |> Flow.from_enumerable(max_demand: Config.batch().concurrency_esi)
+      |> Flow.map(&get_group/1)
+      |> Flow.partition()
+      |> Enum.to_list()
 
     errors = Enum.filter(results, &match?({:error, _}, &1))
     successes = Enum.filter(results, &match?({:ok, _}, &1))
 
     if length(errors) > 0 do
-      Logger.error("Failed to fetch some groups",
+      log_error("Failed to fetch some groups",
         error_count: length(errors),
         success_count: length(successes)
       )
@@ -249,22 +258,27 @@ defmodule WandererKills.ESI.DataFetcher do
   end
 
   defp extract_and_fetch_types(groups) do
-    Logger.debug("Extracting type IDs from groups")
+    log_debug("Extracting type IDs from groups")
 
     type_ids =
       groups
       |> Enum.flat_map(fn group -> Map.get(group, "types", []) end)
       |> Enum.uniq()
 
-    Logger.debug("Fetching types", type_count: length(type_ids))
+    log_debug("Fetching types", type_count: length(type_ids))
 
-    results = Enum.map(type_ids, &get_type/1)
+    results =
+      type_ids
+      |> Flow.from_enumerable(max_demand: Config.batch().concurrency_esi)
+      |> Flow.map(&get_type/1)
+      |> Flow.partition()
+      |> Enum.to_list()
 
     errors = Enum.filter(results, &match?({:error, _}, &1))
     successes = Enum.filter(results, &match?({:ok, _}, &1))
 
     if length(errors) > 0 do
-      Logger.error("Failed to fetch some types",
+      log_error("Failed to fetch some types",
         error_count: length(errors),
         success_count: length(successes)
       )
@@ -278,19 +292,10 @@ defmodule WandererKills.ESI.DataFetcher do
 
   defp fetch_batch(entity_type, ids) when is_list(ids) do
     ids
-    |> Task.async_stream(
-      fn id -> fetch_from_api(entity_type, id) end,
-      max_concurrency: Config.batch().concurrency_esi,
-      timeout: Config.timeouts().esi_request_ms
-    )
+    |> Flow.from_enumerable(max_demand: Config.batch().concurrency_esi)
+    |> Flow.map(fn id -> fetch_from_api(entity_type, id) end)
+    |> Flow.partition()
     |> Enum.to_list()
-    |> Enum.map(fn
-      {:ok, result} ->
-        result
-
-      {:exit, reason} ->
-        {:error, Error.esi_error(:timeout, "Batch fetch timeout", false, %{reason: reason})}
-    end)
   end
 
   defp fetch_from_api(entity_type, entity_id) do
@@ -301,7 +306,11 @@ defmodule WandererKills.ESI.DataFetcher do
         parse_response(entity_type, entity_id, response)
 
       {:error, reason} ->
-        Logger.error("Failed to fetch #{entity_type} #{entity_id}: #{inspect(reason)}")
+        log_error("Failed to fetch entity from ESI",
+          entity_type: entity_type,
+          entity_id: entity_id,
+          error: reason
+        )
 
         raise Error.esi_error(:api_error, "Failed to fetch #{entity_type} from ESI", false, %{
                 entity_type: entity_type,
@@ -314,7 +323,7 @@ defmodule WandererKills.ESI.DataFetcher do
   defp fetch_killmail_from_api(killmail_id, killmail_hash) do
     url = "#{esi_base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
 
-    Logger.debug("Fetching killmail from ESI",
+    log_debug("Fetching killmail from ESI",
       killmail_id: killmail_id,
       killmail_hash: String.slice(killmail_hash, 0, 8) <> "..."
     )
@@ -471,5 +480,36 @@ defmodule WandererKills.ESI.DataFetcher do
       timeout: Config.timeouts().esi_request_ms,
       recv_timeout: Config.timeouts().esi_request_ms
     ]
+  end
+
+  @doc """
+  Gets ESI base URL from configuration.
+  """
+  def base_url, do: Config.services().esi_base_url
+
+  @doc """
+  Returns the source name for this ESI client.
+  """
+  def source_name, do: "ESI"
+
+  @doc """
+  General update function that delegates to update_ship_groups.
+
+  This provides compatibility for modules that expect a general update function.
+
+  ## Options
+  - `opts` - Keyword list of options
+    - `group_ids` - List of group IDs to fetch (optional)
+
+  ## Examples
+      iex> WandererKills.ESI.DataFetcher.update()
+      :ok
+
+      iex> WandererKills.ESI.DataFetcher.update(group_ids: [23, 16])
+      :ok
+  """
+  def update(opts \\ []) do
+    group_ids = Keyword.get(opts, :group_ids)
+    update_ship_groups(group_ids)
   end
 end

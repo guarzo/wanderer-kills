@@ -14,9 +14,9 @@ defmodule WandererKills.Killmails.ZkbClientBehaviour do
   @callback fetch_system_killmails(integer()) :: {:ok, [map()]} | {:error, term()}
 
   @doc """
-  Gets the kill count for a system.
+  Gets the killmail count for a system.
   """
-  @callback get_system_kill_count(integer()) :: {:ok, integer()} | {:error, term()}
+  @callback get_system_killmail_count(integer()) :: {:ok, integer()} | {:error, term()}
 end
 
 defmodule WandererKills.Killmails.ZkbClient do
@@ -31,9 +31,11 @@ defmodule WandererKills.Killmails.ZkbClient do
   @behaviour WandererKills.Killmails.ZkbClientBehaviour
 
   require Logger
-  alias WandererKills.Infrastructure.{Config, Error}
+  import WandererKills.Support.Logger
+  alias WandererKills.Support.Error
   alias WandererKills.Http.{Client, ClientProvider}
   alias WandererKills.Observability.Telemetry
+  alias WandererKills.Config
 
   @base_url Application.compile_env(:wanderer_kills, :zkb_base_url)
 
@@ -47,7 +49,7 @@ defmodule WandererKills.Killmails.ZkbClient do
   """
   @spec fetch_killmail(killmail_id()) :: {:ok, killmail()} | {:error, term()}
   def fetch_killmail(killmail_id) when is_integer(killmail_id) and killmail_id > 0 do
-    Logger.debug("Fetching killmail from ZKB",
+    log_debug("Fetching killmail from ZKB",
       killmail_id: killmail_id,
       operation: :fetch_killmail,
       step: :start
@@ -115,7 +117,7 @@ defmodule WandererKills.Killmails.ZkbClient do
 
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    Logger.info("[ZKB] Fetching system killmails",
+    Logger.debug("[ZKB] Fetching system killmails",
       system_id: system_id,
       data_source: "zkillboard.com/api",
       request_type: "historical_data"
@@ -146,14 +148,7 @@ defmodule WandererKills.Killmails.ZkbClient do
             # Validate and log the format of received killmails
             validate_zkb_format(killmails, system_id)
 
-            # Convert ZKB reference format to partial killmail format for parser
-            converted_killmails = convert_zkb_to_partial_format(killmails)
-
-            Logger.info(
-              "[ZKB] Converted #{length(killmails)} reference killmails to partial format"
-            )
-
-            {:ok, converted_killmails}
+            {:ok, killmails}
 
           {:error, reason} ->
             Telemetry.fetch_system_error(system_id, reason, :zkb)
@@ -253,7 +248,16 @@ defmodule WandererKills.Killmails.ZkbClient do
         timeout: Config.timeouts().zkb_request_ms
       )
 
-    request_opts = Keyword.put(request_opts, :operation, :"fetch_#{entity_type}_killmails")
+    operation_atom =
+      case entity_type do
+        "systemID" -> :fetch_system_killmails
+        "characterID" -> :fetch_character_killmails
+        "corporationID" -> :fetch_corporation_killmails
+        "allianceID" -> :fetch_alliance_killmails
+        _ -> :fetch_unknown_killmails
+      end
+
+    request_opts = Keyword.put(request_opts, :operation, operation_atom)
 
     case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} -> Client.parse_json_response(response)
@@ -302,14 +306,14 @@ defmodule WandererKills.Killmails.ZkbClient do
   end
 
   @doc """
-  Gets the kill count for a system from zKillboard with telemetry.
+  Gets the killmail count for a system from zKillboard with telemetry.
   Returns {:ok, count} or {:error, reason}.
   """
-  @spec get_system_kill_count(system_id()) :: {:ok, integer()} | {:error, term()}
-  def get_system_kill_count(system_id) when is_integer(system_id) and system_id > 0 do
-    Logger.debug("Fetching system kill count from ZKB",
+  @spec get_system_killmail_count(system_id()) :: {:ok, integer()} | {:error, term()}
+  def get_system_killmail_count(system_id) when is_integer(system_id) and system_id > 0 do
+    Logger.debug("Fetching system killmail count from ZKB",
       system_id: system_id,
-      operation: :get_system_kill_count,
+      operation: :get_system_killmail_count,
       step: :start
     )
 
@@ -321,7 +325,7 @@ defmodule WandererKills.Killmails.ZkbClient do
         timeout: Config.timeouts().zkb_request_ms
       )
 
-    request_opts = Keyword.put(request_opts, :operation, :get_system_kill_count)
+    request_opts = Keyword.put(request_opts, :operation, :get_system_killmail_count)
 
     case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} ->
@@ -329,10 +333,10 @@ defmodule WandererKills.Killmails.ZkbClient do
           {:ok, data} when is_list(data) ->
             count = length(data)
 
-            Logger.debug("Successfully fetched system kill count from ZKB",
+            Logger.debug("Successfully fetched system killmail count from ZKB",
               system_id: system_id,
-              kill_count: count,
-              operation: :get_system_kill_count,
+              killmail_count: count,
+              operation: :get_system_killmail_count,
               step: :success
             )
 
@@ -342,13 +346,13 @@ defmodule WandererKills.Killmails.ZkbClient do
             error_reason =
               Error.zkb_error(
                 :unexpected_response,
-                "Expected list data for kill count but got different format",
+                "Expected list data for killmail count but got different format",
                 false
               )
 
-            Logger.error("Failed to fetch system kill count from ZKB",
+            Logger.error("Failed to fetch system killmail count from ZKB",
               system_id: system_id,
-              operation: :get_system_kill_count,
+              operation: :get_system_killmail_count,
               error: error_reason,
               step: :error
             )
@@ -356,9 +360,9 @@ defmodule WandererKills.Killmails.ZkbClient do
             {:error, error_reason}
 
           {:error, reason} ->
-            Logger.error("Failed to fetch system kill count from ZKB",
+            Logger.error("Failed to fetch system killmail count from ZKB",
               system_id: system_id,
-              operation: :get_system_kill_count,
+              operation: :get_system_killmail_count,
               error: reason,
               step: :error
             )
@@ -367,9 +371,9 @@ defmodule WandererKills.Killmails.ZkbClient do
         end
 
       {:error, reason} ->
-        Logger.error("Failed to fetch system kill count from ZKB",
+        Logger.error("Failed to fetch system killmail count from ZKB",
           system_id: system_id,
-          operation: :get_system_kill_count,
+          operation: :get_system_killmail_count,
           error: reason,
           step: :error
         )
@@ -378,7 +382,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     end
   end
 
-  def get_system_kill_count(invalid_id) do
+  def get_system_killmail_count(invalid_id) do
     {:error,
      Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
@@ -395,7 +399,6 @@ defmodule WandererKills.Killmails.ZkbClient do
     else
       case fetch_from_cache() do
         {:ok, systems} -> {:ok, systems}
-        {:error, _reason} -> do_fetch_active_systems()
       end
     end
   end
@@ -403,18 +406,12 @@ defmodule WandererKills.Killmails.ZkbClient do
   defp fetch_from_cache do
     alias WandererKills.Cache.Helper
 
-    case Helper.system_get_active_systems() do
+    case Helper.get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         {:ok, systems}
 
-      {:error, reason} ->
-        Logger.warning("Cache error for active systems, falling back to fresh fetch",
-          operation: :fetch_active_systems,
-          step: :cache_error,
-          error: reason
-        )
-
-        do_fetch_active_systems()
+      _ ->
+        {:error, Error.cache_error(:not_found, "Active systems not found in cache")}
     end
   end
 
@@ -479,192 +476,38 @@ defmodule WandererKills.Killmails.ZkbClient do
 
   # Note: Response parsing now handled by WandererKills.Http.Client
 
-  # Converts ZKB reference format to partial killmail format expected by parser.
-  # ZKB format: %{"killmail_id" => id, "zkb" => metadata}
-  # Partial format: %{"killID" => id, "zkb" => metadata}
-  defp convert_zkb_to_partial_format(zkb_killmails) when is_list(zkb_killmails) do
-    Enum.map(zkb_killmails, &convert_single_zkb_killmail/1)
-  end
-
-  defp convert_single_zkb_killmail(%{"killmail_id" => id, "zkb" => zkb_data}) do
-    %{
-      "killID" => id,
-      "zkb" => zkb_data
-    }
-  end
-
-  defp convert_single_zkb_killmail(killmail) do
-    Logger.warning("[ZKB] Unexpected killmail format, passing through unchanged",
-      killmail_keys: Map.keys(killmail),
-      killmail_sample: inspect(killmail, limit: 3)
-    )
-
-    killmail
-  end
-
   @doc """
   Validates and logs the format of killmails received from zKillboard API.
-  This helps us understand the data structure and compare it with RedisQ formats.
   """
   def validate_zkb_format(killmails, system_id) when is_list(killmails) do
+    log_debug("[ZKB] Received killmails",
+      system_id: system_id,
+      killmail_count: length(killmails),
+      data_source: "zkillboard.com/api"
+    )
+
+    # Track format for telemetry if we have killmails
     if length(killmails) > 0 do
-      sample_killmail = List.first(killmails)
-      format_analysis = analyze_killmail_structure(sample_killmail)
+      sample = List.first(killmails)
 
-      Logger.info("[ZKB] Format Analysis",
+      format_type =
+        cond do
+          Map.has_key?(sample, "victim") && Map.has_key?(sample, "attackers") ->
+            :full_esi_format
+
+          Map.has_key?(sample, "killmail_id") && Map.has_key?(sample, "zkb") ->
+            :zkb_reference_format
+
+          true ->
+            :unknown_format
+        end
+
+      # Emit telemetry event
+      WandererKills.Observability.Telemetry.zkb_format(format_type, %{
+        source: :zkb_api,
         system_id: system_id,
-        data_source: "zkillboard.com/api",
-        killmail_count: length(killmails),
-        sample_structure: format_analysis,
-        data_type: "historical_killmails"
-      )
-
-      # Log detailed structure for first few killmails
-      killmails
-      |> Enum.take(3)
-      |> Enum.with_index()
-      |> Enum.each(fn {killmail, index} ->
-        structure = analyze_killmail_structure(killmail)
-
-        # Log the raw killmail structure for debugging
-        Logger.info("[ZKB] Killmail RAW data",
-          sample_index: index,
-          killmail_id: Map.get(killmail, "killmail_id") || Map.get(killmail, "killID"),
-          raw_keys: Map.keys(killmail),
-          raw_structure: killmail |> inspect(limit: :infinity),
-          byte_size: byte_size(inspect(killmail))
-        )
-
-        Logger.debug("[ZKB] Killmail structure detail",
-          sample_index: index,
-          killmail_id: Map.get(killmail, "killmail_id") || Map.get(killmail, "killID"),
-          structure: structure,
-          has_full_data: has_full_killmail_data?(killmail),
-          needs_esi_fetch: needs_esi_fetch?(killmail)
-        )
-      end)
-
-      # Track format statistics
-      track_zkb_format_usage(format_analysis)
-    else
-      Logger.info("[ZKB] No killmails received",
-        system_id: system_id,
-        data_source: "zkillboard.com/api"
-      )
+        count: length(killmails)
+      })
     end
   end
-
-  # Analyze the structure of a killmail to understand its format
-  defp analyze_killmail_structure(killmail) when is_map(killmail) do
-    %{
-      has_killmail_id: Map.has_key?(killmail, "killmail_id"),
-      has_killID: Map.has_key?(killmail, "killID"),
-      has_victim: Map.has_key?(killmail, "victim"),
-      has_attackers: Map.has_key?(killmail, "attackers"),
-      has_solar_system_id: Map.has_key?(killmail, "solar_system_id"),
-      has_zkb: Map.has_key?(killmail, "zkb"),
-      has_hash: Map.has_key?(killmail, "hash"),
-      main_keys: Map.keys(killmail) |> Enum.sort(),
-      estimated_format: estimate_format_type(killmail)
-    }
-  end
-
-  # Determine if killmail has full ESI-style data
-  defp has_full_killmail_data?(killmail) do
-    required_fields = ["victim", "attackers", "solar_system_id"]
-    Enum.all?(required_fields, &Map.has_key?(killmail, &1))
-  end
-
-  # ZKB API confirmed to always return reference format requiring ESI fetch
-  defp needs_esi_fetch?(killmail) do
-    # ZKB API always returns reference format (killmail_id + zkb metadata only)
-    Map.has_key?(killmail, "killmail_id") && Map.has_key?(killmail, "zkb")
-  end
-
-  # Estimate the format type - ZKB API is consistently reference format
-  defp estimate_format_type(killmail) do
-    cond do
-      # Should not occur with ZKB API
-      has_full_killmail_data?(killmail) ->
-        :full_esi_format
-
-      Map.has_key?(killmail, "killmail_id") && Map.has_key?(killmail, "zkb") ->
-        :zkb_reference_format
-
-      true ->
-        :unknown_format
-    end
-  end
-
-  # Track ZKB format usage for comparison with RedisQ
-  defp track_zkb_format_usage(format_analysis) do
-    format_type = format_analysis.estimated_format
-
-    # Emit telemetry event
-    :telemetry.execute(
-      [:wanderer_kills, :zkb, :format],
-      %{count: 1},
-      %{
-        format: format_type,
-        data_source: "zkillboard_api",
-        timestamp: DateTime.utc_now(),
-        module: __MODULE__,
-        analysis: format_analysis
-      }
-    )
-
-    # Update persistent counters for periodic summaries
-    current_stats = :persistent_term.get({__MODULE__, :zkb_format_stats}, %{})
-    updated_stats = Map.update(current_stats, format_type, 1, &(&1 + 1))
-    :persistent_term.put({__MODULE__, :zkb_format_stats}, updated_stats)
-
-    new_count = :persistent_term.get({__MODULE__, :zkb_format_counter}, 0) + 1
-    :persistent_term.put({__MODULE__, :zkb_format_counter}, new_count)
-
-    # Log summary every 50 killmails
-    if rem(new_count, 50) == 0 do
-      log_zkb_format_summary(updated_stats, new_count)
-    end
-  end
-
-  # Log comprehensive ZKB format summary
-  defp log_zkb_format_summary(stats, total_count) do
-    Logger.info("[ZKB] Format Summary",
-      data_source: "zkillboard.com/api (historical)",
-      total_killmails_analyzed: total_count,
-      format_distribution: stats,
-      purpose: "Format validation for preloader vs RedisQ comparison"
-    )
-
-    Enum.each(stats, fn {format, count} ->
-      percentage = Float.round(count / total_count * 100, 1)
-      recommendation = get_zkb_format_recommendation(format, percentage)
-
-      Logger.info("[ZKB] Format details",
-        format: format,
-        count: count,
-        percentage: "#{percentage}%",
-        description: describe_zkb_format(format),
-        recommendation: recommendation
-      )
-    end)
-  end
-
-  # Describe ZKB format types
-  defp describe_zkb_format(:full_esi_format),
-    do: "Complete killmail with victim/attackers (unexpected for ZKB API)"
-
-  defp describe_zkb_format(:zkb_reference_format),
-    do: "zKillboard reference format (killmail_id + zkb metadata) - confirmed production format"
-
-  defp describe_zkb_format(:unknown_format), do: "Unknown/unexpected format"
-
-  # Provide recommendations for ZKB formats
-  defp get_zkb_format_recommendation(:full_esi_format, _),
-    do: "UNEXPECTED: ZKB API should only return reference format"
-
-  defp get_zkb_format_recommendation(:zkb_reference_format, _),
-    do: "EXPECTED: Standard ZKB reference format - uses partial parser + ESI fetch"
-
-  defp get_zkb_format_recommendation(:unknown_format, _), do: "ERROR: Review data structure"
 end

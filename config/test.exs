@@ -33,7 +33,7 @@ config :wanderer_kills,
   # Mock clients for testing
   http_client: WandererKills.Http.Client.Mock,
   zkb_client: WandererKills.Zkb.Client.Mock,
-  esi_client: WandererKills.ESI.Client.Mock,
+  esi_client: WandererKills.ESI.DataFetcher.Mock,
 
   # Use test cache names
   killmails_cache_name: :wanderer_test_killmails_cache,

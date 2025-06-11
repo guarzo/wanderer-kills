@@ -9,8 +9,9 @@ The WandererKills service provides real-time EVE Online killmail data through mu
 The service runs on `http://localhost:4004` by default and provides:
 
 - **REST API** - Fetch kill data and manage subscriptions
-- **Real-time Updates** - Phoenix PubSub for internal applications
+- **WebSocket** - Real-time kill notifications
 - **Webhooks** - HTTP callbacks for external services
+- **Phoenix PubSub** - Direct message broadcasting for Elixir applications
 - **Client Library** - Elixir behaviour for direct integration
 
 ## Authentication
@@ -56,19 +57,26 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
       {
         "killmail_id": 123456789,
         "kill_time": "2024-01-15T14:30:00Z",
-        "solar_system_id": 30000142,
+        "system_id": 30000142,
         "victim": {
           "character_id": 987654321,
+          "character_name": "Victim Name",
           "corporation_id": 123456789,
+          "corporation_name": "Victim Corp",
           "alliance_id": 456789123,
+          "alliance_name": "Victim Alliance",
           "ship_type_id": 671,
+          "ship_name": "Raven",
           "damage_taken": 2847
         },
         "attackers": [
           {
             "character_id": 111222333,
+            "character_name": "Attacker Name",
             "corporation_id": 444555666,
+            "corporation_name": "Attacker Corp",
             "ship_type_id": 17918,
+            "ship_name": "Rattlesnake",
             "weapon_type_id": 2456,
             "damage_done": 2847,
             "final_blow": true
@@ -88,8 +96,7 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
     ],
     "cached": false
   },
-  "timestamp": "2024-01-15T15:00:00Z",
-  "error": null
+  "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
 
@@ -113,14 +120,13 @@ Content-Type: application/json
 ```json
 {
   "data": {
-    "systems_kills": {
+    "systems_killmails": {
       "30000142": [...],
       "30000144": [...],
       "30000145": [...]
     }
   },
-  "timestamp": "2024-01-15T15:00:00Z",
-  "error": null
+  "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
 
@@ -156,7 +162,8 @@ GET /api/v1/kills/count/{system_id}
     "system_id": 30000142,
     "count": 47,
     "timestamp": "2024-01-15T15:00:00Z"
-  }
+  },
+  "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
 
@@ -185,8 +192,7 @@ Content-Type: application/json
     "subscription_id": "abc123def456",
     "status": "active"
   },
-  "timestamp": "2024-01-15T15:00:00Z",
-  "error": null
+  "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
 
@@ -206,6 +212,90 @@ Get all active subscriptions.
 GET /api/v1/subscriptions
 ```
 
+## WebSocket Integration
+
+Connect to the WebSocket endpoint for real-time kill notifications.
+
+### Connection
+
+```
+ws://localhost:4004/ws
+```
+
+### Subscribe to Systems
+
+After connecting, send a subscription message:
+
+```json
+{
+  "action": "subscribe",
+  "systems": [30000142, 30000144]
+}
+```
+
+### Receiving Updates
+
+#### Kill Update
+
+```json
+{
+  "type": "killmail_update",
+  "system_id": 30000142,
+  "killmail": {
+    "killmail_id": 123456789,
+    "kill_time": "2024-01-15T14:30:00Z",
+    "system_id": 30000142,
+    "victim": {...},
+    "attackers": [...],
+    "zkb": {...}
+  }
+}
+```
+
+#### System Update
+
+```json
+{
+  "type": "system_update",
+  "system_id": 30000142,
+  "kill_count": 48,
+  "timestamp": "2024-01-15T15:00:00Z"
+}
+```
+
+### WebSocket Client Example (JavaScript)
+
+```javascript
+const ws = new WebSocket('ws://localhost:4004/ws');
+
+ws.onopen = () => {
+  console.log('Connected to WandererKills');
+  
+  // Subscribe to systems
+  ws.send(JSON.stringify({
+    action: 'subscribe',
+    systems: [30000142, 30000144]
+  }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  
+  switch(data.type) {
+    case 'killmail_update':
+      console.log('New kill:', data.killmail.killmail_id);
+      break;
+    case 'system_update':
+      console.log(`System ${data.system_id} has ${data.kill_count} kills`);
+      break;
+  }
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+```
+
 ## Webhook Integration
 
 When you create a subscription with a `callback_url`, the service will send HTTP POST requests to your endpoint when new kills are detected.
@@ -216,14 +306,14 @@ When you create a subscription with a `callback_url`, the service will send HTTP
 
 ```json
 {
-  "type": "detailed_kill_update",
+  "type": "killmail_update",
   "data": {
     "solar_system_id": 30000142,
     "kills": [
       {
         "killmail_id": 123456789,
         "kill_time": "2024-01-15T14:30:00Z",
-        "solar_system_id": 30000142,
+        "system_id": 30000142,
         "victim": {...},
         "attackers": [...],
         "zkb": {...}
@@ -238,7 +328,7 @@ When you create a subscription with a `callback_url`, the service will send HTTP
 
 ```json
 {
-  "type": "kill_count_update",
+  "type": "killmail_count_update",
   "data": {
     "solar_system_id": 30000142,
     "count": 48,
@@ -267,10 +357,10 @@ app = Flask(__name__)
 def handle_kill_webhook():
     data = request.get_json()
 
-    if data['type'] == 'detailed_kill_update':
+    if data['type'] == 'killmail_update':
         for kill in data['data']['kills']:
             process_kill(kill)
-    elif data['type'] == 'kill_count_update':
+    elif data['type'] == 'killmail_count_update':
         update_system_count(
             data['data']['solar_system_id'],
             data['data']['count']
@@ -280,7 +370,7 @@ def handle_kill_webhook():
 
 def process_kill(kill):
     # Your kill processing logic here
-    print(f"New kill: {kill['killmail_id']} in system {kill['solar_system_id']}")
+    print(f"New kill: {kill['killmail_id']} in system {kill['system_id']}")
 
 def update_system_count(system_id, count):
     # Your count update logic here
@@ -319,13 +409,13 @@ defmodule MyApp.KillSubscriber do
     {:ok, state}
   end
 
-  def handle_info(%{type: :detailed_kill_update, solar_system_id: system_id, kills: kills}, state) do
+  def handle_info(%{type: :killmail_update, solar_system_id: system_id, kills: kills}, state) do
     IO.puts("Received #{length(kills)} new kills for system #{system_id}")
     # Process kills...
     {:noreply, state}
   end
 
-  def handle_info(%{type: :kill_count_update, solar_system_id: system_id, kills: count}, state) do
+  def handle_info(%{type: :killmail_count_update, solar_system_id: system_id, kills: count}, state) do
     IO.puts("System #{system_id} kill count updated to #{count}")
     # Update your local state...
     {:noreply, state}
@@ -347,13 +437,13 @@ For direct integration within Elixir applications, implement the `WandererKills.
 alias WandererKills.Client
 
 # Fetch system kills
-{:ok, kills} = Client.fetch_system_kills(30000142, 24, 100)
+{:ok, kills} = Client.get_system_killmails(30000142, 24, 100)
 
 # Fetch multiple systems
-{:ok, systems_kills} = Client.fetch_systems_kills([30000142, 30000144], 24, 50)
+{:ok, systems_kills} = Client.get_systems_killmails([30000142, 30000144], 24, 50)
 
 # Get cached data
-cached_kills = Client.fetch_cached_kills(30000142)
+cached_kills = Client.get_cached_killmails(30000142)
 
 # Manage subscriptions
 {:ok, subscription_id} = Client.subscribe_to_kills(
@@ -372,7 +462,7 @@ defmodule MyApp.KillsClient do
   @behaviour WandererKills.ClientBehaviour
 
   @impl true
-  def fetch_system_kills(system_id, since_hours, limit) do
+  def get_system_killmails(system_id, since_hours, limit) do
     # Your implementation using the REST API
     url = "http://wanderer-kills:4004/api/v1/kills/system/#{system_id}"
     params = %{since_hours: since_hours, limit: limit}
@@ -396,24 +486,28 @@ The service returns standardized error responses:
 
 ```json
 {
-  "data": null,
-  "error": "Invalid system ID",
-  "code": "INVALID_PARAMETER",
-  "details": {
-    "parameter": "system_id",
-    "value": "invalid"
+  "error": {
+    "type": "not_found",
+    "message": "Resource not found",
+    "code": "NOT_FOUND",
+    "details": {
+      "resource": "killmail",
+      "id": 123456789
+    }
   },
   "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
 
-### Common Error Codes
+### Common Error Types
 
-- `INVALID_PARAMETER` - Invalid request parameters
-- `NOT_FOUND` - Resource not found
-- `RATE_LIMITED` - Rate limit exceeded
-- `INTERNAL_ERROR` - Server error
-- `TIMEOUT` - Request timeout
+- `invalid_parameter` - Invalid request parameters
+- `not_found` - Resource not found
+- `rate_limit_exceeded` - Rate limit exceeded
+- `internal_error` - Server error
+- `timeout` - Request timeout
+- `external_api_error` - External API failure
+- `validation_error` - Data validation failed
 
 ### Error Handling Best Practices
 
@@ -470,7 +564,7 @@ GET /status
     "size": 15420
   },
   "active_subscriptions": 42,
-  "websocket_connected": true,
+  "websocket_connections": 15,
   "last_kill_received": "2024-01-15T14:58:30Z"
 }
 ```
@@ -570,6 +664,7 @@ print(f"Created subscription: {subscription['subscription_id']}")
 - **Cache Results** - Implement client-side caching with appropriate TTLs
 - **Use Cached Endpoints** - Use `/cached/` endpoints for frequently accessed data
 - **Limit Request Size** - Keep system lists under 50 systems per request
+- **Use WebSocket** - For real-time updates instead of polling
 
 ### Reliability
 
@@ -584,6 +679,16 @@ print(f"Created subscription: {subscription['subscription_id']}")
 - **Rate Limiting** - Implement client-side rate limiting
 - **HTTPS Only** - Use HTTPS in production environments
 - **API Keys** - Implement proper authentication for production
+
+## Field Normalization
+
+The service normalizes field names for consistency:
+
+- `solar_system_id` → `system_id`
+- `killID` → `killmail_id`
+- `killmail_time` → `kill_time`
+
+All responses use the normalized field names internally.
 
 ## Troubleshooting
 
@@ -624,6 +729,37 @@ config :logger, level: :debug
 docker logs wanderer-kills-container -f
 ```
 
+## Monitoring Integration
+
+The service provides comprehensive monitoring every 5 minutes in the logs:
+
+```text
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 WANDERER KILLS STATUS REPORT (5-minute summary)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 WEBSOCKET ACTIVITY:
+   Active Connections: 15
+   Active Subscriptions: 12 (covering 87 systems)
+
+📤 KILL DELIVERY:
+   Total Kills Sent: 1234 (Realtime: 1150, Preload: 84)
+   Delivery Rate: 4.1 kills/minute
+
+🔄 REDISQ ACTIVITY:
+   Kills Processed: 327
+   Active Systems: 45
+
+💾 CACHE PERFORMANCE:
+   Hit Rate: 87.5%
+   Cache Size: 2156 entries
+
+📦 STORAGE METRICS:
+   Total Killmails: 15234
+   Unique Systems: 234
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
 ## Support
 
 For issues and questions:
@@ -636,6 +772,6 @@ For issues and questions:
 
 The current API version is `v1`. Future versions will be released with backward compatibility guarantees:
 
-- **URL Versioning**: `/api/v1/`, `/api/v2/`
-- **Deprecation Notice**: 6 months advance notice
+- **URL Versioning**: `/api/v1/`
+- **Deprecation Notice**: 6-month advance notice
 - **Migration Guide**: Provided for breaking changes
