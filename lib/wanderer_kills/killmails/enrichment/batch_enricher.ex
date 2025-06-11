@@ -30,19 +30,38 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
 
   ## Returns
   - `{:ok, enriched_killmails}` - List of enriched killmails
+  - `{:error, reason}` - If enrichment fails
   """
-  @spec enrich_killmails_batch([map()]) :: {:ok, [map()]}
+  @spec enrich_killmails_batch([map()]) :: {:ok, [map()]} | {:error, term()}
   def enrich_killmails_batch(killmails) when is_list(killmails) do
-    # Step 1: Collect all unique entity IDs
-    entity_ids = collect_entity_ids(killmails)
+    try do
+      # Step 1: Collect all unique entity IDs
+      entity_ids = collect_entity_ids(killmails)
 
-    # Step 2: Fetch all entities in batch
-    entity_cache = fetch_entities_batch(entity_ids)
+      # Step 2: Fetch all entities in batch
+      entity_cache = fetch_entities_batch(entity_ids)
 
-    # Step 3: Apply enrichment using the cache
-    enriched = Enum.map(killmails, &enrich_killmail_with_cache(&1, entity_cache))
+      # Step 3: Apply enrichment using the cache
+      enriched = Enum.map(killmails, &enrich_killmail_with_cache(&1, entity_cache))
 
-    {:ok, enriched}
+      {:ok, enriched}
+    rescue
+      error ->
+        Logger.error("Failed to enrich killmails batch",
+          error: error,
+          killmail_count: length(killmails)
+        )
+
+        {:error, error}
+    catch
+      :throw, reason ->
+        Logger.error("Failed to enrich killmails batch",
+          reason: reason,
+          killmail_count: length(killmails)
+        )
+
+        {:error, reason}
+    end
   end
 
   @doc """

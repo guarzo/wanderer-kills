@@ -98,15 +98,30 @@ defmodule WandererKillsWeb.KillsController do
       {:ok, system_id} ->
         Logger.debug("Fetching cached kills", system_id: system_id)
 
-        killmails = Client.fetch_cached_killmails(system_id)
+        case Client.fetch_cached_killmails(system_id) do
+          {:ok, killmails} ->
+            response = %{
+              kills: killmails,
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+              error: nil
+            }
 
-        response = %{
-          kills: killmails,
-          timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-          error: nil
-        }
+            render_success(conn, response)
 
-        render_success(conn, response)
+          {:error, reason} ->
+            Logger.error("Failed to fetch cached killmails", system_id: system_id, reason: reason)
+            render_error(conn, :internal_server_error, "Failed to fetch cached killmails", reason)
+
+          killmails when is_list(killmails) ->
+            # Handle case where Client.fetch_cached_killmails returns list directly
+            response = %{
+              kills: killmails,
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+              error: nil
+            }
+
+            render_success(conn, response)
+        end
 
       {:error, %Error{}} ->
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")

@@ -20,17 +20,24 @@ defmodule WandererKills.App.EtsManager do
     Logger.info("Starting ETS Manager")
 
     # Create the websocket stats table with concurrency optimizations
-    :ets.new(@websocket_stats_table, [
-      :named_table,
-      :public,
-      :set,
-      read_concurrency: true,
-      write_concurrency: true
-    ])
+    # Handle the case where table might already exist during hot-code reloads
+    case :ets.info(@websocket_stats_table) do
+      :undefined ->
+        :ets.new(@websocket_stats_table, [
+          :named_table,
+          :public,
+          :set,
+          read_concurrency: true,
+          write_concurrency: true
+        ])
 
-    :ets.insert(@websocket_stats_table, {:kills_sent_realtime, 0})
-    :ets.insert(@websocket_stats_table, {:kills_sent_preload, 0})
-    :ets.insert(@websocket_stats_table, {:last_reset, DateTime.utc_now()})
+        :ets.insert(@websocket_stats_table, {:kills_sent_realtime, 0})
+        :ets.insert(@websocket_stats_table, {:kills_sent_preload, 0})
+        :ets.insert(@websocket_stats_table, {:last_reset, DateTime.utc_now()})
+
+      _ ->
+        Logger.debug("ETS table #{@websocket_stats_table} already exists, skipping creation")
+    end
 
     Logger.info("ETS tables initialized successfully")
 

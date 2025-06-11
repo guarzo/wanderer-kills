@@ -104,10 +104,22 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
       # Batch enrich all valid killmails if enrichment is enabled
       final_killmails =
         if enrich? and not Enum.empty?(validated_killmails) do
-          {:ok, enriched} = BatchEnricher.enrich_killmails_batch(validated_killmails)
-          # Cache all enriched killmails
-          Enum.each(enriched, &ESIFetcher.cache_enriched_killmail/1)
-          enriched
+          case BatchEnricher.enrich_killmails_batch(validated_killmails) do
+            {:ok, enriched} ->
+              # Cache all enriched killmails
+              Enum.each(enriched, &ESIFetcher.cache_enriched_killmail/1)
+              enriched
+
+            {:error, reason} ->
+              Logger.error("Failed to enrich killmails batch",
+                reason: reason,
+                batch_size: length(validated_killmails)
+              )
+
+              # Fall back to unenriched killmails
+              Enum.each(validated_killmails, &ESIFetcher.cache_enriched_killmail/1)
+              validated_killmails
+          end
         else
           Enum.each(validated_killmails, &ESIFetcher.cache_enriched_killmail/1)
           validated_killmails

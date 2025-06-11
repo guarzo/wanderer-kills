@@ -7,7 +7,12 @@ defmodule WandererKillsWeb.ErrorView do
 
   # For API-only app, always return JSON with status code
   def render(template, _assigns) do
-    status_code = template |> String.split(".") |> hd() |> String.to_integer()
+    status_code =
+      case template |> String.split(".") |> hd() |> Integer.parse() do
+        {code, _} -> code
+        :error -> 500
+      end
+
     status_message = Phoenix.Controller.status_message_from_template(template)
 
     %{
