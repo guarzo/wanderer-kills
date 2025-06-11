@@ -383,6 +383,18 @@ defmodule WandererKills.Observability.Telemetry do
       nil
     )
 
+    # Supervised task handlers
+    :telemetry.attach_many(
+      "wanderer-kills-task-handler",
+      [
+        [:wanderer_kills, :task, :start],
+        [:wanderer_kills, :task, :stop],
+        [:wanderer_kills, :task, :error]
+      ],
+      &WandererKills.Observability.Telemetry.handle_task_event/4,
+      nil
+    )
+
     :ok
   end
 
@@ -401,6 +413,7 @@ defmodule WandererKills.Observability.Telemetry do
     :telemetry.detach("wanderer-kills-websocket-handler")
     :telemetry.detach("wanderer-kills-zkb-handler")
     :telemetry.detach("wanderer-kills-system-handler")
+    :telemetry.detach("wanderer-kills-task-handler")
     :ok
   end
 
@@ -572,6 +585,26 @@ defmodule WandererKills.Observability.Telemetry do
             process_cpu = Map.get(measurements, :process_cpu, "N/A")
             Logger.debug("[System] CPU usage - Total: #{total_cpu}%, Process: #{process_cpu}%")
         end
+    end
+  end
+
+  @doc """
+  Handles supervised task telemetry events.
+  """
+  def handle_task_event([:wanderer_kills, :task, event], measurements, metadata, _config) do
+    case event do
+      :start ->
+        Logger.debug("[Task] Started #{metadata.task_name}")
+
+      :stop ->
+        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+        Logger.debug("[Task] Completed #{metadata.task_name} in #{duration_ms}ms")
+
+      :error ->
+        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+        Logger.error(
+          "[Task] Failed #{metadata.task_name} after #{duration_ms}ms - #{metadata.error}"
+        )
     end
   end
 end

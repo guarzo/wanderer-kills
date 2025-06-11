@@ -203,20 +203,23 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
 
   @spec store_killmail_async(integer(), killmail(), term()) :: :ok
   defp store_killmail_async(system_id, enriched, killmail_id) do
-    Task.start(fn ->
-      try do
-        killmail_id = enriched["killmail_id"]
-        :ok = KillmailStore.put(killmail_id, system_id, enriched)
+    alias WandererKills.Support.SupervisedTask
+    
+    SupervisedTask.start_child(
+      fn ->
+        try do
+          killmail_id = enriched["killmail_id"]
+          :ok = KillmailStore.put(killmail_id, system_id, enriched)
 
-        Logger.debug("Successfully enriched and stored killmail", %{
-          killmail_id: killmail_id,
-          system_id: system_id,
-          operation: :process_killmail,
-          status: :success
-        })
-      rescue
-        # Only rescue specific known exception types to avoid masking bugs
-        error in [ArgumentError] ->
+          Logger.debug("Successfully enriched and stored killmail", %{
+            killmail_id: killmail_id,
+            system_id: system_id,
+            operation: :process_killmail,
+            status: :success
+          })
+        rescue
+          # Only rescue specific known exception types to avoid masking bugs
+          error in [ArgumentError] ->
           Logger.error("Invalid arguments when storing killmail", %{
             killmail_id: killmail_id,
             system_id: system_id,
@@ -234,7 +237,10 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
             status: :error
           })
       end
-    end)
+    end,
+    task_name: "store_killmail",
+    metadata: %{system_id: system_id, killmail_id: killmail_id}
+    )
 
     :ok
   end

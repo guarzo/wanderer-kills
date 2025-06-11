@@ -91,11 +91,9 @@ defmodule WandererKills.App.Application do
   end
 
   defp maybe_preloader(children) do
-    if Config.start_preloader?() do
-      children ++ [WandererKills.Preloader.Supervisor]
-    else
-      children
-    end
+    # Preloader.Supervisor was removed - it was unused dead code
+    # The actual preloading is handled by WandererKills.Preloader
+    children
   end
 
   defp maybe_redisq(children) do
@@ -108,17 +106,21 @@ defmodule WandererKills.App.Application do
 
   @spec start_ship_type_update() :: :ok
   defp start_ship_type_update do
-    Task.start(fn ->
-      WandererKills.ShipTypes.Info.warm_cache()
+    alias WandererKills.Support.SupervisedTask
+    
+    SupervisedTask.start_child(
+      fn ->
+        case WandererKills.ShipTypes.Updater.update_ship_types() do
+          {:error, reason} ->
+            Logger.error("Failed to update ship types: #{inspect(reason)}")
 
-      case WandererKills.ShipTypes.Updater.update_ship_types() do
-        {:error, reason} ->
-          Logger.error("Failed to update ship types: #{inspect(reason)}")
-
-        _ ->
-          :ok
-      end
-    end)
+          _ ->
+            :ok
+        end
+      end,
+      task_name: "ship_type_update",
+      metadata: %{module: __MODULE__}
+    )
 
     :ok
   end

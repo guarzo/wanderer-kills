@@ -112,32 +112,15 @@ defmodule WandererKills.Killmails.Transformations do
   ## Returns
   - Normalized victim map with defaults applied
   """
-  @spec normalize_victim_data(map()) :: map()
-  def normalize_victim_data(victim) when is_map(victim) do
-    Map.merge(@victim_defaults, victim)
+  @spec normalize_victim(map()) :: map()
+  def normalize_victim(victim) when is_map(victim) do
+    apply_defaults(victim, @victim_defaults)
   end
 
   @doc """
   Normalizes attackers data structure with defaults.
 
-  Applies default values to each attacker and calculates total attacker count.
-
-  ## Parameters
-  - `attackers` - List of raw attacker data maps
-
-  ## Returns
-  - `{normalized_attackers, attacker_count}` - Tuple of normalized list and count
-  """
-  @spec normalize_attackers_data([map()]) :: {[map()], non_neg_integer()}
-  def normalize_attackers_data(attackers) when is_list(attackers) do
-    normalized = Enum.map(attackers, &Map.merge(@attacker_defaults, &1))
-    {normalized, length(normalized)}
-  end
-
-  @doc """
-  Normalizes attackers data structure with defaults (list only).
-
-  Applies default values to each attacker without calculating count.
+  Applies default values to each attacker.
 
   ## Parameters
   - `attackers` - List of raw attacker data maps
@@ -145,24 +128,29 @@ defmodule WandererKills.Killmails.Transformations do
   ## Returns
   - Normalized attackers list
   """
-  @spec normalize_attackers(list()) :: list()
+  @spec normalize_attackers([map()]) :: [map()]
   def normalize_attackers(attackers) when is_list(attackers) do
-    Enum.map(attackers, &Map.merge(@attacker_defaults, &1))
+    normalize_entity_list(attackers, @attacker_defaults)
   end
 
   @doc """
-  Normalizes victim data structure with defaults (alias for normalize_victim_data).
+  Normalizes attackers data and returns count.
+
+  Applies default values to each attacker and calculates total attacker count.
+  This is a convenience function when you need both normalized data and count.
 
   ## Parameters
-  - `victim` - Raw victim data map
+  - `attackers` - List of raw attacker data maps
 
   ## Returns
-  - Normalized victim map with defaults applied
+  - `{normalized_attackers, attacker_count}` - Tuple of normalized list and count
   """
-  @spec normalize_victim(map()) :: map()
-  def normalize_victim(victim) when is_map(victim) do
-    normalize_victim_data(victim)
+  @spec normalize_attackers_with_count([map()]) :: {[map()], non_neg_integer()}
+  def normalize_attackers_with_count(attackers) when is_list(attackers) do
+    normalized = normalize_attackers(attackers)
+    {normalized, length(normalized)}
   end
+
 
   # ============================================================================
   # Data Flattening Operations
@@ -360,56 +348,69 @@ defmodule WandererKills.Killmails.Transformations do
     do: {:error, Error.ship_types_error(:no_ship_type_id, "No ship type ID provided")}
 
   defp get_ship_name(ship_type_id) when is_integer(ship_type_id) do
-    try do
-      case WandererKills.ShipTypes.Info.get_ship_type(ship_type_id) do
-        {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
-          {:ok, ship_name}
-
-        {:ok, ship_data} ->
-          Logger.warning(
-            "Ship data missing name field for type ID: #{ship_type_id}, data: #{inspect(ship_data)}"
-          )
-
-          {:error, Error.ship_types_error(:invalid_ship_data, "Ship data missing name field")}
-
-        {:error, %Error{type: :not_found}} ->
-          # Try to fetch from ESI if not in cache
-
-          case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
-            {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
-              {:ok, ship_name}
-
-            {:ok, _} ->
-              Logger.warning("ESI data missing name field for type ID: #{ship_type_id}")
-              {:error, Error.ship_types_error(:invalid_ship_data, "ESI data missing name field")}
-
-            {:error, reason} ->
-              Logger.warning(
-                "Failed to fetch from ESI for type ID: #{ship_type_id}, error: #{inspect(reason)}"
-              )
-
-              {:error, Error.ship_types_error(:ship_name_not_found, "Ship type not found")}
-          end
-
-        {:error, reason} ->
-          Logger.warning(
-            "Ship type lookup failed for type ID: #{ship_type_id}, error: #{inspect(reason)}"
-          )
-
-          {:error, Error.ship_types_error(:ship_name_not_found, "Ship type lookup failed")}
-      end
-    rescue
-      error ->
-        Logger.error(
-          "Exception while looking up ship name for type ID: #{ship_type_id}, error: #{inspect(error)}"
-        )
-
-        {:error, error}
-    end
+    ship_type_id
+    |> get_ship_from_cache()
+    |> fallback_to_esi(ship_type_id)
   end
 
   defp get_ship_name(_),
     do: {:error, Error.ship_types_error(:invalid_ship_type_id, "Invalid ship type ID format")}
+
+  # Try to get ship data from cache first
+  defp get_ship_from_cache(ship_type_id) do
+    case WandererKills.ShipTypes.Info.get_ship_type(ship_type_id) do
+      {:ok, ship_data} -> extract_ship_name(ship_data)
+      error -> error
+    end
+  end
+
+  # Extract ship name from ship data, handling both atom and string keys
+  defp extract_ship_name(ship_data) when is_map(ship_data) do
+    case Map.get(ship_data, :name) || Map.get(ship_data, "name") do
+      name when is_binary(name) -> 
+        {:ok, name}
+      _ -> 
+        {:error, Error.ship_types_error(:invalid_ship_data, "Ship data missing name field")}
+    end
+  end
+
+  # Fallback to ESI if not found in cache
+  defp fallback_to_esi({:error, %Error{type: :not_found}}, ship_type_id) do
+    case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
+      {:ok, %{"name" => name}} when is_binary(name) -> 
+        {:ok, name}
+      {:ok, _} -> 
+        {:error, Error.ship_types_error(:invalid_ship_data, "ESI data missing name field")}
+      {:error, _reason} -> 
+        {:error, Error.ship_types_error(:ship_name_not_found, "Ship type not found")}
+    end
+  end
+
+  defp fallback_to_esi(result, _ship_type_id), do: result
+
+  # ============================================================================  
+  # Common Normalization Patterns
+  # ============================================================================
+
+  @doc """
+  Applies default values to a data structure.
+  
+  Generic function for merging defaults with provided data.
+  """
+  @spec apply_defaults(map(), map()) :: map()
+  def apply_defaults(data, defaults) when is_map(data) and is_map(defaults) do
+    Map.merge(defaults, data)
+  end
+
+  @doc """
+  Normalizes a list of entities with defaults.
+  
+  Generic function for normalizing lists of data structures.
+  """
+  @spec normalize_entity_list([map()], map()) :: [map()]
+  def normalize_entity_list(entities, defaults) when is_list(entities) and is_map(defaults) do
+    Enum.map(entities, &apply_defaults(&1, defaults))
+  end
 
   # ============================================================================
   # Utility Functions

@@ -32,7 +32,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   use WandererKillsWeb, :channel
 
   require Logger
-  alias WandererKills.Killmails.Preloader
+  alias WandererKills.Preloader
 
   alias WandererKills.SubscriptionManager
   alias WandererKills.Config

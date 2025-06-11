@@ -45,10 +45,10 @@ defmodule WandererKills.Http.Client do
 
   require Logger
   import WandererKills.Support.Logger
-  alias WandererKills.Support.Error.{ConnectionError, TimeoutError, RateLimitError}
   alias WandererKills.Support.{Error, Retry}
-  alias WandererKills.Http.{ClientProvider, Base}
+  alias WandererKills.Http.ClientProvider
   alias WandererKills.Observability.Telemetry
+  alias WandererKills.Config
 
   @type url :: String.t()
   @type headers :: [{String.t(), String.t()}]
@@ -169,37 +169,22 @@ defmodule WandererKills.Http.Client do
     # Merge default headers with custom headers
     merged_headers = ClientProvider.default_headers() ++ headers
 
-    fetch_fun = fn ->
-      case do_get(url, merged_headers, raw, into) do
-        {:ok, response} ->
-          response
-
-        {:error, :rate_limited} ->
-          # Turn a 429 into a retryable exception
-          raise RateLimitError, message: "HTTP 429 Rate Limit for #{url}"
-
-        {:error, %TimeoutError{} = err} ->
-          raise err
-
-        {:error, %ConnectionError{} = err} ->
-          raise err
-
-        {:error, other_reason} ->
-          # Non-retriable: short-circuit
-          throw({:error, other_reason})
-      end
-    end
-
-    result =
-      try do
-        {:ok, response} = Retry.retry_with_backoff(fetch_fun)
+    case do_get(url, merged_headers, raw, into) do
+      {:ok, response} ->
         {:ok, response}
-      catch
-        {:error, reason} ->
-          {:error, reason}
-      end
 
-    result
+      {:error, %Error{type: :timeout}} ->
+        {:error, Error.http_error(:timeout, "Request to #{url} timed out", true)}
+
+      {:error, %Error{type: :connection_failed}} ->
+        {:error, Error.http_error(:connection_failed, "Connection failed for #{url}", true)}
+
+      {:error, :rate_limited} ->
+        {:error, Error.http_error(:rate_limited, "Rate limit exceeded for #{url}", true)}
+
+      {:error, reason} ->
+        {:error, Error.http_error(:request_failed, "Request failed: #{inspect(reason)}", false)}
+    end
   end
 
   @spec do_get(url(), headers(), boolean(), module() | nil) :: {:ok, term()} | {:error, term()}
@@ -214,10 +199,10 @@ defmodule WandererKills.Http.Client do
           handle_status_code(status, resp)
 
         {:error, %{reason: :timeout}} ->
-          {:error, %TimeoutError{message: "Request to #{url} timed out"}}
+          {:error, Error.http_error(:timeout, "Request to #{url} timed out", true)}
 
         {:error, %{reason: :econnrefused}} ->
-          {:error, %ConnectionError{message: "Connection refused for #{url}"}}
+          {:error, Error.http_error(:connection_failed, "Connection refused for #{url}", true)}
 
         {:error, reason} ->
           {:error, reason}
@@ -251,10 +236,10 @@ defmodule WandererKills.Http.Client do
           handle_status_code(status, %{status: status, body: body})
 
         {:error, %{reason: :timeout}} ->
-          {:error, %TimeoutError{message: "Request to #{url} timed out"}}
+          {:error, Error.http_error(:timeout, "Request to #{url} timed out", true)}
 
         {:error, %{reason: :econnrefused}} ->
-          {:error, %ConnectionError{message: "Connection refused for #{url}"}}
+          {:error, Error.http_error(:connection_failed, "Connection refused for #{url}", true)}
 
         {:error, reason} ->
           {:error, reason}
@@ -307,14 +292,16 @@ defmodule WandererKills.Http.Client do
   """
   @spec handle_status_code(integer(), map()) :: {:ok, map()} | {:error, term()}
   def handle_status_code(status, resp \\ %{}) do
-    case Base.map_status_code(status) do
+    case map_status_code(status) do
       :ok -> {:ok, resp}
       error -> error
     end
   end
 
   @spec retriable_error?(term()) :: boolean()
-  def retriable_error?(error), do: Base.retryable_error?(error)
+  def retriable_error?(error) do
+    retryable_error?(error)
+  end
 
   # ============================================================================
   # Consolidated Utility Functions (from Http.Util)
@@ -367,8 +354,8 @@ defmodule WandererKills.Http.Client do
   """
   @spec parse_json_response(map()) :: {:ok, term()} | {:error, term()}
   def parse_json_response(%{status: status, body: body}) do
-    case Base.map_status_code(status) do
-      :ok -> Base.parse_json(body)
+    case map_status_code(status) do
+      :ok -> parse_json(body)
       error -> error
     end
   end
@@ -378,7 +365,7 @@ defmodule WandererKills.Http.Client do
   """
   @spec retry_operation((-> term()), atom(), keyword()) :: {:ok, term()} | {:error, term()}
   def retry_operation(fun, service, opts \\ []) do
-    retry_opts = Base.retry_options(service, opts)
+    retry_opts = retry_options(service, Keyword.get(opts, :retry_options, []))
     operation_name = Keyword.get(opts, :operation_name, "#{service} request")
 
     Retry.retry_http_operation(fun, Keyword.put(retry_opts, :operation_name, operation_name))
@@ -413,6 +400,89 @@ defmodule WandererKills.Http.Client do
     {:error,
      Error.validation_error(:invalid_format, "Invalid response format", %{type: typeof(data)})}
   end
+
+  # ============================================================================
+  # Status Code and Error Handling (from Base module)
+  # ============================================================================
+
+  @type status_code :: integer()
+  @type response_body :: map() | list() | binary()
+  @type parsed_response :: {:ok, term()} | {:error, term()}
+
+  # Success range
+  @success_range 200..299
+
+  # Common HTTP status codes
+  @not_found 404
+  @rate_limited 429
+  @client_error_range 400..499
+  @server_error_range 500..599
+
+  # Maps HTTP status codes to standardized error responses
+  @spec map_status_code(status_code()) :: :ok | {:error, term()}
+  defp map_status_code(status) when status in @success_range, do: :ok
+  defp map_status_code(@not_found), do: {:error, :not_found}
+  defp map_status_code(@rate_limited), do: {:error, :rate_limited}
+
+  defp map_status_code(status) when status in @server_error_range,
+    do: {:error, {:server_error, status}}
+
+  defp map_status_code(status) when status in @client_error_range,
+    do: {:error, {:client_error, status}}
+
+  defp map_status_code(status), do: {:error, {:http_error, status}}
+
+  # Determines if an HTTP error is retryable
+  @spec retryable_error?(term()) :: boolean()
+  defp retryable_error?({:error, :rate_limited}), do: true
+  defp retryable_error?({:error, {:server_error, _}}), do: true
+  defp retryable_error?({:error, {:client_error, _}}), do: false
+  defp retryable_error?({:error, :not_found}), do: false
+  defp retryable_error?(_), do: false
+
+  # Configures retry options for a service
+  @spec retry_options(atom(), keyword()) :: keyword()
+  defp retry_options(service, opts) do
+    config = Config.retry()
+
+    base_options = [
+      max_retries: config.http_max_retries,
+      base_delay: config.http_base_delay,
+      max_delay: config.http_max_delay,
+      retry?: &retryable_error?/1
+    ]
+
+    # Use default retry counts for services
+    service_options =
+      case service do
+        :esi -> [max_retries: 3]
+        :zkb -> [max_retries: 5]
+        _ -> []
+      end
+
+    base_options
+    |> Keyword.merge(service_options)
+    |> Keyword.merge(opts)
+  end
+
+  # Standard JSON parsing with error handling
+  @spec parse_json(response_body()) :: {:ok, term()} | {:error, term()}
+  defp parse_json(body) when is_map(body) or is_list(body), do: {:ok, body}
+
+  defp parse_json(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, parsed} ->
+        {:ok, parsed}
+
+      {:error, reason} ->
+        {:error, Error.parsing_error(:invalid_json, "Invalid JSON response", %{reason: reason})}
+    end
+  end
+
+  defp parse_json(_),
+    do:
+      {:error,
+       Error.parsing_error(:invalid_response_type, "Response body must be string, map, or list")}
 
   # ============================================================================
   # Private Helper Functions

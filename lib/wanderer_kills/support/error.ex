@@ -18,22 +18,23 @@ defmodule WandererKills.Support.Error do
   ## Usage
 
   ```elixir
-  # HTTP errors
+  # Preferred: Using the generic constructor
+  {:error, Error.new(:http, :timeout, "Request timed out", true)}
+  {:error, Error.new(:cache, :miss, "Cache key not found")}
+  {:error, Error.new(:killmail, :invalid_format, "Missing required fields")}
+
+  # Alternative: Using domain-specific helpers (backward compatibility)
   {:error, Error.http_error(:timeout, "Request timed out", true)}
-
-  # Cache errors
   {:error, Error.cache_error(:miss, "Cache key not found")}
-
-  # Killmail processing errors
-  {:error, Error.killmail_error(:invalid_format, "Missing required fields")}
 
   # Checking if error is retryable
   if Error.retryable?(error) do
     retry_operation()
   end
 
-  # Creating standardized errors
+  # Common error patterns
   Error.not_found_error("Resource not found")
+  Error.timeout_error("Operation timed out")
   ```
   """
 
@@ -66,176 +67,103 @@ defmodule WandererKills.Support.Error do
         }
 
   # ============================================================================
-  # Constructor Functions by Domain
+  # Constructor Functions
   # ============================================================================
 
-  @doc "Creates an HTTP-related error"
-  @spec http_error(error_type(), String.t(), boolean(), details()) :: t()
-  def http_error(type, message, retryable \\ false, details \\ nil) do
+  @doc """
+  Creates a new error with the specified domain.
+  
+  This is the main constructor for all errors. Domain-specific convenience
+  functions are provided for backward compatibility.
+  
+  ## Parameters
+  - `domain` - Error domain (:http, :cache, :killmail, etc.)
+  - `type` - Specific error type within the domain
+  - `message` - Human-readable error message
+  - `retryable` - Whether the operation can be retried (default: false)
+  - `details` - Additional error context (default: nil)
+  """
+  @spec new(domain(), error_type(), String.t(), boolean(), details()) :: t()
+  def new(domain, type, message, retryable \\ false, details \\ nil) do
     %__MODULE__{
-      domain: :http,
+      domain: domain,
       type: type,
       message: message,
       details: details,
       retryable: retryable
     }
   end
+
+  # Domain-specific convenience functions for backward compatibility
+  @doc "Creates an HTTP-related error"
+  @spec http_error(error_type(), String.t(), boolean(), details()) :: t()
+  def http_error(type, message, retryable \\ false, details \\ nil),
+    do: new(:http, type, message, retryable, details)
 
   @doc "Creates a cache-related error"
   @spec cache_error(error_type(), String.t(), details()) :: t()
-  def cache_error(type, message, details \\ nil) do
-    %__MODULE__{
-      domain: :cache,
-      type: type,
-      message: message,
-      details: details,
-      retryable: false
-    }
-  end
+  def cache_error(type, message, details \\ nil),
+    do: new(:cache, type, message, false, details)
 
   @doc "Creates a killmail processing error"
   @spec killmail_error(error_type(), String.t(), boolean(), details()) :: t()
-  def killmail_error(type, message, retryable \\ false, details \\ nil) do
-    %__MODULE__{
-      domain: :killmail,
-      type: type,
-      message: message,
-      details: details,
-      retryable: retryable
-    }
-  end
+  def killmail_error(type, message, retryable \\ false, details \\ nil),
+    do: new(:killmail, type, message, retryable, details)
 
   @doc "Creates a system-related error"
   @spec system_error(error_type(), String.t(), boolean(), details()) :: t()
-  def system_error(type, message, retryable \\ false, details \\ nil) do
-    %__MODULE__{
-      domain: :system,
-      type: type,
-      message: message,
-      details: details,
-      retryable: retryable
-    }
-  end
+  def system_error(type, message, retryable \\ false, details \\ nil),
+    do: new(:system, type, message, retryable, details)
 
   @doc "Creates an ESI API error"
   @spec esi_error(error_type(), String.t(), boolean(), details()) :: t()
-  def esi_error(type, message, retryable \\ false, details \\ nil) do
-    %__MODULE__{
-      domain: :esi,
-      type: type,
-      message: message,
-      details: details,
-      retryable: retryable
-    }
-  end
+  def esi_error(type, message, retryable \\ false, details \\ nil),
+    do: new(:esi, type, message, retryable, details)
 
   @doc "Creates a zKillboard API error"
   @spec zkb_error(error_type(), String.t(), boolean(), details()) :: t()
-  def zkb_error(type, message, retryable \\ false, details \\ nil) do
-    %__MODULE__{
-      domain: :zkb,
-      type: type,
-      message: message,
-      details: details,
-      retryable: retryable
-    }
-  end
+  def zkb_error(type, message, retryable \\ false, details \\ nil),
+    do: new(:zkb, type, message, retryable, details)
 
   @doc "Creates a parsing error"
   @spec parsing_error(error_type(), String.t(), details()) :: t()
-  def parsing_error(type, message, details \\ nil) do
-    %__MODULE__{
-      domain: :parsing,
-      type: type,
-      message: message,
-      details: details,
-      retryable: false
-    }
-  end
+  def parsing_error(type, message, details \\ nil),
+    do: new(:parsing, type, message, false, details)
 
   @doc "Creates an enrichment error"
   @spec enrichment_error(error_type(), String.t(), boolean(), details()) :: t()
-  def enrichment_error(type, message, retryable \\ false, details \\ nil) do
-    %__MODULE__{
-      domain: :enrichment,
-      type: type,
-      message: message,
-      details: details,
-      retryable: retryable
-    }
-  end
+  def enrichment_error(type, message, retryable \\ false, details \\ nil),
+    do: new(:enrichment, type, message, retryable, details)
 
   @doc "Creates a RedisQ error"
   @spec redisq_error(error_type(), String.t(), boolean(), details()) :: t()
-  def redisq_error(type, message, retryable \\ true, details \\ nil) do
-    %__MODULE__{
-      domain: :redis_q,
-      type: type,
-      message: message,
-      details: details,
-      retryable: retryable
-    }
-  end
+  def redisq_error(type, message, retryable \\ true, details \\ nil),
+    do: new(:redis_q, type, message, retryable, details)
 
   @doc "Creates a ship types error"
   @spec ship_types_error(error_type(), String.t(), boolean(), details()) :: t()
-  def ship_types_error(type, message, retryable \\ false, details \\ nil) do
-    %__MODULE__{
-      domain: :ship_types,
-      type: type,
-      message: message,
-      details: details,
-      retryable: retryable
-    }
-  end
+  def ship_types_error(type, message, retryable \\ false, details \\ nil),
+    do: new(:ship_types, type, message, retryable, details)
 
   @doc "Creates a validation error"
   @spec validation_error(error_type(), String.t(), details()) :: t()
-  def validation_error(type, message, details \\ nil) do
-    %__MODULE__{
-      domain: :validation,
-      type: type,
-      message: message,
-      details: details,
-      retryable: false
-    }
-  end
+  def validation_error(type, message, details \\ nil),
+    do: new(:validation, type, message, false, details)
 
   @doc "Creates a configuration error"
   @spec config_error(error_type(), String.t(), details()) :: t()
-  def config_error(type, message, details \\ nil) do
-    %__MODULE__{
-      domain: :config,
-      type: type,
-      message: message,
-      details: details,
-      retryable: false
-    }
-  end
+  def config_error(type, message, details \\ nil),
+    do: new(:config, type, message, false, details)
 
   @doc "Creates a time processing error"
   @spec time_error(error_type(), String.t(), details()) :: t()
-  def time_error(type, message, details \\ nil) do
-    %__MODULE__{
-      domain: :time,
-      type: type,
-      message: message,
-      details: details,
-      retryable: false
-    }
-  end
+  def time_error(type, message, details \\ nil),
+    do: new(:time, type, message, false, details)
 
   @doc "Creates a CSV processing error"
   @spec csv_error(error_type(), String.t(), details()) :: t()
-  def csv_error(type, message, details \\ nil) do
-    %__MODULE__{
-      domain: :csv,
-      type: type,
-      message: message,
-      details: details,
-      retryable: false
-    }
-  end
+  def csv_error(type, message, details \\ nil),
+    do: new(:csv, type, message, false, details)
 
   # ============================================================================
   # Utility Functions

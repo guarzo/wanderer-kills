@@ -254,32 +254,21 @@ defmodule WandererKills.RedisQ do
       stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
 
     if total_activity > 0 or stats.errors > 0 do
-      # Get websocket stats from the observability module
-      ws_stats =
-        case WandererKills.Observability.WebSocketStats.get_stats() do
-          {:ok, stats} -> stats
-          _ -> %{kills_sent: %{total: 0, realtime: 0, preload: 0}}
-        end
-
       Logger.info(
-        "📊 REDISQ SUMMARY (#{duration}s): " <>
-          "Kills processed: #{stats.kills_received}, " <>
-          "Older kills: #{stats.kills_older}, " <>
-          "Skipped: #{stats.kills_skipped}, " <>
-          "Legacy: #{stats.legacy_kills}, " <>
-          "No-kill polls: #{stats.no_kills_count}, " <>
-          "Errors: #{stats.errors}, " <>
-          "Active systems: #{MapSet.size(stats.systems_active)}, " <>
-          "Total polls: #{total_activity + stats.no_kills_count + stats.errors}, " <>
-          "WS kills sent: #{ws_stats.kills_sent.total} (RT: #{ws_stats.kills_sent.realtime}, PL: #{ws_stats.kills_sent.preload})",
-        kills_processed: stats.kills_received,
-        kills_older: stats.kills_older,
-        kills_skipped: stats.kills_skipped,
-        legacy_kills: stats.legacy_kills,
-        no_kills_polls: stats.no_kills_count,
-        errors: stats.errors,
-        active_systems: MapSet.size(stats.systems_active),
-        total_polls: total_activity + stats.no_kills_count + stats.errors
+        "[RedisQ Stats] Processed: #{stats.kills_received} | " <>
+        "Older: #{stats.kills_older} | " <>
+        "Skipped: #{stats.kills_skipped} | " <>
+        "Legacy: #{stats.legacy_kills} | " <>
+        "Systems: #{MapSet.size(stats.systems_active)} | " <>
+        "Errors: #{stats.errors} | " <>
+        "Duration: #{duration}s",
+        redisq_kills_processed: stats.kills_received,
+        redisq_kills_older: stats.kills_older,
+        redisq_kills_skipped: stats.kills_skipped,
+        redisq_legacy_kills: stats.legacy_kills,
+        redisq_active_systems: MapSet.size(stats.systems_active),
+        redisq_errors: stats.errors,
+        redisq_duration_s: duration
       )
     end
   end

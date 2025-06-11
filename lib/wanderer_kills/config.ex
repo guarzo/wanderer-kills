@@ -61,7 +61,6 @@ defmodule WandererKills.Config do
       port: get_endpoint_port(),
       http_client: get(:http_client, WandererKills.Http.Client),
       zkb_client: get(:zkb_client, WandererKills.Killmails.ZkbClient),
-      start_preloader: get(:start_preloader, true),
       start_redisq: get(:start_redisq, true)
     }
   end
@@ -144,7 +143,6 @@ defmodule WandererKills.Config do
   def validation(:max_character_id), do: max_character_id()
 
   # Compatibility helpers
-  def start_preloader?, do: get(:start_preloader, true)
   def start_redisq?, do: get(:start_redisq, true)
 
   def services do

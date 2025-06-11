@@ -5,11 +5,12 @@ defmodule WandererKills.Support.Retry do
   This module consolidates retry logic from across the application into a single,
   reusable implementation. It handles:
   - Exponential backoff with configurable parameters
-  - Retryable error detection
+  - Safe retryable error detection (only network/service errors)
   - Logging of retry attempts
   - Custom error types for different failure scenarios
 
-  Originally designed for HTTP requests but generalized to handle any retryable operation.
+  Only retries network/service errors by default. Programming errors like
+  ArgumentError and RuntimeError are not retried to prevent masking bugs.
   """
 
   require Logger
@@ -50,7 +51,7 @@ defmodule WandererKills.Support.Retry do
       - `:max_retries` - Maximum number of retry attempts (default: 3)
       - `:base_delay` - Initial delay in milliseconds (default: 1000)
       - `:max_delay` - Maximum delay in milliseconds (default: 30000)
-      - `:rescue_only` - List of exception types to retry on (default: all common retryable errors)
+      - `:rescue_only` - List of exception types to retry on (default: network/service errors only)
       - `:operation_name` - Name for logging purposes (default: "operation")
 
   ## Returns
@@ -68,10 +69,7 @@ defmodule WandererKills.Support.Retry do
       Keyword.get(opts, :rescue_only, [
         WandererKills.Support.Error.ConnectionError,
         WandererKills.Support.Error.TimeoutError,
-        WandererKills.Support.Error.RateLimitError,
-        # Add common retryable exceptions
-        RuntimeError,
-        ArgumentError
+        WandererKills.Support.Error.RateLimitError
       ])
 
     # Create an Erlang backoff state: init(StartDelay, MaxDelay)
@@ -132,12 +130,6 @@ defmodule WandererKills.Support.Retry do
   def retriable_http_error?(%WandererKills.Support.Error.TimeoutError{}), do: true
   def retriable_http_error?(%WandererKills.Support.Error.ConnectionError{}), do: true
   def retriable_http_error?(_), do: false
-
-  @doc """
-  Alias for retriable_http_error?/1 for backward compatibility.
-  """
-  @spec retriable_error?(term()) :: boolean()
-  def retriable_error?(reason), do: retriable_http_error?(reason)
 
   @doc """
   Convenience function for retrying HTTP operations with sensible defaults.

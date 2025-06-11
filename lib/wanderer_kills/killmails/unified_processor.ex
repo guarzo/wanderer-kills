@@ -11,7 +11,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
 
   alias WandererKills.Support.Error
   alias WandererKills.Killmails.Transformations
-  alias WandererKills.Killmails.Pipeline.{UnifiedValidator, DataBuilder, ESIFetcher}
+  alias WandererKills.Killmails.Pipeline.{Validator, DataBuilder, ESIFetcher}
   alias WandererKills.Killmails.Enrichment.BatchEnricher
   alias WandererKills.Storage.KillmailStore
   alias WandererKills.Observability.Monitoring
@@ -170,8 +170,8 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
       validate_only: validate_only?
     )
 
-    # Use unified validator
-    case UnifiedValidator.validate_killmail(killmail, cutoff_time) do
+    # Use validator
+    case Validator.validate_killmail(killmail, cutoff_time) do
       {:ok, validated} ->
         if validate_only? do
           {:ok, validated}
@@ -256,7 +256,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
   end
 
   defp validate_and_build_killmail(killmail, cutoff_time) do
-    case UnifiedValidator.validate_killmail(killmail, cutoff_time) do
+    case Validator.validate_killmail(killmail, cutoff_time) do
       {:ok, validated} ->
         DataBuilder.build_killmail_data(validated)
 

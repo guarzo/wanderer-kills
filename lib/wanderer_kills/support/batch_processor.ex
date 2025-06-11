@@ -200,13 +200,4 @@ defmodule WandererKills.Support.BatchProcessor do
     end)
   end
 
-  @doc """
-  Alias for process_parallel_async/3 for backward compatibility.
-
-  @deprecated Use process_parallel_async/3 instead
-  """
-  @spec process_parallel([term()], (term() -> task_result()), batch_opts()) :: batch_result()
-  def process_parallel(items, process_fn, opts \\ []) do
-    process_parallel_async(items, process_fn, opts)
-  end
 end
