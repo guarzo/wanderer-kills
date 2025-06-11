@@ -54,6 +54,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to get all tags
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -67,6 +69,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Get current version tag
+        id: get_tag
+        run: |
+          # Get the current tag on this commit
+          CURRENT_TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
+          echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_OUTPUT
+          echo "Current tag: $CURRENT_TAG"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v4
@@ -79,6 +89,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
+            type=raw,value=${{ steps.get_tag.outputs.CURRENT_TAG }},enable=${{ steps.get_tag.outputs.CURRENT_TAG != '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
