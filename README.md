@@ -1,12 +1,12 @@
 # WandererKills
 
-A high-performance, real-time EVE Online killmail data service built with Elixir/Phoenix. This service provides REST API, WebSocket, and webhook interfaces for accessing killmail data from zKillboard.
+A high-performance, real-time EVE Online killmail data service built with Elixir/Phoenix. This service provides REST API and WebSocket interfaces for accessing killmail data from zKillboard.
 
 ## Features
 
 - **Real-time Data** - Continuous killmail stream from zKillboard RedisQ
-- **Multiple Integration Methods** - REST API, WebSocket, webhooks, and Phoenix PubSub
-- **Efficient Caching** - Multi-tiered caching with Cachex for optimal performance
+- **Multiple Integration Methods** - REST API, WebSocket channels, and Phoenix PubSub
+- **Efficient Caching** - Multi-tiered caching with custom ETS-based cache for optimal performance
 - **ESI Enrichment** - Automatic enrichment with character, corporation, and ship names
 - **Batch Processing** - Efficient bulk operations for multiple systems
 - **Event Streaming** - Optional event-driven architecture with offset tracking
@@ -18,18 +18,19 @@ A high-performance, real-time EVE Online killmail data service built with Elixir
 
 ```bash
 # Run the service
-docker run -p 4004:4004 wanderer-kills
+docker run -p 4004:4004 guarzo/wanderer-kills
 
-# With persistent cache
+# With environment variables
 docker run -p 4004:4004 \
-  -v wanderer-cache:/app/cache \
-  wanderer-kills
+  -e PORT=4004 \
+  -e ESI_BASE_URL=https://esi.evetech.net/latest \
+  guarzo/wanderer-kills
 ```
 
 ### Using Docker Compose
 
 ```bash
-# Start all services (includes Redis)
+# Start the service
 docker-compose up
 
 # Run in background
@@ -39,9 +40,8 @@ docker-compose up -d
 ### Development Setup
 
 1. **Prerequisites**
-   - Elixir 1.14.0+
+   - Elixir 1.18+
    - OTP 25.0+
-   - Docker (for Redis)
 
 2. **Clone and Setup**
 
@@ -52,12 +52,9 @@ docker-compose up -d
    mix compile
    ```
 
-3. **Start Services**
+3. **Start the Application**
 
    ```bash
-   # Start Redis
-   docker run -d -p 6379:6379 redis:7-alpine
-
    # Start the application
    mix phx.server
    ```
@@ -75,27 +72,39 @@ The service will be available at `http://localhost:4004`
 | GET | `/api/v1/kills/cached/{system_id}` | Get cached kills only |
 | GET | `/api/v1/killmail/{killmail_id}` | Get specific killmail |
 | GET | `/api/v1/kills/count/{system_id}` | Get kill count |
-| POST | `/api/v1/subscriptions` | Create webhook subscription |
 | GET | `/health` | Health check |
 | GET | `/status` | Service status |
+| GET | `/websocket` | WebSocket connection info |
 
 ### WebSocket Connection
 
 ```javascript
+// Import Phoenix Socket library
+import { Socket } from 'phoenix';
+
 // Connect to WebSocket
-const ws = new WebSocket('ws://localhost:4004/ws');
+const socket = new Socket('ws://localhost:4004/socket', {
+  params: { client_identifier: 'my_client' }
+});
 
-// Subscribe to systems
-ws.send(JSON.stringify({
-  action: 'subscribe',
-  systems: [30000142, 30000144]
-}));
+socket.connect();
 
-// Receive real-time updates
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('New kill:', data);
-};
+// Join a killmail channel for a specific system
+const channel = socket.channel('killmails:system:30000142', {});
+
+channel.join()
+  .receive('ok', resp => { console.log('Joined successfully', resp) })
+  .receive('error', resp => { console.log('Unable to join', resp) });
+
+// Listen for new kills
+channel.on('new_kill', payload => {
+  console.log('New kill:', payload);
+});
+
+// Subscribe to multiple systems
+const systems = [30000142, 30000144];
+channel.push('subscribe', { systems: systems })
+  .receive('ok', resp => { console.log('Subscribed to systems', resp) });
 ```
 
 ### Example API Call
@@ -127,8 +136,7 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
                               │    Distribution Layer    │
                               ├──────────────────────────┤
                               │ • REST API               │
-                              │ • WebSocket              │
-                              │ • Webhooks               │
+                              │ • WebSocket Channels     │
                               │ • Phoenix PubSub         │
                               └──────────────────────────┘
 ```
@@ -149,9 +157,6 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
 ```bash
 # Port configuration
 PORT=4004
-
-# Redis configuration (optional)
-REDIS_URL=redis://localhost:6379
 
 # ESI configuration
 ESI_BASE_URL=https://esi.evetech.net/latest
@@ -273,13 +278,7 @@ mix run -e "WandererKills.ShipTypes.Updater.update_all_ship_types()"
 
 ### Cache Management
 
-```bash
-# Clear all caches
-mix run -e "Cachex.clear(:wanderer_cache)"
-
-# Check cache statistics
-mix run -e "IO.inspect(Cachex.stats(:wanderer_cache))"
-```
+The service uses an ETS-based caching system that is automatically managed. Caches are cleared and warmed on startup, with configurable TTLs for different data types.
 
 ## Documentation
 
@@ -321,14 +320,10 @@ docker build -t wanderer-kills:latest .
 docker run -d \
   -p 4004:4004 \
   -e PORT=4004 \
-  -e REDIS_URL=redis://redis:6379 \
+  -e ESI_BASE_URL=https://esi.evetech.net/latest \
   --name wanderer-kills \
-  wanderer-kills:latest
+  guarzo/wanderer-kills:latest
 ```
-
-### Kubernetes
-
-See [deployment/k8s/](deployment/k8s/) for Kubernetes manifests.
 
 ## Performance
 
@@ -340,12 +335,12 @@ The service is designed for high performance:
 - **Connection Pooling** - Optimized HTTP client connections
 - **ETS Storage** - In-memory storage for fast access
 
-Typical performance metrics:
+The service is optimized for:
 
-- Process 100+ kills/second
-- Cache hit rate > 85%
-- API response time < 50ms (cached)
-- WebSocket latency < 10ms
+- High-throughput kill processing
+- Efficient batch operations
+- Low-latency WebSocket updates
+- Minimal API response times with caching
 
 ## License
 

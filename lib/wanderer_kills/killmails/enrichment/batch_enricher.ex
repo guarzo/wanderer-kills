@@ -34,33 +34,57 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
   """
   @spec enrich_killmails_batch([map()]) :: {:ok, [map()]} | {:error, term()}
   def enrich_killmails_batch(killmails) when is_list(killmails) do
+    # Step 1: Collect all unique entity IDs
+    entity_ids = collect_entity_ids(killmails)
+
+    # Step 2: Fetch all entities in batch (risky external calls)
+    entity_cache =
+      try do
+        fetch_entities_batch(entity_ids)
+      rescue
+        error ->
+          Logger.error("Failed to fetch entities batch",
+            error: error,
+            stacktrace: __STACKTRACE__,
+            entity_ids: entity_ids
+          )
+
+          reraise error, __STACKTRACE__
+      catch
+        kind, reason ->
+          Logger.error("Failed to fetch entities batch",
+            kind: kind,
+            reason: reason,
+            stacktrace: __STACKTRACE__,
+            entity_ids: entity_ids
+          )
+
+          :erlang.raise(kind, reason, __STACKTRACE__)
+      end
+
+    # Step 3: Apply enrichment using the cache
     try do
-      # Step 1: Collect all unique entity IDs
-      entity_ids = collect_entity_ids(killmails)
-
-      # Step 2: Fetch all entities in batch
-      entity_cache = fetch_entities_batch(entity_ids)
-
-      # Step 3: Apply enrichment using the cache
       enriched = Enum.map(killmails, &enrich_killmail_with_cache(&1, entity_cache))
-
       {:ok, enriched}
     rescue
       error ->
-        Logger.error("Failed to enrich killmails batch",
+        Logger.error("Failed to apply enrichment",
           error: error,
+          stacktrace: __STACKTRACE__,
           killmail_count: length(killmails)
         )
 
-        {:error, error}
+        {:error, {:exception, error}}
     catch
-      :throw, reason ->
-        Logger.error("Failed to enrich killmails batch",
+      kind, reason ->
+        Logger.error("Failed to apply enrichment",
+          kind: kind,
           reason: reason,
+          stacktrace: __STACKTRACE__,
           killmail_count: length(killmails)
         )
 
-        {:error, reason}
+        {:error, {kind, reason}}
     end
   end
 

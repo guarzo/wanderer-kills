@@ -7,6 +7,7 @@ defmodule WandererKillsWeb.Plugs.ApiLogger do
   """
 
   require Logger
+  alias WandererKillsWeb.Shared.ParseHelpers
 
   @behaviour Plug
 
@@ -56,14 +57,8 @@ defmodule WandererKillsWeb.Plugs.ApiLogger do
 
   defp get_response_size(conn) do
     case Plug.Conn.get_resp_header(conn, "content-length") do
-      [size] ->
-        case Integer.parse(size) do
-          {parsed_size, _} -> parsed_size
-          :error -> 0
-        end
-
-      _ ->
-        0
+      [size] -> ParseHelpers.parse_int(size, 0)
+      _ -> 0
     end
   end
 end
