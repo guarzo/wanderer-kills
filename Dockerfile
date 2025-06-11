@@ -18,8 +18,12 @@ RUN MIX_ENV=prod mix deps.get --only prod && MIX_ENV=prod mix deps.compile
 
 COPY lib lib
 COPY config config
+COPY priv priv
 
 RUN MIX_ENV=prod mix compile
+
+# Build the release
+RUN MIX_ENV=prod mix release
 
 FROM debian:stable-slim AS app
 RUN apt-get update && apt-get install -y --no-install-recommends \
