@@ -3,7 +3,7 @@ defmodule WandererKills.Killmails.Transformations do
   Centralized module for all killmail field transformations and data normalization.
 
   This module consolidates transformation logic that was previously scattered
-  across multiple modules including field normalization, data structure 
+  across multiple modules including field normalization, data structure
   standardization, and data flattening operations.
 
   ## Functions
@@ -23,7 +23,7 @@ defmodule WandererKills.Killmails.Transformations do
   # Flatten enriched entity data
   flattened = Transformations.flatten_enriched_data(enriched_killmail)
 
-  # Apply victim/attacker normalization  
+  # Apply victim/attacker normalization
   victim = Transformations.normalize_victim_data(victim_map)
   attackers = Transformations.normalize_attackers_data(attackers_list)
   ```
@@ -97,7 +97,7 @@ defmodule WandererKills.Killmails.Transformations do
   end
 
   # ============================================================================
-  # Data Structure Normalization  
+  # Data Structure Normalization
   # ============================================================================
 
   @doc """
@@ -333,7 +333,7 @@ defmodule WandererKills.Killmails.Transformations do
     end
   end
 
-  # Adds ship names to all attackers  
+  # Adds ship names to all attackers
   defp add_attackers_ship_names(killmail) do
     attackers = Map.get(killmail, "attackers", [])
 
@@ -361,11 +361,8 @@ defmodule WandererKills.Killmails.Transformations do
 
   defp get_ship_name(ship_type_id) when is_integer(ship_type_id) do
     try do
-      Logger.info("Looking up ship name for type ID: #{ship_type_id}")
-
       case WandererKills.ShipTypes.Info.get_ship_type(ship_type_id) do
         {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
-          Logger.info("Found ship name: #{ship_name} for type ID: #{ship_type_id}")
           {:ok, ship_name}
 
         {:ok, ship_data} ->
@@ -377,11 +374,9 @@ defmodule WandererKills.Killmails.Transformations do
 
         {:error, %Error{type: :not_found}} ->
           # Try to fetch from ESI if not in cache
-          Logger.info("Ship type not in cache, fetching from ESI for type ID: #{ship_type_id}")
 
           case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
             {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
-              Logger.info("Found ship name from ESI: #{ship_name} for type ID: #{ship_type_id}")
               {:ok, ship_name}
 
             {:ok, _} ->
