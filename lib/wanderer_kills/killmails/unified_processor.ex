@@ -102,28 +102,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
       {:ok, validated_killmails}
     else
       # Batch enrich all valid killmails if enrichment is enabled
-      final_killmails =
-        if enrich? and not Enum.empty?(validated_killmails) do
-          case BatchEnricher.enrich_killmails_batch(validated_killmails) do
-            {:ok, enriched} ->
-              # Cache all enriched killmails
-              Enum.each(enriched, &ESIFetcher.cache_enriched_killmail/1)
-              enriched
-
-            {:error, reason} ->
-              Logger.error("Failed to enrich killmails batch",
-                reason: reason,
-                batch_size: length(validated_killmails)
-              )
-
-              # Fall back to unenriched killmails
-              Enum.each(validated_killmails, &ESIFetcher.cache_enriched_killmail/1)
-              validated_killmails
-          end
-        else
-          Enum.each(validated_killmails, &ESIFetcher.cache_enriched_killmail/1)
-          validated_killmails
-        end
+      final_killmails = apply_enrichment(validated_killmails, enrich?)
 
       # Store killmails if requested
       if store? do
@@ -329,6 +308,31 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc false
+  defp apply_enrichment(validated_killmails, enrich?) do
+    if enrich? and not Enum.empty?(validated_killmails) do
+      case BatchEnricher.enrich_killmails_batch(validated_killmails) do
+        {:ok, enriched} ->
+          # Cache all enriched killmails
+          Enum.each(enriched, &ESIFetcher.cache_enriched_killmail/1)
+          enriched
+
+        {:error, reason} ->
+          Logger.error("Failed to enrich killmails batch",
+            reason: reason,
+            batch_size: length(validated_killmails)
+          )
+
+          # Fall back to unenriched killmails
+          Enum.each(validated_killmails, &ESIFetcher.cache_enriched_killmail/1)
+          validated_killmails
+      end
+    else
+      Enum.each(validated_killmails, &ESIFetcher.cache_enriched_killmail/1)
+      validated_killmails
     end
   end
 end
