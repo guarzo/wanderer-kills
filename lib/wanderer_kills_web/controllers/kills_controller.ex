@@ -29,14 +29,7 @@ defmodule WandererKillsWeb.KillsController do
 
       case Client.fetch_system_killmails(system_id, since_hours, limit) do
         {:ok, killmails} ->
-          response = %{
-            kills: killmails,
-            # This is a fresh fetch
-            cached: false,
-            timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-            error: nil
-          }
-
+          response = build_cached_response(killmails, false)
           render_success(conn, response)
 
         {:error, reason} ->
@@ -99,7 +92,7 @@ defmodule WandererKillsWeb.KillsController do
         Logger.debug("Fetching cached kills", system_id: system_id)
 
         killmails = Client.fetch_cached_killmails(system_id)
-        response = build_cached_response(killmails)
+        response = build_cached_response(killmails, true)
         render_success(conn, response)
 
       {:error, %Error{}} ->
@@ -164,11 +157,17 @@ defmodule WandererKillsWeb.KillsController do
 
   # Private helper functions
 
-  defp build_cached_response(killmails) do
-    %{
+  defp build_cached_response(killmails, cached, error \\ nil) do
+    base_response = %{
       kills: killmails,
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-      error: nil
+      cached: cached
     }
+
+    if error do
+      Map.put(base_response, :error, error)
+    else
+      base_response
+    end
   end
 end
