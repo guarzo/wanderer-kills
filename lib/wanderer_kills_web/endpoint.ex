@@ -7,15 +7,6 @@ defmodule WandererKillsWeb.Endpoint do
 
   use Phoenix.Endpoint, otp_app: :wanderer_kills
 
-  # The session will be stored in the cookie and signed,
-  # this means its contents can be read but not tampered with.
-  # Set :encryption_salt if you would also like to encrypt it.
-  @session_options [
-    store: :cookie,
-    key: "_wanderer_kills_key",
-    signing_salt: "wanderer_salt"
-  ]
-
   # WebSocket configuration
   socket("/socket", WandererKillsWeb.UserSocket,
     websocket: [
@@ -54,7 +45,6 @@ defmodule WandererKillsWeb.Endpoint do
 
   plug(Plug.MethodOverride)
   plug(Plug.Head)
-  plug(Plug.Session, @session_options)
 
   # Phoenix router
   plug(WandererKillsWeb.Router)

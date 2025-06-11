@@ -20,7 +20,9 @@
       "Bash(mix deps.get:*)",
       "Bash(MIX_ENV=test mix test test/shared/cache_key_test.exs --no-start)",
       "Bash(MIX_ENV=test mix test test/external/esi_cache_test.exs --no-start)",
-      "Bash(MIX_ENV=test mix test)"
+      "Bash(MIX_ENV=test mix test)",
+      "Bash(cat:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }
