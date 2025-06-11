@@ -12,7 +12,7 @@ WandererKills now supports **real-time WebSocket subscriptions** for receiving k
 
 ## 📡 Connection Details
 
-- **WebSocket URL**: `ws://your-server:4004/socket`
+- **WebSocket URL**: `ws://your-server:4004/socket` (development) / `wss://your-server/socket` (production)
 - **Protocol**: Phoenix Channels (compatible with Phoenix JavaScript/Python clients)
 - **Authentication**: None required - anonymous connections
 - **Channel**: `killmails:lobby`
@@ -309,10 +309,10 @@ Compared to the previous HTTP webhook system:
 
 ## 🔒 Security Considerations
 
-- Use WSS (secure WebSocket) in production
+- **Always use WSS (wss://) in production** instead of ws:// for secure WebSocket connections
 - Set appropriate `check_origin` restrictions for your domain
 - Monitor connection limits and rate limiting
-- Use TLS for all WebSocket connections in production
+- Use TLS for all WebSocket connections in production environments
 - Consider implementing authentication in production environments
 
 ---

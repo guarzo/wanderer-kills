@@ -304,7 +304,9 @@ defmodule WandererKills.Observability.Statistics do
         end)
 
       avg_hit_rate =
-        case calculate_weighted_average(hit_rates) do
+        hit_rates
+        |> calculate_weighted_average()
+        |> case do
           {:ok, rate} -> rate
           {:error, _} -> 0.0
         end

@@ -194,34 +194,30 @@ defmodule WandererKills.Support.Logger do
   """
   defmacro log_timed_debug(description, fun, metadata \\ []) do
     quote do
-      if Logger.level() == :debug do
-        description = unquote(description)
-        metadata = unquote(metadata)
-        env = __ENV__
+      description = unquote(description)
+      metadata = unquote(metadata)
+      env = __ENV__
 
-        start_time = System.monotonic_time()
-        result = unquote(fun).()
+      start_time = System.monotonic_time()
+      result = unquote(fun).()
 
-        duration_ms =
-          System.convert_time_unit(
-            System.monotonic_time() - start_time,
-            :native,
-            :millisecond
-          )
-
-        timing_metadata = Keyword.merge(metadata, duration_ms: duration_ms)
-
-        unquote(__MODULE__).do_log(
-          :debug,
-          description,
-          timing_metadata,
-          env
+      duration_ms =
+        System.convert_time_unit(
+          System.monotonic_time() - start_time,
+          :native,
+          :millisecond
         )
 
-        result
-      else
-        unquote(fun).()
-      end
+      timing_metadata = Keyword.merge(metadata, duration_ms: duration_ms)
+
+      unquote(__MODULE__).do_log(
+        :debug,
+        description,
+        timing_metadata,
+        env
+      )
+
+      result
     end
   end
 

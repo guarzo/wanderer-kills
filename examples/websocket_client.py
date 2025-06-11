@@ -14,7 +14,7 @@ import json
 import logging
 import signal
 import sys
-from typing import List, Optional, Set
+from typing import Optional
 import websockets
 from websockets.exceptions import ConnectionClosed, WebSocketException
 
@@ -32,7 +32,7 @@ class WandererKillsClient:
     def __init__(self, server_url: str):
         self.server_url = server_url.replace('http://', 'ws://').replace('https://', 'wss://')
         self.websocket: Optional[websockets.WebSocketServerProtocol] = None
-        self.subscriptions: Set[int] = set()
+        self.subscriptions: set[int] = set()
         self.subscription_id: Optional[str] = None
         self.running = False
         
@@ -143,7 +143,7 @@ class WandererKillsClient:
             else:
                 logger.error(f"❌ Command {ref} failed: {response}")
     
-    async def subscribe_to_systems(self, system_ids: List[int]) -> dict:
+    async def subscribe_to_systems(self, system_ids: list[int]) -> dict:
         """Subscribe to specific EVE Online systems."""
         if not self.websocket or not self.running:
             raise Exception("Not connected to WebSocket")
@@ -163,7 +163,7 @@ class WandererKillsClient:
         
         return {"subscribed_systems": list(self.subscriptions)}
     
-    async def unsubscribe_from_systems(self, system_ids: List[int]) -> dict:
+    async def unsubscribe_from_systems(self, system_ids: list[int]) -> dict:
         """Unsubscribe from specific EVE Online systems."""
         if not self.websocket or not self.running:
             raise Exception("Not connected to WebSocket")
@@ -219,7 +219,7 @@ class WandererKillsClient:
             try:
                 await self.websocket.send(json.dumps(leave_message))
                 await self.websocket.close()
-            except:
+            except (ConnectionClosed, WebSocketException):
                 pass  # Ignore errors during cleanup
         
         logger.info("📴 Disconnected from WandererKills WebSocket")

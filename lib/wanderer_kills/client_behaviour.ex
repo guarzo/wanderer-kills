@@ -73,7 +73,7 @@ defmodule WandererKills.ClientBehaviour do
             }
 
   @doc """
-  Subscribes to kill updates for specified systems.
+  Subscribes to killmail updates for specified systems.
 
   ## Parameters
   - subscriber_id: Unique identifier for the subscriber
@@ -92,7 +92,7 @@ defmodule WandererKills.ClientBehaviour do
               {:ok, subscription_id :: String.t()} | {:error, term()}
 
   @doc """
-  Unsubscribes from all kill updates for a subscriber.
+  Unsubscribes from all killmail updates for a subscriber.
 
   ## Parameters
   - subscriber_id: Unique identifier for the subscriber to unsubscribe

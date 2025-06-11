@@ -1,8 +1,6 @@
 import Config
 
 config :wanderer_kills,
-  port: 4004,
-
   # Cache configuration
   cache_killmails_ttl: 3600,
   cache_system_ttl: 1800,
@@ -73,7 +71,10 @@ config :wanderer_kills,
 
   # Service startup configuration
   start_preloader: true,
-  start_redisq: true
+  start_redisq: true,
+
+  # WebSocket configuration
+  websocket_degraded_threshold: 1000
 
 # Configure the Phoenix endpoint
 config :wanderer_kills, WandererKillsWeb.Endpoint,
@@ -84,9 +85,6 @@ config :wanderer_kills, WandererKillsWeb.Endpoint,
 # Cachex default configuration
 config :cachex, :default_ttl, :timer.hours(24)
 
-# Load shared logger metadata configuration
-Code.require_file("logger_metadata.exs", __DIR__)
-
 # Configure the logger
 config :logger,
   level: :info,
@@ -96,7 +94,7 @@ config :logger,
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: LoggerMetadata.all()
+  metadata: :all
 
 # Import environment specific config
 import_config "#{config_env()}.exs"

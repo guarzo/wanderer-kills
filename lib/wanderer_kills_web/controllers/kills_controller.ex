@@ -160,4 +160,11 @@ defmodule WandererKillsWeb.KillsController do
         render_error(conn, 400, "Invalid system ID format", "INVALID_SYSTEM_ID")
     end
   end
+
+  @doc """
+  Handles undefined API routes.
+  """
+  def not_found(conn, _params) do
+    render_error(conn, 404, "Not Found", "NOT_FOUND")
+  end
 end

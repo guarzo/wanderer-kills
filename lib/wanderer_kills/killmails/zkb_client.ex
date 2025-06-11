@@ -248,7 +248,16 @@ defmodule WandererKills.Killmails.ZkbClient do
         timeout: Config.timeouts().zkb_request_ms
       )
 
-    request_opts = Keyword.put(request_opts, :operation, :"fetch_#{entity_type}_killmails")
+    operation_atom =
+      case entity_type do
+        "systemID" -> :fetch_system_killmails
+        "characterID" -> :fetch_character_killmails
+        "corporationID" -> :fetch_corporation_killmails
+        "allianceID" -> :fetch_alliance_killmails
+        _ -> :fetch_unknown_killmails
+      end
+
+    request_opts = Keyword.put(request_opts, :operation, operation_atom)
 
     case Client.request_with_telemetry(url, :zkb, request_opts) do
       {:ok, response} -> Client.parse_json_response(response)
@@ -400,6 +409,9 @@ defmodule WandererKills.Killmails.ZkbClient do
     case Helper.get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         {:ok, systems}
+
+      _ ->
+        {:error, Error.cache_error(:not_found, "Active systems not found in cache")}
     end
   end
 

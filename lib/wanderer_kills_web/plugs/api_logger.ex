@@ -51,16 +51,13 @@ defmodule WandererKillsWeb.Plugs.ApiLogger do
   end
 
   defp get_remote_ip(conn) do
-    case conn.remote_ip do
-      {a, b, c, d} -> "#{a}.#{b}.#{c}.#{d}"
-      _ -> "unknown"
-    end
+    :inet.ntoa(conn.remote_ip) |> to_string()
   end
 
   defp get_response_size(conn) do
     case Plug.Conn.get_resp_header(conn, "content-length") do
-      [size] -> size
-      _ -> "unknown"
+      [size] -> String.to_integer(size)
+      _ -> 0
     end
   end
 end

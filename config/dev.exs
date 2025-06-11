@@ -1,10 +1,7 @@
 import Config
 
-# Load shared logger metadata configuration
-Code.require_file("logger_metadata.exs", __DIR__)
-
 # Override logger metadata for development to exclude verbose fields (pid, application, mfa)
-config :logger, :console, metadata: LoggerMetadata.dev()
+config :logger, :console, metadata: [:request_id, :file, :line]
 
 # Enable WebSocket transport logging for development debugging
 config :wanderer_kills, WandererKillsWeb.Endpoint,
@@ -19,13 +16,11 @@ config :wanderer_kills, WandererKillsWeb.Endpoint,
       ~r"lib/wanderer_kills_web/(live|views)/.*(ex)$",
       ~r"lib/wanderer_kills_web/templates/.*(eex)$"
     ]
-  ]
+  ],
+  socket_drainer_timeout: 5_000
 
 # Enable more detailed WebSocket logging for debugging
 config :phoenix, :socket_drainer_timeout, 5_000
-
-# Override socket configuration for development debugging
-config :wanderer_kills, WandererKillsWeb.Endpoint, socket_drainer_timeout: 5_000
 
 # Enable detailed logging for Phoenix and transport layers
 config :logger, level: :info

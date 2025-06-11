@@ -79,10 +79,10 @@ defmodule WandererKills.Support.BatchProcessor do
     supervisor = Keyword.get(opts, :supervisor, WandererKills.TaskSupervisor)
     description = Keyword.get(opts, :description, "items")
 
-    Logger.debug(
+    Logger.debug(fn ->
       "Processing #{length(items)} #{description} in parallel " <>
         "(max_concurrency: #{max_concurrency}, timeout: #{timeout}ms)"
-    )
+    end)
 
     start_time = System.monotonic_time()
 
@@ -119,7 +119,7 @@ defmodule WandererKills.Support.BatchProcessor do
     timeout = Keyword.get(opts, :timeout, Config.timeouts().default_request_ms)
     description = Keyword.get(opts, :description, "tasks")
 
-    Logger.debug("Awaiting #{length(tasks)} #{description} (timeout: #{timeout}ms)")
+    Logger.debug(fn -> "Awaiting #{length(tasks)} #{description} (timeout: #{timeout}ms)" end)
 
     start_time = System.monotonic_time()
 
@@ -129,7 +129,7 @@ defmodule WandererKills.Support.BatchProcessor do
       duration = System.monotonic_time() - start_time
       duration_ms = System.convert_time_unit(duration, :native, :millisecond)
 
-      Logger.debug("Completed #{length(tasks)} #{description} in #{duration_ms}ms")
+      Logger.debug(fn -> "Completed #{length(tasks)} #{description} in #{duration_ms}ms" end)
       {:ok, results}
     rescue
       error ->
@@ -157,7 +157,10 @@ defmodule WandererKills.Support.BatchProcessor do
 
     case {success_count, failure_count} do
       {^total_count, 0} ->
-        Logger.debug("Successfully processed #{success_count} #{description} in #{duration_ms}ms")
+        Logger.debug(fn ->
+          "Successfully processed #{success_count} #{description} in #{duration_ms}ms"
+        end)
+
         {:ok, successes}
 
       {0, ^total_count} ->

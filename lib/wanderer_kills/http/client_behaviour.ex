@@ -3,7 +3,7 @@ defmodule WandererKills.Http.ClientBehaviour do
   Behaviour for HTTP client implementations.
 
   This behaviour standardizes HTTP operations across ESI, ZKB, and other
-  external service clients. Currently only GET operations are used.
+  external service clients. Supports both GET and POST operations.
   """
 
   alias WandererKills.Support.Error

@@ -38,7 +38,7 @@ defmodule WandererKills.Test.SharedContexts do
   - `%{cache: cache_name}` - The cache instance name
   """
   def with_cache(_context \\ %{}) do
-    cache_name = :"test_cache_#{System.unique_integer()}"
+    cache_name = Module.safe_concat([TestCache, System.unique_integer()])
 
     {:ok, _pid} = Cachex.start_link(cache_name)
 
@@ -182,7 +182,7 @@ defmodule WandererKills.Test.SharedContexts do
   - `%{pubsub: pubsub_name}` - The PubSub instance name
   """
   def with_pubsub(_context \\ %{}) do
-    pubsub_name = :"test_pubsub_#{System.unique_integer()}"
+    pubsub_name = Module.safe_concat([TestPubSub, System.unique_integer()])
 
     {:ok, _pid} =
       Phoenix.PubSub.Supervisor.start_link(

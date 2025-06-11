@@ -387,7 +387,8 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   @doc """
   Processes a single killmail.
   """
-  @spec process_single_killmail(map(), boolean()) :: {:ok, killmail()} | {:error, term()}
+  @spec process_single_killmail(map(), boolean()) ::
+          {:ok, killmail()} | {:ok, :kill_older} | {:error, term()}
   def process_single_killmail(raw_killmail, enrich \\ true) do
     cutoff_time = DateTime.utc_now() |> DateTime.add(-24 * 60 * 60, :second)
 
@@ -398,6 +399,9 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
           # Fall back to basic data
           {:error, _reason} -> {:ok, parsed}
         end
+
+      {:ok, :kill_older} ->
+        {:ok, :kill_older}
 
       {:ok, parsed} ->
         {:ok, parsed}

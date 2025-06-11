@@ -15,14 +15,11 @@ defmodule WandererKillsWeb.Router do
 
   pipeline :api do
     plug(:accepts, ["json"])
-    plug(:put_secure_browser_headers)
-    plug(WandererKillsWeb.Plugs.RequestId)
     plug(WandererKillsWeb.Plugs.ApiLogger)
   end
 
   pipeline :infrastructure do
     plug(:accepts, ["json", "text"])
-    plug(WandererKillsWeb.Plugs.RequestId)
   end
 
   # Health and service discovery routes (no versioning needed)
@@ -49,5 +46,12 @@ defmodule WandererKillsWeb.Router do
     get("/kills/cached/:system_id", KillsController, :cached)
     get("/killmail/:killmail_id", KillsController, :show)
     get("/kills/count/:system_id", KillsController, :count)
+
+    # Catch-all for undefined API routes
+    get("/*path", KillsController, :not_found)
+    post("/*path", KillsController, :not_found)
+    put("/*path", KillsController, :not_found)
+    patch("/*path", KillsController, :not_found)
+    delete("/*path", KillsController, :not_found)
   end
 end

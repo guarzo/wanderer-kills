@@ -143,7 +143,7 @@ defmodule WandererKills.ShipTypes.Updater do
         :ok
 
       csv_result ->
-        Logger.warning("CSV update failed: #{inspect(csv_result)}, falling back to ESI")
+        Logger.warning("CSV update failed, falling back to ESI", error: csv_result)
 
         case update_with_esi() do
           :ok ->

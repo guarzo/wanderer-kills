@@ -241,19 +241,6 @@ defmodule WandererKills.Observability.HealthChecks do
     end
   end
 
-  @doc """
-  Backwards compatibility: Get basic application version.
-
-  Use `check_health/1` for full health information.
-  """
-  @spec version() :: String.t()
-  def version do
-    case Application.spec(:wanderer_kills, :vsn) do
-      nil -> "unknown"
-      version -> to_string(version)
-    end
-  end
-
   # ============================================================================
   # Public API
   # ============================================================================
@@ -355,6 +342,8 @@ defmodule WandererKills.Observability.HealthChecks do
     This module provides a unified view of application health by collecting
     and aggregating health status from all registered health check modules.
     """
+
+    alias WandererKills.Support.Clock
 
     @behaviour WandererKills.Observability.HealthChecks
 
@@ -507,6 +496,8 @@ defmodule WandererKills.Observability.HealthChecks do
     instances in the application, including size, connectivity, and
     performance metrics.
     """
+
+    alias WandererKills.Support.Clock
 
     @behaviour WandererKills.Observability.HealthChecks
 

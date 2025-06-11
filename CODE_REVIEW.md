@@ -131,7 +131,8 @@ This document presents a comprehensive review of the WandererKills codebase, doc
 - Added structured metadata fields for log filtering
 
 **Example Output**:
-```
+
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 WANDERER KILLS STATUS REPORT (5-minute summary)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -252,26 +252,6 @@ defmodule WandererKills.Killmails.Transformations do
   # ============================================================================
 
   @doc """
-  Adds ship names to victim and attackers based on ship_type_id.
-
-  Uses cached ship type information to enrich killmail data with
-  readable ship names.
-
-  ## Parameters
-  - `killmail` - Killmail to enrich with ship names
-
-  ## Returns
-  - `{:ok, killmail}` - Killmail with ship names added
-  - `{:error, reason}` - If ship enrichment fails
-  """
-  @spec enrich_ship_names(map()) :: {:ok, map()} | {:error, term()}
-  def enrich_ship_names(killmail) when is_map(killmail) do
-    with {:ok, killmail} <- add_victim_ship_name(killmail) do
-      add_attackers_ship_names(killmail)
-    end
-  end
-
-  @doc """
   Calculates and adds attacker count to killmail.
 
   ## Parameters
@@ -381,11 +361,11 @@ defmodule WandererKills.Killmails.Transformations do
 
   defp get_ship_name(ship_type_id) when is_integer(ship_type_id) do
     try do
-      Logger.debug("Looking up ship name for type ID: #{ship_type_id}")
+      Logger.info("Looking up ship name for type ID: #{ship_type_id}")
 
       case WandererKills.ShipTypes.Info.get_ship_type(ship_type_id) do
         {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
-          Logger.debug("Found ship name: #{ship_name} for type ID: #{ship_type_id}")
+          Logger.info("Found ship name: #{ship_name} for type ID: #{ship_type_id}")
           {:ok, ship_name}
 
         {:ok, ship_data} ->
@@ -397,11 +377,11 @@ defmodule WandererKills.Killmails.Transformations do
 
         {:error, %Error{type: :not_found}} ->
           # Try to fetch from ESI if not in cache
-          Logger.debug("Ship type not in cache, fetching from ESI for type ID: #{ship_type_id}")
+          Logger.info("Ship type not in cache, fetching from ESI for type ID: #{ship_type_id}")
 
           case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
             {:ok, %{"name" => ship_name}} when is_binary(ship_name) ->
-              Logger.debug("Found ship name from ESI: #{ship_name} for type ID: #{ship_type_id}")
+              Logger.info("Found ship name from ESI: #{ship_name} for type ID: #{ship_type_id}")
               {:ok, ship_name}
 
             {:ok, _} ->

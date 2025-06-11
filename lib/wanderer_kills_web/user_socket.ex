@@ -50,14 +50,21 @@ defmodule WandererKillsWeb.UserSocket do
   defp get_user_agent(connect_info) do
     case connect_info do
       %{x_headers: headers} ->
-        Enum.find_value(headers, "unknown", fn
-          {"user-agent", ua} -> ua
-          _ -> nil
-        end)
+        find_user_agent_header(headers)
 
       _ ->
         "unknown"
     end
+  end
+
+  defp find_user_agent_header(headers) do
+    Enum.find_value(headers, "unknown", fn
+      {header_name, value} when is_binary(header_name) ->
+        if String.downcase(header_name) == "user-agent", do: value
+
+      _ ->
+        nil
+    end)
   end
 
   defp generate_anonymous_id(params) do
@@ -69,8 +76,10 @@ defmodule WandererKillsWeb.UserSocket do
         "#{timestamp}_#{random_suffix}"
 
       client_id ->
-        sanitized_id = sanitize_client_identifier(client_id)
-        "#{sanitized_id}_#{timestamp}_#{random_suffix}"
+        case sanitize_client_identifier(client_id) do
+          nil -> "#{timestamp}_#{random_suffix}"
+          sanitized_id -> "#{sanitized_id}_#{timestamp}_#{random_suffix}"
+        end
     end
   end
 

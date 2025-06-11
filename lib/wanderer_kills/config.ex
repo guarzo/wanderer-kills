@@ -13,7 +13,7 @@ defmodule WandererKills.Config do
 
   ## Examples
       
-      Config.get(:port, 4004)
+      Config.get(:cache_killmails_ttl, 3600)
       Config.get([:cache, :killmails_ttl], 3600)
   """
   def get(key, default \\ nil)
@@ -25,11 +25,7 @@ defmodule WandererKills.Config do
   def get([key | path], default) when is_atom(key) do
     @app_name
     |> Application.get_env(key, %{})
-    |> get_in(path)
-    |> case do
-      nil -> default
-      value -> value
-    end
+    |> get_in(path) || default
   end
 
   @doc """
@@ -62,7 +58,7 @@ defmodule WandererKills.Config do
 
   def app do
     %{
-      port: get(:port, 4004),
+      port: get_endpoint_port(),
       http_client: get(:http_client, WandererKills.Http.Client),
       zkb_client: get(:zkb_client, WandererKills.Killmails.ZkbClient),
       start_preloader: get(:start_preloader, true),
@@ -137,8 +133,8 @@ defmodule WandererKills.Config do
   # Constants that shouldn't change at runtime
   def gen_server_call_timeout, do: 5_000
   def max_killmail_id, do: 999_999_999_999
-  def max_system_id, do: 32_000_000
-  def max_character_id, do: 999_999_999_999
+  def max_system_id, do: 34_999_999
+  def max_character_id, do: 2_129_999_999
   def max_subscribed_systems, do: 100
 
   # Validation helper
@@ -190,5 +186,13 @@ defmodule WandererKills.Config do
       github_url: get(:github_url, "https://github.com/wanderer-industries/wanderer-kills"),
       contact_email: get(:contact_email, "wanderer-kills@proton.me")
     }
+  end
+
+  defp get_endpoint_port do
+    case WandererKillsWeb.Endpoint.config(:http) do
+      nil -> 4004
+      http_config when is_list(http_config) -> Keyword.get(http_config, :port, 4004)
+      _ -> 4004
+    end
   end
 end

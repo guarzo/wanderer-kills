@@ -225,8 +225,15 @@ defmodule WandererKills.Observability.Metrics do
   """
   @spec record_success(service(), atom()) :: :ok
   def record_success(service, operation) do
-    increment_counter(:"#{service}.#{operation}.success")
-    increment_counter(:"#{service}.#{operation}.total")
+    case build_metric_name(service, operation, "success") do
+      {:ok, success_name} -> increment_counter(success_name)
+      _ -> :ok
+    end
+
+    case build_metric_name(service, operation, "total") do
+      {:ok, total_name} -> increment_counter(total_name)
+      _ -> :ok
+    end
   end
 
   @doc """
@@ -234,9 +241,20 @@ defmodule WandererKills.Observability.Metrics do
   """
   @spec record_failure(service(), atom(), atom()) :: :ok
   def record_failure(service, operation, reason) do
-    increment_counter(:"#{service}.#{operation}.failure")
-    increment_counter(:"#{service}.#{operation}.failure.#{reason}")
-    increment_counter(:"#{service}.#{operation}.total")
+    case build_metric_name(service, operation, "failure") do
+      {:ok, failure_name} -> increment_counter(failure_name)
+      _ -> :ok
+    end
+
+    case build_metric_name(service, operation, "failure.#{reason}") do
+      {:ok, failure_reason_name} -> increment_counter(failure_reason_name)
+      _ -> :ok
+    end
+
+    case build_metric_name(service, operation, "total") do
+      {:ok, total_name} -> increment_counter(total_name)
+      _ -> :ok
+    end
   end
 
   @doc """
@@ -244,7 +262,74 @@ defmodule WandererKills.Observability.Metrics do
   """
   @spec record_duration(service(), atom(), number()) :: :ok
   def record_duration(service, operation, duration_ms) do
-    record_histogram(:"#{service}.#{operation}.duration_ms", duration_ms)
+    case build_metric_name(service, operation, "duration_ms") do
+      {:ok, duration_name} -> record_histogram(duration_name, duration_ms)
+      _ -> :ok
+    end
+  end
+
+  # Helper function to safely build metric names
+  defp build_metric_name(service, operation, suffix)
+       when is_atom(service) and is_atom(operation) do
+    metric_string = "#{service}.#{operation}.#{suffix}"
+
+    case lookup_known_metric(service, operation, suffix) do
+      nil ->
+        Logger.debug("Unknown metric combination", metric_string: metric_string)
+        {:error, :unknown_metric}
+
+      atom ->
+        {:ok, atom}
+    end
+  end
+
+  # ESI metric mappings
+  defp lookup_known_metric(:esi, :get_character, "success"), do: :esi_get_character_success
+  defp lookup_known_metric(:esi, :get_character, "failure"), do: :esi_get_character_failure
+  defp lookup_known_metric(:esi, :get_character, "total"), do: :esi_get_character_total
+
+  defp lookup_known_metric(:esi, :get_character, "duration_ms"),
+    do: :esi_get_character_duration_ms
+
+  defp lookup_known_metric(:esi, :get_corporation, "success"), do: :esi_get_corporation_success
+  defp lookup_known_metric(:esi, :get_corporation, "failure"), do: :esi_get_corporation_failure
+  defp lookup_known_metric(:esi, :get_corporation, "total"), do: :esi_get_corporation_total
+
+  defp lookup_known_metric(:esi, :get_corporation, "duration_ms"),
+    do: :esi_get_corporation_duration_ms
+
+  # ZKB metric mappings
+  defp lookup_known_metric(:zkb, :fetch_system_killmails, "success"),
+    do: :zkb_fetch_system_killmails_success
+
+  defp lookup_known_metric(:zkb, :fetch_system_killmails, "failure"),
+    do: :zkb_fetch_system_killmails_failure
+
+  defp lookup_known_metric(:zkb, :fetch_system_killmails, "total"),
+    do: :zkb_fetch_system_killmails_total
+
+  defp lookup_known_metric(:zkb, :fetch_system_killmails, "duration_ms"),
+    do: :zkb_fetch_system_killmails_duration_ms
+
+  # Cache metric mappings
+  defp lookup_known_metric(:cache, :hit, "success"), do: :cache_hit_success
+  defp lookup_known_metric(:cache, :hit, "total"), do: :cache_hit_total
+  defp lookup_known_metric(:cache, :miss, "success"), do: :cache_miss_success
+  defp lookup_known_metric(:cache, :miss, "total"), do: :cache_miss_total
+
+  # Unknown metric combination
+  defp lookup_known_metric(_, _, _), do: nil
+
+  # Safe atom creation - only use for known metric patterns
+  defp safe_atom(string) when is_binary(string) do
+    try do
+      String.to_existing_atom(string)
+    rescue
+      ArgumentError ->
+        # If atom doesn't exist, create it but log for monitoring
+        Logger.debug("Creating new metric atom", atom_string: string)
+        # credo:disable-next-line Credo.Check.Warning.UnsafeToAtom\n        String.to_atom(string)
+    end
   end
 
   # ============================================================================
@@ -314,10 +399,10 @@ defmodule WandererKills.Observability.Metrics do
 
     new_state =
       state
-      |> increment_counter_internal(:"http.#{service}.requests")
-      |> increment_counter_internal(:"http.#{service}.#{method}")
-      |> increment_counter_internal(:"http.#{service}.status.#{status_class}xx")
-      |> record_histogram_internal(:"http.#{service}.duration_ms", duration_ms)
+      |> increment_counter_internal(safe_atom("http.#{service}.requests"))
+      |> increment_counter_internal(safe_atom("http.#{service}.#{method}"))
+      |> increment_counter_internal(safe_atom("http.#{service}.status.#{status_class}xx"))
+      |> record_histogram_internal(safe_atom("http.#{service}.duration_ms"), duration_ms)
 
     {:noreply, new_state}
   end
@@ -334,8 +419,8 @@ defmodule WandererKills.Observability.Metrics do
     # Update counters
     new_state =
       state
-      |> increment_counter_internal(:"cache.#{cache_name}.#{operation}")
-      |> increment_counter_internal(:"cache.#{cache_name}.total")
+      |> increment_counter_internal(safe_atom("cache.#{cache_name}.#{operation}"))
+      |> increment_counter_internal(safe_atom("cache.#{cache_name}.total"))
 
     {:noreply, new_state}
   end
@@ -352,7 +437,7 @@ defmodule WandererKills.Observability.Metrics do
     # Update counters
     new_state =
       state
-      |> increment_counter_internal(:"killmail.#{result}")
+      |> increment_counter_internal(safe_atom("killmail.#{result}"))
       |> increment_counter_internal(:killmail_total)
 
     {:noreply, new_state}
@@ -389,7 +474,7 @@ defmodule WandererKills.Observability.Metrics do
     )
 
     # Update gauge
-    new_state = set_gauge_internal(state, :"system.#{resource}", value)
+    new_state = set_gauge_internal(state, safe_atom("system.#{resource}"), value)
 
     {:noreply, new_state}
   end
@@ -533,7 +618,7 @@ defmodule WandererKills.Observability.Metrics do
     counters
     |> Enum.map(fn {name, count} ->
       rate = if duration_seconds > 0, do: count / duration_seconds, else: 0
-      {:"#{name}_per_second", Float.round(rate, 2)}
+      {safe_atom("#{name}_per_second"), Float.round(rate, 2)}
     end)
     |> Map.new()
   end

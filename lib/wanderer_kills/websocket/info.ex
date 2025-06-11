@@ -69,9 +69,11 @@ defmodule WandererKills.WebSocket.Info do
   end
 
   defp determine_server_status do
+    threshold = WandererKills.Config.get(:websocket_degraded_threshold, 1000)
+
     cond do
       not endpoint_running?() -> "error"
-      get_active_connection_count() > 1000 -> "degraded"
+      get_active_connection_count() > threshold -> "degraded"
       true -> "operational"
     end
   end

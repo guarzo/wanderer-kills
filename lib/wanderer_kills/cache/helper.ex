@@ -35,11 +35,12 @@ defmodule WandererKills.Cache.Helper do
     characters: %{ttl: :timer.hours(24), prefix: "esi:characters"},
     corporations: %{ttl: :timer.hours(24), prefix: "esi:corporations"},
     alliances: %{ttl: :timer.hours(24), prefix: "esi:alliances"},
-    ship_types: %{ttl: :timer.hours(24), prefix: "esi:ship_types"}
+    ship_types: %{ttl: :timer.hours(24), prefix: "esi:ship_types"},
+    groups: %{ttl: :timer.hours(24), prefix: "esi:groups"}
   }
 
   @type namespace ::
-          :killmails | :systems | :characters | :corporations | :alliances | :ship_types
+          :killmails | :systems | :characters | :corporations | :alliances | :ship_types | :groups
   @type id :: String.t() | integer()
   @type value :: any()
   @type error :: {:error, Error.t()}

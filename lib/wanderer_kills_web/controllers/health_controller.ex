@@ -25,9 +25,12 @@ defmodule WandererKillsWeb.HealthController do
   def health(conn, _params) do
     case Monitoring.check_health() do
       {:ok, health_status} ->
-        _status_code = if health_status.healthy, do: 200, else: 503
+        status_code = if health_status.healthy, do: 200, else: 503
         response = Map.put(health_status, :timestamp, DateTime.utc_now() |> DateTime.to_iso8601())
-        json(conn, response)
+
+        conn
+        |> put_status(status_code)
+        |> json(response)
 
       {:error, reason} ->
         response = %{

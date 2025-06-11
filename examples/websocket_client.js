@@ -7,7 +7,7 @@
 
 // Import Phoenix Socket (you'll need to install phoenix)
 // npm install phoenix
-const { Socket } = require('phoenix');
+import { Socket } from 'phoenix';
 
 class WandererKillsClient {
   constructor(serverUrl) {
@@ -19,12 +19,20 @@ class WandererKillsClient {
 
   /**
    * Connect to the WebSocket server
+   * @param {number} timeout - Connection timeout in milliseconds (default: 10000)
+   * @returns {Promise} Resolves when connected, rejects on error or timeout
    */
-  async connect() {
+  async connect(timeout = 10000) {
     return new Promise((resolve, reject) => {
+      // Set up a connection timeout
+      const timeoutId = setTimeout(() => {
+        this.disconnect();
+        reject(new Error('Connection timeout'));
+      }, timeout);
+
       // Create socket connection with optional client identifier
       this.socket = new Socket(`${this.serverUrl}/socket`, {
-        timeout: 10000,
+        timeout: timeout,
         params: {
           // Optional: provide a client identifier for easier debugging
           // This will be included in server logs to help identify your connection
@@ -35,6 +43,8 @@ class WandererKillsClient {
       // Handle connection events
       this.socket.onError((error) => {
         console.error('Socket error:', error);
+        clearTimeout(timeoutId);
+        reject(error);
       });
 
       this.socket.onClose(() => {
@@ -49,14 +59,23 @@ class WandererKillsClient {
 
       this.channel.join()
         .receive('ok', (response) => {
+          clearTimeout(timeoutId);
           console.log('Connected to WandererKills WebSocket');
           console.log('Connection details:', response);
           this.setupEventHandlers();
           resolve(response);
         })
         .receive('error', (error) => {
+          clearTimeout(timeoutId);
           console.error('Failed to join channel:', error);
+          this.disconnect();
           reject(error);
+        })
+        .receive('timeout', () => {
+          clearTimeout(timeoutId);
+          console.error('Channel join timeout');
+          this.disconnect();
+          reject(new Error('Channel join timeout'));
         });
     });
   }
@@ -148,15 +167,40 @@ class WandererKillsClient {
 
   /**
    * Disconnect from the WebSocket server
+   * @returns {Promise} Resolves when disconnected
    */
-  disconnect() {
-    if (this.channel) {
-      this.channel.leave();
-    }
-    if (this.socket) {
-      this.socket.disconnect();
-    }
-    console.log('Disconnected from WandererKills WebSocket');
+  async disconnect() {
+    return new Promise((resolve) => {
+      if (this.channel) {
+        this.channel.leave()
+          .receive('ok', () => {
+            console.log('Left channel successfully');
+            if (this.socket) {
+              this.socket.disconnect(() => {
+                console.log('Disconnected from WandererKills WebSocket');
+                resolve();
+              });
+            } else {
+              resolve();
+            }
+          })
+          .receive('timeout', () => {
+            console.warn('Channel leave timeout, forcing disconnect');
+            if (this.socket) {
+              this.socket.disconnect();
+            }
+            console.log('Disconnected from WandererKills WebSocket');
+            resolve();
+          });
+      } else if (this.socket) {
+        this.socket.disconnect(() => {
+          console.log('Disconnected from WandererKills WebSocket');
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
   }
 }
 
@@ -181,19 +225,20 @@ async function example() {
     }, 5 * 60 * 1000);
 
     // Disconnect after 10 minutes
-    setTimeout(() => {
-      client.disconnect();
+    setTimeout(async () => {
+      await client.disconnect();
     }, 10 * 60 * 1000);
 
   } catch (error) {
     console.error('Client error:', error);
-    client.disconnect();
+    await client.disconnect();
   }
 }
 
 // Run the example if this file is executed directly
-if (require.main === module) {
+// For ES modules, use import.meta.url
+if (import.meta.url === `file://${process.argv[1]}`) {
   example();
 }
 
-module.exports = WandererKillsClient; 
+export default WandererKillsClient; 

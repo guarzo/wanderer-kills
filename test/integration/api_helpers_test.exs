@@ -46,6 +46,37 @@ defmodule WandererKills.Api.HelpersTest do
       conn = %Plug.Conn{params: %{"id" => "456"}}
       assert {:ok, 456} = Helpers.parse_integer_param(conn, "id")
     end
+
+    test "returns {:error, %Error{}} for non-ASCII strings" do
+      conn = conn(:get, "/test?id=café") |> fetch_query_params()
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
+    end
+
+    test "returns {:error, %Error{}} for unicode strings" do
+      conn = conn(:get, "/test?id=🚀") |> fetch_query_params()
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
+    end
+
+    test "returns {:error, %Error{}} for mixed ASCII and numbers" do
+      conn = conn(:get, "/test?id=1２３") |> fetch_query_params()
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
+    end
+
+    test "handles non-binary parameter types gracefully" do
+      # Simulate a non-binary parameter (though Plug typically ensures strings)
+      conn = %Plug.Conn{params: %{"id" => 123}}
+      assert {:ok, 123} = Helpers.parse_integer_param(conn, "id")
+    end
+
+    test "handles nil parameter value" do
+      conn = %Plug.Conn{params: %{"id" => nil}}
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
+    end
+
+    test "handles atom parameter value" do
+      conn = %Plug.Conn{params: %{"id" => :atom_value}}
+      assert {:error, %Error{type: :invalid_id}} = Helpers.parse_integer_param(conn, "id")
+    end
   end
 
   describe "send_json_resp/3" do

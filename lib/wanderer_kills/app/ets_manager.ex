@@ -19,8 +19,15 @@ defmodule WandererKills.App.EtsManager do
   def init(_opts) do
     Logger.info("Starting ETS Manager")
 
-    # Create the websocket stats table
-    :ets.new(@websocket_stats_table, [:named_table, :public, :set])
+    # Create the websocket stats table with concurrency optimizations
+    :ets.new(@websocket_stats_table, [
+      :named_table,
+      :public,
+      :set,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+
     :ets.insert(@websocket_stats_table, {:kills_sent_realtime, 0})
     :ets.insert(@websocket_stats_table, {:kills_sent_preload, 0})
     :ets.insert(@websocket_stats_table, {:last_reset, DateTime.utc_now()})
@@ -28,12 +35,6 @@ defmodule WandererKills.App.EtsManager do
     Logger.info("ETS tables initialized successfully")
 
     {:ok, %{tables: [@websocket_stats_table]}}
-  end
-
-  @impl true
-  def handle_info({:EXIT, _pid, _reason}, state) do
-    # If we crash, the ETS tables will be lost, but the supervisor will restart us
-    {:noreply, state}
   end
 
   @doc """

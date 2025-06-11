@@ -20,32 +20,31 @@ defmodule WandererKills.Killmails.Pipeline.ESIFetcher do
   """
   @spec fetch_full_killmail(integer(), map()) :: {:ok, killmail()} | {:error, Error.t()}
   def fetch_full_killmail(killmail_id, zkb) do
-    hash = zkb["hash"]
+    with {:hash, hash} when not is_nil(hash) <- {:hash, Map.get(zkb, "hash")},
+         {:cache, {:error, %WandererKills.Support.Error{type: :not_found}}} <-
+           {:cache, Helper.get(:killmails, killmail_id)},
+         {:esi, {:ok, esi_data}} when is_map(esi_data) <-
+           {:esi, WandererKills.ESI.DataFetcher.get_killmail_raw(killmail_id, hash)} do
+      # Cache the result
+      Helper.put(:killmails, killmail_id, esi_data)
+      {:ok, esi_data}
+    else
+      {:hash, nil} ->
+        {:error, Error.killmail_error(:missing_hash, "Killmail hash not found in zkb data")}
 
-    # Try to get from cache first, then fetch from ESI if needed
-    case Helper.get(:killmails, killmail_id) do
-      {:ok, full_data} ->
+      {:cache, {:ok, full_data}} ->
         {:ok, full_data}
 
-      {:error, %WandererKills.Support.Error{type: :not_found}} ->
-        # Fetch full killmail data from ESI
-        case WandererKills.ESI.DataFetcher.get_killmail_raw(killmail_id, hash) do
-          {:ok, esi_data} when is_map(esi_data) ->
-            # Cache the result
-            Helper.put(:killmails, killmail_id, esi_data)
-            {:ok, esi_data}
+      {:cache, {:error, reason}} ->
+        {:error, reason}
 
-          {:error, reason} ->
-            Logger.error("Failed to fetch full killmail from ESI",
-              killmail_id: killmail_id,
-              hash: hash,
-              error: reason
-            )
+      {:esi, {:error, reason}} ->
+        Logger.error("Failed to fetch full killmail from ESI",
+          killmail_id: killmail_id,
+          hash: Map.get(zkb, "hash"),
+          error: reason
+        )
 
-            {:error, reason}
-        end
-
-      {:error, reason} ->
         {:error, reason}
     end
   end

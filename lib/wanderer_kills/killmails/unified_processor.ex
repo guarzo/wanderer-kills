@@ -238,7 +238,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
   defp store_killmail_async(killmail) do
     case extract_system_id(killmail) do
       {:ok, system_id} ->
-        Task.start(fn ->
+        Task.Supervisor.start_child(WandererKills.TaskSupervisor, fn ->
           log_debug("Storing killmail asynchronously",
             killmail_id: killmail["killmail_id"],
             system_id: system_id

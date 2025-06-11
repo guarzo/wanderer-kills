@@ -54,19 +54,19 @@ defmodule WandererKills.Killmails.Pipeline.DataBuilder do
   @spec merge_killmail_data(killmail(), map()) :: {:ok, killmail()} | {:error, Error.t()}
   def merge_killmail_data(%{"killmail_id" => id} = esi_data, %{"zkb" => zkb})
       when is_integer(id) and is_map(zkb) do
-    kill_time = Transformations.get_killmail_time(esi_data)
+    case Transformations.get_killmail_time(esi_data) do
+      kill_time when is_binary(kill_time) ->
+        merged =
+          esi_data
+          |> Map.put("zkb", zkb)
+          |> Map.put("kill_time", kill_time)
+          # Keep both for compatibility
+          |> Map.put("killmail_time", kill_time)
 
-    if kill_time do
-      merged =
-        esi_data
-        |> Map.put("zkb", zkb)
-        |> Map.put("kill_time", kill_time)
-        # Keep both for compatibility
-        |> Map.put("killmail_time", kill_time)
+        {:ok, merged}
 
-      {:ok, merged}
-    else
-      {:error, Error.killmail_error(:missing_kill_time, "Killmail time not found in ESI data")}
+      nil ->
+        {:error, Error.killmail_error(:missing_kill_time, "Killmail time not found in ESI data")}
     end
   end
 

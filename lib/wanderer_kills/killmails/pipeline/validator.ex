@@ -30,7 +30,7 @@ defmodule WandererKills.Killmails.Pipeline.Validator do
   """
   @spec validate_structure(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
   def validate_structure(%{"killmail_id" => id} = killmail) when is_integer(id) do
-    required_fields = ["solar_system_id", "victim", "attackers"]
+    required_fields = ["system_id", "victim", "attackers"]
 
     missing_fields =
       required_fields

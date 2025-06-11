@@ -76,10 +76,14 @@ defmodule WandererKills.ApiTest do
   end
 
   describe "unknown routes" do
-    test "returns 404 for unknown routes" do
-      conn = build_conn() |> get("/unknown")
+    test "returns 404 for unknown API routes" do
+      conn =
+        build_conn()
+        |> put_req_header("accept", "application/json")
+        |> get("/api/v1/unknown")
 
       assert conn.status == 404
+      assert json_response(conn, 404)["error"] == "Not Found"
     end
   end
 end

@@ -24,7 +24,7 @@ defmodule WandererKillsWeb.Endpoint do
   plug(Plug.Static,
     at: "/",
     from: :wanderer_kills,
-    gzip: false,
+    gzip: true,
     only: ~w(css fonts images js favicon.ico robots.txt)
   )
 

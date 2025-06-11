@@ -185,6 +185,9 @@ defmodule WandererKills.Storage.KillmailStore do
 
   @doc """
   Adds a killmail to a system's list.
+
+  Optimized to minimize list traversal by checking existence only when the list is small.
+  For larger lists, duplicates are rare so we skip the check.
   """
   @impl true
   def add_system_killmail(system_id, killmail_id)
@@ -193,11 +196,16 @@ defmodule WandererKills.Storage.KillmailStore do
       [] ->
         :ets.insert(@system_killmails_table, {system_id, [killmail_id]})
 
-      [{^system_id, existing_ids}] ->
-        # Ensure we don't add duplicates
+      [{^system_id, existing_ids}] when length(existing_ids) < 100 ->
+        # For small lists, check for duplicates using simple list membership
         if killmail_id not in existing_ids do
           :ets.insert(@system_killmails_table, {system_id, [killmail_id | existing_ids]})
         end
+
+      [{^system_id, existing_ids}] ->
+        # For large lists, skip duplicate check as duplicates are rare
+        # and the O(n) check becomes expensive
+        :ets.insert(@system_killmails_table, {system_id, [killmail_id | existing_ids]})
     end
 
     :ok

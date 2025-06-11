@@ -154,24 +154,33 @@ defmodule WandererKills.Observability.Monitoring do
 
   @doc """
   Increments the count of successfully stored killmails.
-  Delegates to the unified Metrics module.
+  Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_stored() :: :ok
-  defdelegate increment_stored(), to: WandererKills.Observability.Metrics
+  def increment_stored() do
+    GenServer.cast(__MODULE__, {:increment, :stored})
+    WandererKills.Observability.Metrics.increment_stored()
+  end
 
   @doc """
   Increments the count of skipped killmails (too old).
-  Delegates to the unified Metrics module.
+  Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_skipped() :: :ok
-  defdelegate increment_skipped(), to: WandererKills.Observability.Metrics
+  def increment_skipped() do
+    GenServer.cast(__MODULE__, {:increment, :skipped})
+    WandererKills.Observability.Metrics.increment_skipped()
+  end
 
   @doc """
   Increments the count of failed killmail parsing attempts.
-  Delegates to the unified Metrics module.
+  Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_failed() :: :ok
-  defdelegate increment_failed(), to: WandererKills.Observability.Metrics
+  def increment_failed() do
+    GenServer.cast(__MODULE__, {:increment, :failed})
+    WandererKills.Observability.Metrics.increment_failed()
+  end
 
   @doc """
   Gets the current parsing statistics.

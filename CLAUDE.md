@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 WandererKills is a real-time EVE Online killmail data service built with Elixir/Phoenix that:
+
 - Fetches killmail data from zKillboard API
 - Provides caching and enrichment of killmail data with ESI (EVE Swagger Interface)
 - Offers REST API endpoints and WebSocket support for real-time updates
@@ -86,7 +87,8 @@ docker-compose up        # Start with Redis and all services
 
 ### Elixir Best Practices
 
-**Code Organization**
+#### Code Organization
+
 - Organize code around business domains using Domain-Driven Design
 - Implement functional core with imperative shell pattern
 - Use explicit code over implicit - clarity is paramount
@@ -95,7 +97,8 @@ docker-compose up        # Start with Redis and all services
 - Design for changeability and maintainability
 - Follow YAGNI principle - avoid unnecessary features
 
-**Style Guidelines**
+#### Style Guidelines
+
 - Use 2 spaces for indentation, never tabs
 - Unix-style line endings throughout
 - Remove trailing whitespace
@@ -104,20 +107,23 @@ docker-compose up        # Start with Redis and all services
 - Use PascalCase for modules and protocols
 - Choose clear, descriptive names without abbreviations
 
-**Functions and Modules**
+#### Functions and Modules
+
 - Use `def` for public, `defp` for private functions
 - Keep modules small and focused on single concern
 - Group related functions together
 - Pattern match in function heads for different cases
 - Use guard clauses for additional constraints
 
-**Pipe Operator Usage**
+#### Pipe Operator Usage
+
 - Chain functions with `|>` for linear data transformation
 - Each pipe operation on its own line when chaining multiple
 - Ensure clear data flow without interruptions
 - Left side must provide correct input for next function
 
-**Documentation**
+#### Documentation
+
 - Document every public module with `@moduledoc`
 - Document public functions with `@doc`
 - Write inline comments only for non-obvious logic
@@ -180,6 +186,7 @@ docker-compose up        # Start with Redis and all services
 ## Project-Specific Patterns
 
 ### Naming Conventions
+
 - Always use `killmail` (not `kill`) for consistency
 - Use `get_*` for local/cache operations
 - Use `fetch_*` for external API calls
@@ -188,17 +195,20 @@ docker-compose up        # Start with Redis and all services
 - Use `system_id` internally (normalized from `solar_system_id`)
 
 ### Cache Key Conventions
+
 - Killmails: `"killmail:{id}"`
 - Systems: `"system:{id}"`
 - ESI data: `"esi:{type}:{id}"`
 
 ### Event Streaming
+
 - Storage.KillmailStore publishes events with client offset tracking (when enabled)
 - Supports both polling and push-based consumption
 - Events include full killmail data and metadata
 - Configured via `:storage, :enable_event_streaming` (default: true)
 
 ### Configuration
+
 - Main config in `config/config.exs`
 - Environment-specific in `config/{env}.exs`
 - Runtime config in `config/runtime.exs`
@@ -206,6 +216,7 @@ docker-compose up        # Start with Redis and all services
 - All configuration access through Config module
 
 ### Monitoring and Observability
+
 - Comprehensive 5-minute status reports showing:
   - WebSocket activity (connections, subscriptions, delivery rates)
   - RedisQ processing statistics
@@ -219,18 +230,21 @@ docker-compose up        # Start with Redis and all services
 ## Common Development Tasks
 
 ### Adding New Endpoints
+
 1. Define route in `lib/wanderer_kills_web/router.ex`
 2. Create controller in `lib/wanderer_kills_web/controllers/`
 3. Add context function in appropriate module under `lib/wanderer_kills/`
 4. Write tests for both controller and context
 
 ### Working with External APIs
+
 1. Define behaviour in `lib/wanderer_kills/{service}/client_behaviour.ex`
 2. Implement client with Req library
 3. Configure mock in test config
 4. Use dependency injection via application config
 
 ### Modifying Kill Processing
+
 1. Pipeline stages are in `lib/wanderer_kills/killmails/pipeline/`
 2. UnifiedProcessor handles both full and partial killmails
 3. Parser handles initial validation

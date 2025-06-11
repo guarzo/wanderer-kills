@@ -250,28 +250,32 @@ defmodule WandererKills.Killmails.TimeFilters do
   def is_recent_fetch?(system_id, opts \\ []) when is_integer(system_id) do
     threshold_hours = Keyword.get(opts, :hours, @default_recent_threshold_hours)
 
-    try do
-      case WandererKills.Cache.Helper.get(:systems, system_id) do
-        {:ok, system_data} ->
-          case Map.get(system_data, "last_fetched") do
-            nil ->
-              false
+    case WandererKills.Cache.Helper.get(:systems, system_id) do
+      {:ok, system_data} when is_map(system_data) ->
+        check_last_fetched_timestamp(system_data, threshold_hours)
 
-            timestamp when is_binary(timestamp) ->
-              case parse_killmail_time(timestamp) do
-                {:ok, fetch_time} -> recent?(fetch_time, hours: threshold_hours)
-                {:error, _} -> false
-              end
+      _ ->
+        false
+    end
+  end
 
-            _ ->
-              false
-          end
+  defp check_last_fetched_timestamp(system_data, threshold_hours) do
+    case Map.get(system_data, "last_fetched") do
+      nil ->
+        false
 
-        {:error, _} ->
-          false
-      end
-    rescue
-      _ -> false
+      timestamp when is_binary(timestamp) ->
+        check_timestamp_recency(timestamp, threshold_hours)
+
+      _ ->
+        false
+    end
+  end
+
+  defp check_timestamp_recency(timestamp, threshold_hours) do
+    case parse_killmail_time(timestamp) do
+      {:ok, fetch_time} -> recent?(fetch_time, hours: threshold_hours)
+      {:error, _} -> false
     end
   end
 

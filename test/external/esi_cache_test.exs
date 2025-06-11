@@ -102,23 +102,10 @@ defmodule WandererKills.EsiCacheTest do
         types: [1234, 5678]
       }
 
-      assert {:ok, true} = Helper.put(:ship_types, to_string(group_id), group_data)
-      assert {:ok, cached_data} = Helper.get(:ship_types, to_string(group_id))
+      assert {:ok, true} = Helper.put(:groups, to_string(group_id), group_data)
+      assert {:ok, cached_data} = Helper.get(:groups, to_string(group_id))
       assert cached_data.group_id == group_id
       assert cached_data.name == "Test Group"
-    end
-  end
-
-  describe "clear cache" do
-    test "clear removes all entries" do
-      # Add some data first to ensure the namespaces exist
-      assert {:ok, true} = Helper.put(:characters, 123, %{name: "test"})
-      assert {:ok, true} = Helper.put(:corporations, 456, %{name: "test corp"})
-      assert {:ok, true} = Helper.put(:alliances, 789, %{name: "test alliance"})
-
-      # Clear namespace functionality removed from simplified API
-      # Clear namespace functionality is not part of the simplified API
-      # Tests would need to manually delete specific keys if needed
     end
   end
 end

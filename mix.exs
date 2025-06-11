@@ -47,7 +47,6 @@ defmodule WandererKills.MixProject do
     [
       # Phoenix framework
       {:phoenix, "~> 1.7.14"},
-      {:phoenix_html, "~> 4.1"},
       {:plug_cowboy, "~> 2.7"},
 
       # JSON parsing

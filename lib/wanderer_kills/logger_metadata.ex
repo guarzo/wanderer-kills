@@ -1,8 +1,10 @@
-# Logger metadata configuration
-# This file is loaded at compile time by config files
+defmodule WandererKills.LoggerMetadata do
+  @moduledoc """
+  Logger metadata configuration for the WandererKills application.
 
-defmodule LoggerMetadata do
-  @moduledoc false
+  This module defines all metadata fields that can be included in log messages
+  throughout the application, organized by domain.
+  """
 
   # Standard Elixir metadata
   @standard_metadata [
@@ -34,7 +36,6 @@ defmodule LoggerMetadata do
   # HTTP and API metadata
   @http_metadata [
     :url,
-    :response_time,
     :method,
     :service,
     :endpoint,
@@ -331,6 +332,17 @@ defmodule LoggerMetadata do
                    @pubsub_metadata)
                 |> Enum.uniq()
 
+  @doc """
+  Returns all available metadata fields.
+  """
+  @spec all() :: [atom()]
   def all, do: @all_metadata
+
+  @doc """
+  Returns metadata fields suitable for development environment.
+
+  Excludes some verbose fields like pid, application, and mfa.
+  """
+  @spec dev() :: [atom()]
   def dev, do: @dev_metadata
 end

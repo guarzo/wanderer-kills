@@ -44,6 +44,7 @@ docker-compose up -d
    - Docker (for Redis)
 
 2. **Clone and Setup**
+
    ```bash
    git clone https://github.com/wanderer-industries/wanderer-kills.git
    cd wanderer-kills
@@ -52,6 +53,7 @@ docker-compose up -d
    ```
 
 3. **Start Services**
+
    ```bash
    # Start Redis
    docker run -d -p 6379:6379 redis:7-alpine
@@ -181,7 +183,7 @@ config :wanderer_kills,
 
 The service provides comprehensive monitoring with 5-minute status reports:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 WANDERER KILLS STATUS REPORT (5-minute summary)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -295,7 +297,7 @@ Comprehensive documentation is available in the `/docs` directory:
 3. Write tests for your changes
 4. Ensure all tests pass (`mix test`)
 5. Check code quality (`mix credo --strict`)
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Commit your changes (`git commit -m 'Add support for amazing feature'`)
 7. Push to the branch (`git push origin feature/amazing-feature`)
 8. Open a Pull Request
 
@@ -339,6 +341,7 @@ The service is designed for high performance:
 - **ETS Storage** - In-memory storage for fast access
 
 Typical performance metrics:
+
 - Process 100+ kills/second
 - Cache hit rate > 85%
 - API response time < 50ms (cached)
@@ -358,7 +361,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Issues**: [GitHub Issues](https://github.com/wanderer-industries/wanderer-kills/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/wanderer-industries/wanderer-kills/discussions)
-- **Email**: wanderer-kills@proton.me
+- **Email**: [wanderer-kills@proton.me](mailto:wanderer-kills@proton.me)
 
 ---
 

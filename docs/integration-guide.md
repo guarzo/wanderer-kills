@@ -733,7 +733,7 @@ docker logs wanderer-kills-container -f
 
 The service provides comprehensive monitoring every 5 minutes in the logs:
 
-```
+```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 WANDERER KILLS STATUS REPORT (5-minute summary)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -773,5 +773,5 @@ For issues and questions:
 The current API version is `v1`. Future versions will be released with backward compatibility guarantees:
 
 - **URL Versioning**: `/api/v1/`
-- **Deprecation Notice**: 6 months advance notice
+- **Deprecation Notice**: 6-month advance notice
 - **Migration Guide**: Provided for breaking changes

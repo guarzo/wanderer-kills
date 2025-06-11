@@ -254,9 +254,9 @@ defmodule WandererKills.RedisQ do
       stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
 
     if total_activity > 0 or stats.errors > 0 do
-      # Get websocket stats
+      # Get websocket stats from the observability module
       ws_stats =
-        case WandererKillsWeb.KillmailChannel.get_stats() do
+        case WandererKills.Observability.WebSocketStats.get_stats() do
           {:ok, stats} -> stats
           _ -> %{kills_sent: %{total: 0, realtime: 0, preload: 0}}
         end
