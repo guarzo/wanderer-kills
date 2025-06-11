@@ -106,20 +106,48 @@ jobs:
     name: Create Release
     needs: docker
     runs-on: ubuntu-latest
-    # Only run when a new tag is pushed
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Run when a tag is pushed directly OR when docker job runs on main with a tag
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          
+      - name: Check for version tag
+        id: check_tag
+        run: |
+          # Get the current tag on this commit
+          CURRENT_TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
+          if [[ "$CURRENT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION=$CURRENT_TAG" >> $GITHUB_OUTPUT
+            echo "HAS_VERSION_TAG=true" >> $GITHUB_OUTPUT
+            echo "Found version tag: $CURRENT_TAG"
+          else
+            echo "HAS_VERSION_TAG=false" >> $GITHUB_OUTPUT
+            echo "No version tag found on current commit"
+          fi
+          
+      # Skip remaining steps if no version tag
+      - name: Exit if no version tag
+        if: steps.check_tag.outputs.HAS_VERSION_TAG != 'true'
+        run: |
+          echo "No version tag found, skipping release creation"
+          exit 0
 
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        if: steps.check_tag.outputs.HAS_VERSION_TAG == 'true'
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ steps.check_tag.outputs.VERSION }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate release notes
         id: release_notes
+        if: steps.check_tag.outputs.HAS_VERSION_TAG == 'true'
         run: |
           # Get the previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
@@ -135,6 +163,7 @@ jobs:
           fi
 
       - name: Create Release
+        if: steps.check_tag.outputs.HAS_VERSION_TAG == 'true'
         uses: softprops/action-gh-release@v1
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
