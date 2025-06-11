@@ -20,5 +20,17 @@ port =
 
 config :wanderer_kills, WandererKillsWeb.Endpoint, http: [port: port]
 
+# Configure CORS/WebSocket origin checking
+# In production, set ORIGIN_HOST to your actual domain
+check_origin =
+  case System.get_env("ORIGIN_HOST") do
+    # Allow all origins in development
+    nil -> false
+    # Whitelist specific origin in production
+    origin -> [origin]
+  end
+
+config :wanderer_kills, WandererKillsWeb.Endpoint, check_origin: check_origin
+
 # Also configure the main application port for consistency
 config :wanderer_kills, port: port

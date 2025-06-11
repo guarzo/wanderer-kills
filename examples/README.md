@@ -24,6 +24,7 @@ No authentication is required - all WebSocket connections are anonymous:
 ```javascript
 // JavaScript
 const socket = new Socket("/socket", {});
+socket.connect();
 ```
 
 ```python
@@ -225,27 +226,6 @@ Here are some popular system IDs for testing:
 - **Connection Authentication**: None required - anonymous connections
 - **Rate Limiting**: Applied per connection
 
-## 🔄 WebSocket Usage
-
-The service provides real-time updates via Phoenix WebSocket channels:
-
-```javascript
-const socket = new Socket("/socket", {});
-const channel = socket.channel("killmails:lobby", { systems: [30000142, 30002187] });
-
-channel.join()
-  .receive("ok", resp => console.log("Joined successfully", resp))
-  .receive("error", resp => console.log("Unable to join", resp));
-
-// Listen for killmail updates
-channel.on("killmail_update", (payload) => {
-  console.log("New killmails:", payload.killmails);
-});
-
-// Add or remove system subscriptions
-channel.push("subscribe_systems", { systems: [30000144] });
-channel.push("unsubscribe_systems", { systems: [30000142] });
-```
 
 ## 🛠️ Development & Testing
 

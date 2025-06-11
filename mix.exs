@@ -67,7 +67,6 @@ defmodule WandererKills.MixProject do
 
       # Telemetry
       {:telemetry_poller, "~> 1.2"},
-      {:uuid, "~> 1.1"},
 
       # Phoenix PubSub for real-time killmail distribution
       {:phoenix_pubsub, "~> 2.1"},
