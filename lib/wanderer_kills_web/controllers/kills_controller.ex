@@ -157,7 +157,7 @@ defmodule WandererKillsWeb.KillsController do
 
   # Private helper functions
 
-  defp build_cached_response(killmails, cached \\ false) do
+  defp build_cached_response(killmails, cached) do
     %{
       kills: killmails,
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),

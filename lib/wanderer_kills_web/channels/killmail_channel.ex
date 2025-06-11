@@ -391,7 +391,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp create_subscription(socket, systems) do
-    subscription_id = UUID.uuid4()
+    subscription_id = generate_uuid_v4()
 
     # Register with SubscriptionManager (we'll update this to handle WebSockets)
     SubscriptionManager.add_websocket_subscription(%{
@@ -567,5 +567,12 @@ defmodule WandererKillsWeb.KillmailChannel do
   """
   def reset_stats do
     WebSocketStats.reset_stats()
+  end
+
+  # Generate a unique ID similar to how Phoenix generates request IDs
+  # Uses timestamp + random bytes for uniqueness
+  defp generate_uuid_v4 do
+    :crypto.strong_rand_bytes(16)
+    |> Base.url_encode64(padding: false)
   end
 end
