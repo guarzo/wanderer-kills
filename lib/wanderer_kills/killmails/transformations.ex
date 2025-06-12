@@ -268,13 +268,13 @@ defmodule WandererKills.Killmails.Transformations do
   @spec enrich_with_ship_names(map()) :: {:ok, map()}
   def enrich_with_ship_names(killmail) when is_map(killmail) do
     Logger.debug("Starting ship name enrichment for killmail",
-      killmail_id: Map.get(killmail, :killmail_id) || killmail["killmail_id"]
+      killmail_id: Map.get(killmail, "killmail_id")
     )
 
     with {:ok, killmail} <- add_victim_ship_name(killmail),
          {:ok, killmail} <- add_attackers_ship_names(killmail) do
       Logger.debug("Completed ship name enrichment for killmail",
-        killmail_id: Map.get(killmail, :killmail_id) || killmail["killmail_id"]
+        killmail_id: Map.get(killmail, "killmail_id")
       )
 
       {:ok, killmail}
@@ -282,7 +282,7 @@ defmodule WandererKills.Killmails.Transformations do
       {:error, reason} = error ->
         Logger.warning("Failed to enrich ship names",
           reason: reason,
-          killmail_id: Map.get(killmail, :killmail_id) || killmail["killmail_id"]
+          killmail_id: Map.get(killmail, "killmail_id")
         )
 
         # Return the error to allow the caller to decide how to handle it

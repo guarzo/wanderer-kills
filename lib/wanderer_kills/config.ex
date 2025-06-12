@@ -346,7 +346,7 @@ defmodule WandererKills.Config do
 
         _ ->
           require Logger
-          Logger.debug("Unknown config type for group #{inspect(group)}: #{inspect(env_config)}")
+          Logger.warning("Unknown config type for group #{inspect(group)}: #{inspect(env_config)}")
           %{}
       end
 

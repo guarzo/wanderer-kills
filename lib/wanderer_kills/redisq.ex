@@ -274,7 +274,7 @@ defmodule WandererKills.RedisQ do
 
       Logger.info(
         String.trim(message),
-        redisq_kills_processed: stats.kills_received,
+        redisq_kills_processed: stats.kills_received + stats.legacy_kills,
         redisq_kills_older: stats.kills_older,
         redisq_kills_skipped: stats.kills_skipped,
         redisq_legacy_kills: stats.legacy_kills,
