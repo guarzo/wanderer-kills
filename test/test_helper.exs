@@ -1,8 +1,3 @@
-# Start test-specific cache instances
-:ets.new(:killmails_cache_test, [:named_table, :public, :set])
-:ets.new(:system_cache_test, [:named_table, :public, :set])
-:ets.new(:esi_cache_test, [:named_table, :public, :set])
-
 # Start ExUnit first
 ExUnit.start()
 

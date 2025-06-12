@@ -25,7 +25,7 @@ defmodule WandererKills.Killmails.Pipeline.ESIFetcher do
          {:cache, {:error, %WandererKills.Support.Error{type: :not_found}}} <-
            {:cache, Helper.get(:killmails, killmail_id)},
          {:esi, {:ok, esi_data}} when is_map(esi_data) <-
-           {:esi, WandererKills.ESI.DataFetcher.get_killmail_raw(killmail_id, hash)} do
+           {:esi, WandererKills.ESI.Client.get_killmail_raw(killmail_id, hash)} do
       # Cache the result
       Helper.put(:killmails, killmail_id, esi_data)
       {:ok, esi_data}

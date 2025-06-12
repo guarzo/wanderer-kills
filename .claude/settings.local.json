@@ -27,7 +27,23 @@
       "Bash(MIX_ENV=test mix test --max-failures=5)",
       "Bash(mix credo:*)",
       "Bash(MIX_ENV=test mix test --exclude integration)",
-      "Bash(MIX_ENV=test mix compile)"
+      "Bash(MIX_ENV=test mix compile)",
+      "Bash(MIX_ENV=test mix test test/wanderer_kills/storage/killmail_store_test.exs)",
+      "Bash(MIX_ENV=test mix test --max-failures=1)",
+      "Bash(MIX_ENV=test mix test test/support/config_test.exs --trace)",
+      "Bash(MIX_ENV=test mix test test/fetcher/zkb_service_test.exs --trace)",
+      "Bash(MIX_ENV=test mix test.coverage)",
+      "Bash(MIX_ENV=test mix test test/wanderer_kills/subscription_manager_test.exs)",
+      "Bash(MIX_ENV=test mix test test/wanderer_kills/subscriptions/broadcaster_test.exs --no-start)",
+      "Bash(MIX_ENV=test mix test test/wanderer_kills/subscriptions/webhook_notifier_test.exs)",
+      "Bash(MIX_ENV=test iex -S mix --no-start)",
+      "Bash(MIX_ENV=test iex -S mix)",
+      "Bash(MIX_ENV=test mix run -e \"IO.puts(Cachex.exists?(:wanderer_cache, \\\"test\\\"))\")",
+      "Bash(MIX_ENV=test mix run -e \"IO.inspect(Cachex.get(:wanderer_cache, \\\"test\\\"))\")",
+      "Bash(MIX_ENV=test mix test test/integration/cache_system_functions_test.exs:30 --no-start)",
+      "Bash(MIX_ENV=test mix test test/integration/cache_system_functions_test.exs:147 --no-start)",
+      "Bash(MIX_ENV=test mix test test/integration/cache_system_functions_test.exs --no-start)",
+      "Bash(MIX_ENV=test mix test test/integration/ --no-start)"
     ],
     "deny": []
   }

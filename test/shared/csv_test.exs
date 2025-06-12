@@ -1,7 +1,7 @@
-defmodule WandererKills.ShipTypes.CSVTest do
+defmodule WandererKills.ShipTypes.ParserTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.ShipTypes.CSV
+  alias WandererKills.ShipTypes.Parser, as: CSV
 
   describe "read_file/3" do
     test "handles missing file" do
@@ -18,7 +18,7 @@ defmodule WandererKills.ShipTypes.CSVTest do
       File.write!(file_path, "")
 
       result = CSV.read_file(file_path, parser)
-      assert {:ok, []} = result
+      assert {:error, %WandererKills.Support.Error{type: :empty_file}} = result
 
       File.rm!(file_path)
     end
@@ -30,7 +30,7 @@ defmodule WandererKills.ShipTypes.CSVTest do
       File.write!(file_path, "invalid\"csv,\"content\nunclosed\"quote")
 
       result = CSV.read_file(file_path, parser)
-      assert {:error, %WandererKills.Support.Error{type: :parse_error}} = result
+      assert {:error, %WandererKills.Support.Error{type: :parse_failure}} = result
 
       File.rm!(file_path)
     end
@@ -42,7 +42,7 @@ defmodule WandererKills.ShipTypes.CSVTest do
       File.write!(file_path, "id,name\n1,test1\n2,test2")
 
       result = CSV.read_file(file_path, parser)
-      assert {:ok, records} = result
+      assert {:ok, {records, _metadata}} = result
       assert length(records) == 2
       assert records == [%{id: 1, name: "test1"}, %{id: 2, name: "test2"}]
 

@@ -9,7 +9,7 @@ defmodule WandererKills.Killmails.Pipeline.Enricher do
   """
 
   require Logger
-  alias WandererKills.ESI.DataFetcher, as: EsiClient
+  alias WandererKills.ESI.Client, as: EsiClient
   alias WandererKills.Config
   alias WandererKills.ShipTypes.Info, as: ShipTypeInfo
   alias WandererKills.Killmails.Transformations
@@ -180,7 +180,11 @@ defmodule WandererKills.Killmails.Pipeline.Enricher do
       {:ok, flattened}
     rescue
       error ->
-        Logger.warning("Failed to flatten enriched data", error: inspect(error))
+        Logger.warning("Failed to flatten enriched data", %{
+          error: inspect(error),
+          killmail_id: killmail["killmail_id"]
+        })
+
         # Return original killmail if flattening fails
         {:ok, killmail}
     end

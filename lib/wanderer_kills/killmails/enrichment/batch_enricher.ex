@@ -8,7 +8,7 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
   """
 
   require Logger
-  alias WandererKills.ESI.DataFetcher
+  alias WandererKills.ESI.Client
   alias WandererKills.ShipTypes.Info, as: ShipInfo
   alias WandererKills.Cache.Helper
   alias WandererKills.Killmails.Transformations
@@ -206,7 +206,7 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
   defp get_from_cache(:ships, id), do: Helper.get(:ship_types, id)
 
   defp fetch_entity(:characters, id) do
-    case DataFetcher.get_character(id) do
+    case Client.get_character(id) do
       {:ok, data} ->
         Helper.put(:characters, id, data)
         {:ok, data}
@@ -217,7 +217,7 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
   end
 
   defp fetch_entity(:corporations, id) do
-    case DataFetcher.get_corporation(id) do
+    case Client.get_corporation(id) do
       {:ok, data} ->
         Helper.put(:corporations, id, data)
         {:ok, data}
@@ -228,7 +228,7 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
   end
 
   defp fetch_entity(:alliances, id) do
-    case DataFetcher.get_alliance(id) do
+    case Client.get_alliance(id) do
       {:ok, data} ->
         Helper.put(:alliances, id, data)
         {:ok, data}

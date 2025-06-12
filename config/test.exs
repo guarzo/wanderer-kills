@@ -1,50 +1,104 @@
 import Config
 
-# Configure the application for testing
+# Configure the application for testing with nested structure
 config :wanderer_kills,
-  # Disable external services in tests
-  start_preloader: false,
-  start_redisq: false,
+  # Service configuration
+  services: [
+    start_preloader: false,
+    start_redisq: false
+  ],
 
-  # Disable ETS supervisor in tests (managed manually)
+  # Cache configuration - fast expiry for tests
+  cache: [
+    killmails_ttl: 1,
+    system_ttl: 1,
+    esi_ttl: 1,
+    esi_killmail_ttl: 1,
+    system_recent_fetch_threshold: 1
+  ],
+
+  # HTTP retry configuration
+  http: [
+    client: WandererKills.Http.Client.Mock,
+    request_timeout_ms: 1_000,
+    default_timeout_ms: 1_000,
+    retry: [
+      max_retries: 1,
+      base_delay: 100,
+      max_delay: 1_000
+    ]
+  ],
+
+  # ESI configuration for tests
+  esi: [
+    base_url: "https://esi.test.local",
+    request_timeout_ms: 1_000,
+    batch_concurrency: 2
+  ],
+
+  # ZKillboard configuration for tests
+  zkb: [
+    base_url: "https://zkb.test.local",
+    request_timeout_ms: 1_000,
+    batch_concurrency: 2
+  ],
+
+  # RedisQ configuration for tests
+  redisq: [
+    base_url: "https://redisq.test.local",
+    fast_interval_ms: 100,
+    idle_interval_ms: 100,
+    task_timeout_ms: 1_000,
+    retry: [
+      max_retries: 1,
+      base_delay: 100
+    ]
+  ],
+
+  # Parser configuration
+  parser: [
+    cutoff_seconds: 60,
+    summary_interval_ms: 100
+  ],
+
+  # Enricher configuration
+  enricher: [
+    max_concurrency: 2,
+    task_timeout_ms: 1_000,
+    min_attackers_for_parallel: 10
+  ],
+
+  # Storage configuration
+  storage: [
+    enable_event_streaming: false,
+    gc_interval_ms: 100,
+    max_events_per_system: 100
+  ],
+
+  # Monitoring configuration
+  monitoring: [
+    status_interval_ms: 60_000,
+    health_check_interval_ms: 30_000
+  ],
+
+  # Telemetry configuration - disabled for tests
+  telemetry: [
+    enabled_metrics: [],
+    sampling_rate: 0.0,
+    retention_period: 60
+  ],
+
+  # Mock clients for testing (legacy flat config for now)
+  zkb_client: WandererKills.Zkb.Client.Mock,
+  esi_client: WandererKills.ESI.Client.Mock,
+
+  # Test-specific configurations (legacy)
   start_ets_supervisor: false,
 
-  # Fast cache expiry for tests (flattened structure)
-  cache_killmails_ttl: 1,
-  cache_system_ttl: 1,
-  cache_esi_ttl: 1,
-
-  # Short timeouts for faster test runs
-  retry_http_max_retries: 1,
-  retry_http_base_delay: 100,
-  retry_redisq_max_retries: 1,
-  retry_redisq_base_delay: 100,
-
-  # Fast intervals for tests
-  redisq_fast_interval_ms: 100,
-  redisq_idle_interval_ms: 100,
-  redisq_task_timeout_ms: 1_000,
-
-  # Short timeouts for other services
-  enricher_task_timeout_ms: 1_000,
-  parser_summary_interval_ms: 100,
-  killmail_store_gc_interval_ms: 100,
-
-  # Mock clients for testing
-  http_client: WandererKills.Http.Client.Mock,
-  zkb_client: WandererKills.Zkb.Client.Mock,
-  esi_client: WandererKills.ESI.DataFetcher.Mock,
-
-  # Use test cache names
+  # Test cache names (legacy)
   killmails_cache_name: :wanderer_test_killmails_cache,
   system_cache_name: :wanderer_test_system_cache,
-  esi_cache_name: :wanderer_test_esi_cache,
-
-  # Disable telemetry in tests
-  telemetry_enabled_metrics: [],
-  telemetry_sampling_rate: 0.0
-
-# ESI cache configuration removed - now using Cache.Helper directly
+  esi_cache_name: :wanderer_test_esi_cache
 
 # Configure Cachex for tests
 config :cachex, :default_ttl, :timer.minutes(1)
@@ -52,5 +106,6 @@ config :cachex, :default_ttl, :timer.minutes(1)
 # Configure Mox - use global mode
 config :mox, global: true
 
-# Logger configuration for tests
-config :logger, level: :warning
+# Logger configuration for tests - already set in runtime.exs based on env
+# But override here to ensure warning level
+config :logger, :default_handler, level: :warning

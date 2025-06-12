@@ -18,10 +18,8 @@ defmodule WandererKills.Test.CacheHelpers do
     # Clear KillStore ETS tables
     WandererKills.Storage.KillmailStore.clear()
 
-    # Clear test caches
-    Cachex.clear(:killmails_cache_test)
-    Cachex.clear(:system_cache_test)
-    Cachex.clear(:esi_cache_test)
+    # Clear the actual wanderer_cache that's running
+    safe_clear_cache(:wanderer_cache)
 
     :ok
   end
@@ -40,6 +38,9 @@ defmodule WandererKills.Test.CacheHelpers do
     # Clear any additional caches
     clear_additional_caches()
 
+    # Give Cachex a moment to settle after clearing
+    Process.sleep(10)
+
     :ok
   end
 
@@ -48,8 +49,8 @@ defmodule WandererKills.Test.CacheHelpers do
   """
   @spec clear_test_caches() :: :ok
   def clear_test_caches do
-    # Clear the unified cache used in both test and production environments
-    safe_clear_cache(:unified_cache)
+    # Clear the wanderer_cache which is the actual cache used in the application
+    safe_clear_cache(:wanderer_cache)
     :ok
   end
 

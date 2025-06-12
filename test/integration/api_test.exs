@@ -1,5 +1,5 @@
 defmodule WandererKills.ApiTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use WandererKillsWeb.ConnCase
   use WandererKills.Test.SharedContexts
   use WandererKills.Test.Tags

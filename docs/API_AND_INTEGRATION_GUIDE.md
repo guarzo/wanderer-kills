@@ -1,54 +1,60 @@
-# WandererKills Integration Guide
+# WandererKills API & Integration Guide
 
 ## Overview
 
-The WandererKills service provides real-time EVE Online killmail data through multiple integration patterns. This guide covers all available integration methods and provides practical examples for consuming the service.
+WandererKills is a real-time EVE Online killmail data service that provides multiple integration patterns for consuming killmail data. The service fetches data from zKillboard's RedisQ stream and enriches it with ESI (EVE Swagger Interface) data.
 
-## Quick Start
+**Service Information:**
+- **Default Port**: 4004
+- **Base URL**: `http://localhost:4004/api/v1`
+- **API Version**: v1
+- **Authentication**: None required (current version)
 
-The service runs on `http://localhost:4004` by default and provides:
+**Integration Options:**
+- **REST API** - HTTP endpoints for fetching killmail data
+- **WebSocket** - Real-time kill notifications via Phoenix channels  
+- **PubSub** - Direct message broadcasting for Elixir applications
+- **Client Library** - Elixir behaviour for type-safe integration
 
-- **REST API** - Fetch kill data
-- **WebSocket Channels** - Real-time kill notifications via Phoenix channels
-- **Phoenix PubSub** - Direct message broadcasting for Elixir applications
-- **Client Library** - Elixir behaviour for direct integration
-
-## Authentication
-
-Currently, the service does not require authentication.
+---
 
 ## REST API Integration
 
 ### Base URL
-
 ```
 http://localhost:4004/api/v1
 ```
 
-### Kill Data Endpoints
+### Core Endpoints
 
-#### Fetch System Kills
+| Method | Endpoint                    | Description                 |
+| ------ | --------------------------- | --------------------------- |
+| GET    | `/kills/system/{system_id}` | Get kills for a system      |
+| POST   | `/kills/systems`            | Bulk fetch multiple systems |
+| GET    | `/kills/cached/{system_id}` | Get cached kills only       |
+| GET    | `/killmail/{killmail_id}`   | Get specific killmail       |
+| GET    | `/kills/count/{system_id}`  | Get kill count for system   |
+| GET    | `/health`                   | Health check                |
+| GET    | `/status`                   | Service status              |
 
-Get recent kills for a specific solar system.
+### System Kills
 
+#### Single System
 ```http
 GET /api/v1/kills/system/{system_id}?since_hours={hours}&limit={limit}
 ```
 
 **Parameters:**
-
 - `system_id` (required) - EVE Online solar system ID
 - `since_hours` (required) - Hours to look back for kills
 - `limit` (optional) - Maximum kills to return (default: 100)
 
-**Example Request:**
-
+**Example:**
 ```bash
 curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50"
 ```
 
-**Example Response:**
-
+**Response:**
 ```json
 {
   "data": {
@@ -62,8 +68,6 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
           "character_name": "Victim Name",
           "corporation_id": 123456789,
           "corporation_name": "Victim Corp",
-          "alliance_id": 456789123,
-          "alliance_name": "Victim Alliance",
           "ship_type_id": 671,
           "ship_name": "Raven",
           "damage_taken": 2847
@@ -71,12 +75,11 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
         "attackers": [
           {
             "character_id": 111222333,
-            "character_name": "Attacker Name",
+            "character_name": "Attacker Name", 
             "corporation_id": 444555666,
             "corporation_name": "Attacker Corp",
             "ship_type_id": 17918,
             "ship_name": "Rattlesnake",
-            "weapon_type_id": 2456,
             "damage_done": 2847,
             "final_blow": true
           }
@@ -99,10 +102,7 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
 }
 ```
 
-#### Bulk Fetch Multiple Systems
-
-Get kills for multiple systems in a single request.
-
+#### Multiple Systems (Bulk)
 ```http
 POST /api/v1/kills/systems
 Content-Type: application/json
@@ -114,8 +114,7 @@ Content-Type: application/json
 }
 ```
 
-**Example Response:**
-
+**Response:**
 ```json
 {
   "data": {
@@ -129,32 +128,23 @@ Content-Type: application/json
 }
 ```
 
-#### Get Cached Kills
-
-Retrieve cached kills without triggering a fresh fetch.
-
+### Cached Data
 ```http
 GET /api/v1/kills/cached/{system_id}
 ```
+Returns only cached kills without triggering a fresh fetch.
 
-#### Get Specific Killmail
-
-Fetch details for a specific killmail.
-
+### Specific Killmail
 ```http
 GET /api/v1/killmail/{killmail_id}
 ```
 
-#### Get System Kill Count
-
-Get the current kill count for a system.
-
+### Kill Count
 ```http
 GET /api/v1/kills/count/{system_id}
 ```
 
-**Example Response:**
-
+**Response:**
 ```json
 {
   "data": {
@@ -166,19 +156,17 @@ GET /api/v1/kills/count/{system_id}
 }
 ```
 
+---
 
 ## WebSocket Integration
 
-Connect to the WebSocket endpoint for real-time kill notifications using Phoenix channels.
-
 ### Connection
-
+Connect to the WebSocket endpoint using Phoenix Socket protocol:
 ```
 ws://localhost:4004/socket
 ```
 
-### Phoenix Socket Client Example (JavaScript)
-
+### JavaScript Example
 ```javascript
 import { Socket } from 'phoenix';
 
@@ -193,17 +181,12 @@ socket.connect();
 const channel = socket.channel('killmails:system:30000142', {});
 
 channel.join()
-  .receive('ok', resp => { 
-    console.log('Joined successfully', resp);
-  })
-  .receive('error', resp => { 
-    console.log('Unable to join', resp);
-  });
+  .receive('ok', resp => console.log('Joined successfully', resp))
+  .receive('error', resp => console.log('Unable to join', resp));
 
 // Listen for kill events
 channel.on('new_kill', payload => {
   console.log('New kill:', payload.killmail_id);
-  // Process the kill data
 });
 
 channel.on('system_stats', payload => {
@@ -211,30 +194,18 @@ channel.on('system_stats', payload => {
 });
 
 // Subscribe to multiple systems
-const systems = [30000142, 30000144];
-channel.push('subscribe', { systems: systems })
-  .receive('ok', resp => { 
-    console.log('Subscribed to systems', resp);
-  })
-  .receive('error', resp => { 
-    console.log('Failed to subscribe', resp);
-  });
-
-// Handle disconnections
-socket.onError(() => console.log('Socket error'));
-socket.onClose(() => console.log('Socket closed'));
+channel.push('subscribe', { systems: [30000142, 30000144] })
+  .receive('ok', resp => console.log('Subscribed to systems', resp))
+  .receive('error', resp => console.log('Failed to subscribe', resp));
 ```
 
 ### Channel Events
 
 #### new_kill
-
-Received when a new kill is detected:
-
 ```json
 {
   "killmail_id": 123456789,
-  "kill_time": "2024-01-15T14:30:00Z",
+  "kill_time": "2024-01-15T14:30:00Z", 
   "system_id": 30000142,
   "victim": {...},
   "attackers": [...],
@@ -243,9 +214,6 @@ Received when a new kill is detected:
 ```
 
 #### system_stats
-
-Received when system statistics are updated:
-
 ```json
 {
   "system_id": 30000142,
@@ -254,25 +222,18 @@ Received when system statistics are updated:
 }
 ```
 
+---
 
-## Real-time Integration (Elixir Applications)
+## PubSub Integration (Elixir Applications)
 
-For Elixir applications running in the same environment, you can subscribe directly to Phoenix PubSub topics.
+For Elixir applications running in the same environment, subscribe directly to Phoenix PubSub topics:
 
-### PubSub Topics
+### Topic Structure
+- `zkb:system:{system_id}` - All updates for system
+- `zkb:system:{system_id}:detailed` - Detailed kills for system
+- `zkb:all_systems` - Global kill updates
 
-```elixir
-# Subscribe to all kill updates
-Phoenix.PubSub.subscribe(WandererKills.PubSub, "zkb:kills:updated")
-Phoenix.PubSub.subscribe(WandererKills.PubSub, "zkb:detailed_kills:updated")
-
-# Subscribe to specific system updates
-Phoenix.PubSub.subscribe(WandererKills.PubSub, "zkb:system:#{system_id}")
-Phoenix.PubSub.subscribe(WandererKills.PubSub, "zkb:system:#{system_id}:detailed")
-```
-
-### Message Handling
-
+### Example Implementation
 ```elixir
 defmodule MyApp.KillSubscriber do
   use GenServer
@@ -287,26 +248,23 @@ defmodule MyApp.KillSubscriber do
     {:ok, state}
   end
 
-  def handle_info(%{type: :killmail_update, solar_system_id: system_id, kills: kills}, state) do
+  def handle_info(%{type: :killmail_update, system_id: system_id, kills: kills}, state) do
     IO.puts("Received #{length(kills)} new kills for system #{system_id}")
-    # Process kills...
     {:noreply, state}
   end
 
-  def handle_info(%{type: :killmail_count_update, solar_system_id: system_id, kills: count}, state) do
+  def handle_info(%{type: :killmail_count_update, system_id: system_id, count: count}, state) do
     IO.puts("System #{system_id} kill count updated to #{count}")
-    # Update your local state...
     {:noreply, state}
   end
 end
 ```
 
+---
+
 ## Client Library Integration (Elixir)
 
-For direct integration within Elixir applications, implement the `WandererKills.ClientBehaviour`.
-
 ### Using the Built-in Client
-
 ```elixir
 # Add to your application's dependencies
 {:wanderer_kills, path: "../wanderer_kills"}
@@ -324,15 +282,13 @@ alias WandererKills.Client
 cached_kills = Client.get_cached_killmails(30000142)
 ```
 
-### Implementing Your Own Client
-
+### Custom Client Implementation
 ```elixir
 defmodule MyApp.KillsClient do
   @behaviour WandererKills.ClientBehaviour
 
   @impl true
   def get_system_killmails(system_id, since_hours, limit) do
-    # Your implementation using the REST API
     url = "http://wanderer-kills:4004/api/v1/kills/system/#{system_id}"
     params = %{since_hours: since_hours, limit: limit}
 
@@ -344,15 +300,14 @@ defmodule MyApp.KillsClient do
         {:error, reason}
     end
   end
-
-  # Implement other callbacks...
 end
 ```
 
+---
+
 ## Error Handling
 
-The service returns standardized error responses:
-
+### Standard Error Response
 ```json
 {
   "error": {
@@ -368,49 +323,53 @@ The service returns standardized error responses:
 }
 ```
 
-### Common Error Types
+### Error Types
+| Type                   | Description                      |
+| ---------------------- | -------------------------------- |
+| `invalid_parameter`    | Invalid request parameter        |
+| `not_found`            | Resource not found               |
+| `rate_limit_exceeded`  | Rate limit exceeded              |
+| `internal_error`       | Server error                     |
+| `timeout`              | Request timeout                  |
+| `external_api_error`   | External API failure             |
+| `validation_error`     | Data validation failed           |
 
-- `invalid_parameter` - Invalid request parameters
-- `not_found` - Resource not found
-- `rate_limit_exceeded` - Rate limit exceeded
-- `internal_error` - Server error
-- `timeout` - Request timeout
-- `external_api_error` - External API failure
-- `validation_error` - Data validation failed
+### HTTP Status Codes
+| Code | Description    |
+| ---- | -------------- |
+| 200  | Success        |
+| 400  | Bad Request    |
+| 404  | Not Found      |
+| 429  | Rate Limited   |
+| 500  | Internal Error |
 
-### Error Handling Best Practices
-
-1. **Implement Retry Logic** - Use exponential backoff for transient errors
-2. **Handle Rate Limits** - Respect 429 responses and retry-after headers
-3. **Validate Parameters** - Check parameters client-side before requests
-4. **Log Errors** - Include request context in error logs
+---
 
 ## Rate Limiting
 
-The service implements rate limiting to ensure fair usage:
+### Limits
+- **Per-IP**: 1000 requests/minute
+- **Burst**: 100 requests/10 seconds
+- **WebSocket**: 10 connections/IP
+- **Subscription Limit**: 100 systems per subscription
 
-- **Per-IP Limits**: 1000 requests per minute
-- **Burst Limit**: 100 requests in 10 seconds
-- **WebSocket Connections**: 10 concurrent connections per IP
-
-### Rate Limit Headers
-
+### Headers
 ```
 X-RateLimit-Limit: 1000
 X-RateLimit-Remaining: 987
 X-RateLimit-Reset: 1642258800
 ```
 
-## Health and Monitoring
+---
+
+## Health & Monitoring
 
 ### Health Check
-
 ```http
 GET /health
 ```
 
 **Response:**
-
 ```json
 {
   "status": "ok",
@@ -419,13 +378,11 @@ GET /health
 ```
 
 ### Service Status
-
 ```http
 GET /status
 ```
 
 **Response:**
-
 ```json
 {
   "cache_stats": {
@@ -438,10 +395,11 @@ GET /status
 }
 ```
 
+---
+
 ## Integration Examples
 
-### Node.js Application
-
+### Node.js
 ```javascript
 const axios = require("axios");
 
@@ -462,7 +420,6 @@ class WandererKillsClient {
       throw error;
     }
   }
-
 }
 
 // Usage
@@ -471,11 +428,9 @@ const kills = await client.getSystemKills(30000142, 24, 50);
 console.log(`Found ${kills.length} kills`);
 ```
 
-### Python Application
-
+### Python
 ```python
 import requests
-import json
 
 class WandererKillsClient:
     def __init__(self, base_url='http://localhost:4004/api/v1'):
@@ -490,89 +445,85 @@ class WandererKillsClient:
 
         return response.json()['data']['kills']
 
-
 # Usage
 client = WandererKillsClient()
 kills = client.get_system_kills(30000142, since_hours=24, limit=50)
 print(f"Found {len(kills)} kills")
 ```
 
-## Best Practices
+---
 
-### Performance
+## Data Formats & Field Normalization
 
-- **Batch Requests** - Use bulk endpoints for multiple systems
-- **Cache Results** - Implement client-side caching with appropriate TTLs
-- **Use Cached Endpoints** - Use `/cached/` endpoints for frequently accessed data
-- **Limit Request Size** - Keep system lists under 50 systems per request
-- **Use WebSocket** - For real-time updates instead of polling
-
-### Reliability
-
-- **Implement Circuit Breakers** - Fail fast when service is unavailable
-- **Handle Duplicates** - Same kill may be delivered multiple times
-- **Graceful Degradation** - Fallback to cached data when possible
-- **Health Monitoring** - Regular health checks in production
-
-### Security
-
-- **Validate Webhooks** - Verify webhook authenticity in production
-- **Rate Limiting** - Implement client-side rate limiting
-- **HTTPS Only** - Use HTTPS in production environments
-- **API Keys** - Implement proper authentication for production
-
-## Field Normalization
-
-The service normalizes field names for consistency:
-
+### Field Mapping
+The API normalizes field names for consistency:
 - `solar_system_id` → `system_id`
 - `killID` → `killmail_id`
 - `killmail_time` → `kill_time`
 
-All responses use the normalized field names internally.
+### Timestamps
+All timestamps are in ISO 8601 format (UTC).
+
+### Cache Behavior
+- **Killmails**: Cached for 5 minutes
+- **System data**: Cached for 1 hour  
+- **ESI enrichment**: Cached for 24 hours
+
+---
+
+## Best Practices
+
+### Performance
+- **Use bulk endpoints** for multiple systems
+- **Implement client-side caching** with appropriate TTLs
+- **Use cached endpoints** for frequently accessed data
+- **Subscribe to WebSocket** for real-time updates instead of polling
+
+### Reliability
+- **Implement circuit breakers** for service failures
+- **Handle duplicates** - same kill may be delivered multiple times
+- **Graceful degradation** - fallback to cached data when possible
+- **Regular health monitoring** in production
+
+### Error Handling
+- **Implement retry logic** with exponential backoff
+- **Respect rate limits** - handle 429 responses
+- **Validate parameters** client-side before requests
+- **Log errors** with request context
+
+---
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **No Kills Returned**
-
-   - Check if system ID is valid
+   - Check system ID validity
    - Verify time range (some systems have no recent activity)
-   - Check if service is properly fetching from zKillboard
+   - Ensure service is fetching from zKillboard
 
-2. **Webhook Not Receiving Data**
-
-   - Verify callback URL is accessible from service
-   - Check webhook endpoint returns 2xx status codes
-   - Review logs for HTTP errors
-
-3. **High Latency**
-
+2. **High Latency**
    - Use bulk endpoints for multiple systems
    - Implement client-side caching
-   - Consider using cached endpoints
+   - Consider cached endpoints
 
-4. **Rate Limiting**
+3. **Rate Limiting**
    - Implement exponential backoff
    - Reduce request frequency
-   - Use WebSocket connections for real-time data
+   - Use WebSocket for real-time data
 
 ### Debug Information
-
-Enable debug logging to troubleshoot issues:
-
+Enable debug logging:
 ```elixir
 # In config/config.exs
 config :logger, level: :debug
-
-# View logs
-docker logs wanderer-kills-container -f
 ```
+
+---
 
 ## Monitoring Integration
 
-The service provides comprehensive monitoring every 5 minutes in the logs:
+The service provides comprehensive 5-minute status reports:
 
 ```text
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -585,7 +536,6 @@ The service provides comprehensive monitoring every 5 minutes in the logs:
 
 📤 KILL DELIVERY:
    Total Kills Sent: 1234 (Realtime: 1150, Preload: 84)
-   Delivery Rate: 4.1 kills/minute
 
 🔄 REDISQ ACTIVITY:
    Kills Processed: 327
@@ -601,18 +551,21 @@ The service provides comprehensive monitoring every 5 minutes in the logs:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-## Support
+---
 
-For issues and questions:
+## Support & Resources
 
-- **GitHub Issues**: [Create an issue](https://github.com/wanderer-industries/wanderer-kills/issues)
-- **Documentation**: Check the `/docs` directory
-- **Health Endpoint**: Monitor service status via `/health`
+- **GitHub Issues**: Report bugs or request features
+- **Health Endpoint**: Monitor service status
+- **API Versioning**: 6-month deprecation notice for breaking changes
+- **Migration Guide**: Provided for major version changes
 
-## API Versioning
+---
 
-The current API version is `v1`. Future versions will be released with backward compatibility guarantees:
+## External Dependencies
 
-- **URL Versioning**: `/api/v1/`
-- **Deprecation Notice**: 6-month advance notice
-- **Migration Guide**: Provided for breaking changes
+The service integrates with:
+- **zKillboard RedisQ** - Real-time killmail stream
+- **EVE ESI API** - Killmail details and validation
+
+Rate limiting and caching ensure reliable operation while respecting external service limits.

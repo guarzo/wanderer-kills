@@ -1,31 +1,163 @@
 defmodule WandererKills.Config do
   @moduledoc """
-  Simplified configuration wrapper for WandererKills.
+  Centralized configuration access for WandererKills.
 
-  This module provides direct access to application configuration
-  using `Application.get_env/3` with sensible defaults.
+  This module provides access to the application's nested configuration structure
+  with sensible defaults. It supports both the new nested format and legacy
+  flat configuration for backward compatibility.
+
+  ## Configuration Structure
+
+  The configuration is organized into logical groups:
+  - `:cache` - Caching configuration (TTLs, thresholds)
+  - `:esi` - ESI API configuration (URL, timeouts, concurrency)
+  - `:http` - HTTP client configuration (timeouts, retries)
+  - `:zkb` - ZKillboard configuration (URL, timeouts)
+  - `:redisq` - RedisQ streaming configuration
+  - `:parser` - Killmail parsing configuration
+  - `:enricher` - Data enrichment configuration
+  - `:batch` - Batch processing configuration
+  - `:storage` - Storage and event streaming configuration
+  - `:monitoring` - Monitoring intervals
+  - `:telemetry` - Telemetry configuration
+  - `:websocket` - WebSocket configuration
+  - `:services` - Service startup flags
+  - `:ship_types` - Ship type validation configuration
+
+  ## Usage
+
+      # Access nested configuration
+      Config.get([:cache, :killmails_ttl], 3600)
+      
+      # Access configuration group
+      Config.cache()
+      
+      # Legacy flat access (for backward compatibility)
+      Config.get(:cache_killmails_ttl, 3600)
   """
 
   @app_name :wanderer_kills
 
+  # Default values for all configuration options
+  @defaults %{
+    cache: %{
+      killmails_ttl: 3600,
+      system_ttl: 1800,
+      esi_ttl: 3600,
+      esi_killmail_ttl: 86_400,
+      system_recent_fetch_threshold: 5
+    },
+    esi: %{
+      base_url: "https://esi.evetech.net/latest",
+      request_timeout_ms: 30_000,
+      batch_concurrency: 10
+    },
+    http: %{
+      client: WandererKills.Http.Client,
+      request_timeout_ms: 10_000,
+      default_timeout_ms: 10_000,
+      retry: %{
+        max_retries: 3,
+        base_delay: 1000,
+        max_delay: 30_000
+      }
+    },
+    zkb: %{
+      base_url: "https://zkillboard.com/api",
+      request_timeout_ms: 15_000,
+      batch_concurrency: 5
+    },
+    redisq: %{
+      base_url: "https://zkillredisq.stream/listen.php",
+      fast_interval_ms: 1_000,
+      idle_interval_ms: 5_000,
+      initial_backoff_ms: 1_000,
+      max_backoff_ms: 30_000,
+      backoff_factor: 2,
+      task_timeout_ms: 10_000,
+      retry: %{
+        max_retries: 5,
+        base_delay: 500
+      }
+    },
+    parser: %{
+      cutoff_seconds: 3_600,
+      summary_interval_ms: 60_000
+    },
+    enricher: %{
+      max_concurrency: 10,
+      task_timeout_ms: 30_000,
+      min_attackers_for_parallel: 3
+    },
+    batch: %{
+      concurrency_size: 100,
+      default_concurrency: 5
+    },
+    storage: %{
+      enable_event_streaming: true,
+      gc_interval_ms: 60_000,
+      max_events_per_system: 10_000
+    },
+    monitoring: %{
+      status_interval_ms: 300_000,
+      health_check_interval_ms: 60_000
+    },
+    telemetry: %{
+      enabled_metrics: [:cache, :api, :circuit, :event],
+      sampling_rate: 1.0,
+      retention_period: 604_800
+    },
+    websocket: %{
+      degraded_threshold: 1000
+    },
+    services: %{
+      start_preloader: true,
+      start_redisq: true
+    }
+  }
+
   @doc """
-  Get a configuration value by key with optional default.
+  Get a configuration value with optional default.
+
+  Supports both nested and flat key formats for backward compatibility.
 
   ## Examples
       
-      Config.get(:cache_killmails_ttl, 3600)
-      Config.get([:cache, :killmails_ttl], 3600)
+      # Nested access
+      Config.get([:cache, :killmails_ttl])
+      
+      # Legacy flat access
+      Config.get(:cache_killmails_ttl)
+      
+      # With custom default
+      Config.get([:cache, :custom_ttl], 7200)
   """
   def get(key, default \\ nil)
 
-  def get(key, default) when is_atom(key) do
-    Application.get_env(@app_name, key, default)
+  # Handle nested key access
+  def get([group | path], default) when is_atom(group) and is_list(path) do
+    group_config = Application.get_env(@app_name, group, get_in(@defaults, [group]))
+
+    case get_in(group_config, path) do
+      nil -> default
+      value -> value
+    end
   end
 
-  def get([key | path], default) when is_atom(key) do
-    @app_name
-    |> Application.get_env(key, %{})
-    |> get_in(path) || default
+  # Handle legacy flat key access by converting to nested
+  def get(key, default) when is_atom(key) do
+    # First try direct access (for non-nested configs)
+    case Application.get_env(@app_name, key) do
+      nil ->
+        # Try to convert flat key to nested key
+        case flat_to_nested_key(key) do
+          {group, nested_path} -> get([group | nested_path], default)
+          nil -> default
+        end
+
+      value ->
+        value
+    end
   end
 
   @doc """
@@ -35,97 +167,142 @@ defmodule WandererKills.Config do
     Application.get_all_env(@app_name)
   end
 
-  # Convenience functions for common config groups
+  # Configuration group accessors
 
+  @doc "Get cache configuration"
   def cache do
-    %{
-      killmails_ttl: get(:cache_killmails_ttl, 3600),
-      system_ttl: get(:cache_system_ttl, 1800),
-      esi_ttl: get(:cache_esi_ttl, 3600),
-      system_recent_fetch_threshold: get(:cache_system_recent_fetch_threshold, 5)
-    }
+    get_group(:cache)
   end
 
+  @doc "Get ESI configuration"
+  def esi do
+    get_group(:esi)
+  end
+
+  @doc "Get HTTP configuration"
+  def http do
+    get_group(:http)
+  end
+
+  @doc "Get ZKillboard configuration"
+  def zkb do
+    get_group(:zkb)
+  end
+
+  @doc "Get RedisQ configuration"
+  def redisq do
+    get_group(:redisq)
+  end
+
+  @doc "Get parser configuration"
+  def parser do
+    get_group(:parser)
+  end
+
+  @doc "Get enricher configuration"
+  def enricher do
+    get_group(:enricher)
+  end
+
+  @doc "Get batch processing configuration"
+  def batch do
+    get_group(:batch)
+  end
+
+  @doc "Get storage configuration"
+  def storage do
+    get_group(:storage)
+  end
+
+  @doc "Get monitoring configuration"
+  def monitoring do
+    get_group(:monitoring)
+  end
+
+  @doc "Get telemetry configuration"
+  def telemetry do
+    get_group(:telemetry)
+  end
+
+  @doc "Get WebSocket configuration"
+  def websocket do
+    get_group(:websocket)
+  end
+
+  @doc "Get services configuration"
+  def services do
+    get_group(:services)
+  end
+
+  @doc "Get ship types configuration"
+  def ship_types do
+    Application.get_env(@app_name, :ship_types, %{})
+  end
+
+  # Legacy compatibility functions
+
+  @doc "Get retry configuration (legacy)"
   def retry do
     %{
-      http_max_retries: get(:retry_http_max_retries, 3),
-      http_base_delay: get(:retry_http_base_delay, 1000),
-      http_max_delay: get(:retry_http_max_delay, 30_000),
-      redisq_max_retries: get(:retry_redisq_max_retries, 5),
-      redisq_base_delay: get(:retry_redisq_base_delay, 500)
+      http_max_retries: get([:http, :retry, :max_retries]),
+      http_base_delay: get([:http, :retry, :base_delay]),
+      http_max_delay: get([:http, :retry, :max_delay]),
+      redisq_max_retries: get([:redisq, :retry, :max_retries]),
+      redisq_base_delay: get([:redisq, :retry, :base_delay])
     }
   end
 
+  @doc "Get application configuration (legacy)"
   def app do
     %{
       port: get_endpoint_port(),
-      http_client: get(:http_client, WandererKills.Http.Client),
+      http_client: get([:http, :client]),
       zkb_client: get(:zkb_client, WandererKills.Killmails.ZkbClient),
-      start_redisq: get(:start_redisq, true)
+      start_redisq: get([:services, :start_redisq])
     }
   end
 
-  def esi do
-    %{
-      base_url: get(:esi_base_url, "https://esi.evetech.net/latest"),
-      request_timeout_ms: get(:esi_request_timeout_ms, 30_000),
-      batch_concurrency: get(:esi_batch_concurrency, 10)
-    }
-  end
-
-  def zkb do
-    %{
-      base_url: get(:zkb_base_url, "https://zkillboard.com/api"),
-      request_timeout_ms: get(:zkb_request_timeout_ms, 15_000),
-      batch_concurrency: get(:zkb_batch_concurrency, 5)
-    }
-  end
-
-  def redisq do
-    %{
-      base_url: get(:redisq_base_url, "https://zkillredisq.stream/listen.php"),
-      fast_interval_ms: get(:redisq_fast_interval_ms, 1_000),
-      idle_interval_ms: get(:redisq_idle_interval_ms, 5_000),
-      initial_backoff_ms: get(:redisq_initial_backoff_ms, 1_000),
-      max_backoff_ms: get(:redisq_max_backoff_ms, 30_000),
-      backoff_factor: get(:redisq_backoff_factor, 2),
-      task_timeout_ms: get(:redisq_task_timeout_ms, 10_000)
-    }
-  end
-
-  def parser do
-    %{
-      cutoff_seconds: get(:parser_cutoff_seconds, 3_600),
-      summary_interval_ms: get(:parser_summary_interval_ms, 60_000)
-    }
-  end
-
-  def enricher do
-    %{
-      max_concurrency: get(:enricher_max_concurrency, 10),
-      task_timeout_ms: get(:enricher_task_timeout_ms, 30_000),
-      min_attackers_for_parallel: get(:enricher_min_attackers_for_parallel, 3)
-    }
-  end
-
+  @doc "Get killmail store configuration (legacy)"
   def killmail_store do
     %{
-      gc_interval_ms: get(:killmail_store_gc_interval_ms, 60_000),
-      max_events_per_system: get(:killmail_store_max_events_per_system, 10_000)
+      gc_interval_ms: get([:storage, :gc_interval_ms]),
+      max_events_per_system: get([:storage, :max_events_per_system])
     }
   end
 
-  def storage do
+  @doc "Get all service URLs"
+  def service_urls do
     %{
-      enable_event_streaming: get([:storage, :enable_event_streaming], true)
+      esi_base_url: get([:esi, :base_url]),
+      zkb_base_url: get([:zkb, :base_url]),
+      redisq_base_url: get([:redisq, :base_url]),
+      eve_db_dump_url: get(:eve_db_dump_url, "https://www.fuzzwork.co.uk/dump/latest")
     }
   end
 
-  def telemetry do
+  @doc "Get all timeout values"
+  def timeouts do
     %{
-      enabled_metrics: get(:telemetry_enabled_metrics, [:cache, :api, :circuit, :event]),
-      sampling_rate: get(:telemetry_sampling_rate, 1.0),
-      retention_period: get(:telemetry_retention_period, 604_800)
+      esi_request_ms: get([:esi, :request_timeout_ms]),
+      zkb_request_ms: get([:zkb, :request_timeout_ms]),
+      http_request_ms: get([:http, :request_timeout_ms]),
+      default_request_ms: get([:http, :default_timeout_ms]),
+      health_check_ms: get(:health_check_timeout_ms, 10_000),
+      health_check_cache_ms: get(:health_check_cache_timeout_ms, 5_000),
+      gen_server_call_ms: gen_server_call_timeout()
+    }
+  end
+
+  @doc "Get metadata configuration"
+  def metadata do
+    %{
+      user_agent:
+        get(
+          :user_agent,
+          "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
+        ),
+      github_url: get(:github_url, "https://github.com/wanderer-industries/wanderer-kills"),
+      contact_email: get(:contact_email, "wanderer-kills@proton.me")
     }
   end
 
@@ -143,47 +320,19 @@ defmodule WandererKills.Config do
   def validation(:max_character_id), do: max_character_id()
 
   # Compatibility helpers
-  def start_redisq?, do: get(:start_redisq, true)
+  def start_redisq?, do: get([:services, :start_redisq])
 
-  def services do
-    %{
-      esi_base_url: get(:esi_base_url, "https://esi.evetech.net/latest"),
-      zkb_base_url: get(:zkb_base_url, "https://zkillboard.com/api"),
-      redisq_base_url: get(:redisq_base_url, "https://zkillredisq.stream/listen.php"),
-      eve_db_dump_url: get(:eve_db_dump_url, "https://www.fuzzwork.co.uk/dump/latest")
-    }
-  end
+  # Private functions
 
-  def batch do
-    %{
-      concurrency_esi: get(:esi_batch_concurrency, 10),
-      concurrency_zkb: get(:zkb_batch_concurrency, 5),
-      concurrency_default: get(:concurrency_batch_size, 100)
-    }
-  end
+  defp get_group(group) when is_atom(group) do
+    config = Application.get_env(@app_name, group, Map.get(@defaults, group, %{}))
 
-  def timeouts do
-    %{
-      esi_request_ms: get(:esi_request_timeout_ms, 30_000),
-      zkb_request_ms: get(:zkb_request_timeout_ms, 15_000),
-      http_request_ms: get(:http_request_timeout_ms, 10_000),
-      default_request_ms: get(:default_request_timeout_ms, 10_000),
-      health_check_ms: get(:health_check_timeout_ms, 10_000),
-      health_check_cache_ms: get(:health_check_cache_timeout_ms, 5_000),
-      gen_server_call_ms: gen_server_call_timeout()
-    }
-  end
-
-  def metadata do
-    %{
-      user_agent:
-        get(
-          :user_agent,
-          "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
-        ),
-      github_url: get(:github_url, "https://github.com/wanderer-industries/wanderer-kills"),
-      contact_email: get(:contact_email, "wanderer-kills@proton.me")
-    }
+    # Convert keyword list to map if necessary
+    case config do
+      config when is_list(config) -> Enum.into(config, %{})
+      config when is_map(config) -> config
+      _ -> %{}
+    end
   end
 
   defp get_endpoint_port do
@@ -191,6 +340,24 @@ defmodule WandererKills.Config do
       nil -> 4004
       http_config when is_list(http_config) -> Keyword.get(http_config, :port, 4004)
       _ -> 4004
+    end
+  end
+
+  # Convert flat keys to nested keys for backward compatibility
+  defp flat_to_nested_key(key) do
+    case Atom.to_string(key) do
+      "cache_" <> rest -> {:cache, [String.to_atom(rest)]}
+      "esi_" <> rest -> {:esi, [String.to_atom(rest)]}
+      "zkb_" <> rest -> {:zkb, [String.to_atom(rest)]}
+      "redisq_" <> rest -> {:redisq, [String.to_atom(rest)]}
+      "parser_" <> rest -> {:parser, [String.to_atom(rest)]}
+      "enricher_" <> rest -> {:enricher, [String.to_atom(rest)]}
+      "retry_http_" <> rest -> {:http, [:retry, String.to_atom(rest)]}
+      "retry_redisq_" <> rest -> {:redisq, [:retry, String.to_atom(rest)]}
+      "telemetry_" <> rest -> {:telemetry, [String.to_atom(rest)]}
+      "websocket_" <> rest -> {:websocket, [String.to_atom(rest)]}
+      "start_" <> rest -> {:services, [String.to_atom("start_" <> rest)]}
+      _ -> nil
     end
   end
 end

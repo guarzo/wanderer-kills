@@ -66,11 +66,11 @@ defmodule WandererKills.Preloader do
   """
   @spec get_enriched_killmails([integer()], limit(), boolean()) :: [killmail()]
   def get_enriched_killmails(killmail_ids, limit, filter_recent \\ true) do
-    Logger.debug("📦 get_enriched_killmails called",
+    Logger.debug("📦 get_enriched_killmails called", %{
       killmail_ids_count: length(killmail_ids),
       limit: limit,
       filter_recent: filter_recent
-    )
+    })
 
     # Only include kills from the last hour if filtering is enabled
     cutoff_time =
@@ -78,11 +78,11 @@ defmodule WandererKills.Preloader do
         now = DateTime.utc_now()
         cutoff = DateTime.add(now, -1 * 60 * 60, :second)
 
-        Logger.debug("📦 Calculated cutoff time for filtering",
+        Logger.debug("📦 Calculated cutoff time for filtering", %{
           current_time: DateTime.to_iso8601(now),
           cutoff_time: DateTime.to_iso8601(cutoff),
           hours_back: 1
-        )
+        })
 
         cutoff
       else
@@ -96,16 +96,16 @@ defmodule WandererKills.Preloader do
       |> Enum.map(&get_single_enriched_killmail/1)
       |> Enum.reduce([], fn
         {:ok, killmail}, acc ->
-          Logger.debug("📦 Retrieved killmail from cache",
+          Logger.debug("📦 Retrieved killmail from cache", %{
             killmail_id: killmail["killmail_id"]
-          )
+          })
 
           [killmail | acc]
 
         {:error, reason}, acc ->
-          Logger.debug("📦 Failed to retrieve killmail from cache",
+          Logger.debug("📦 Failed to retrieve killmail from cache", %{
             error: inspect(reason)
-          )
+          })
 
           acc
       end)

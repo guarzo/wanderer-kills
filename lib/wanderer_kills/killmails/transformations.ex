@@ -267,15 +267,24 @@ defmodule WandererKills.Killmails.Transformations do
   """
   @spec enrich_with_ship_names(map()) :: {:ok, map()}
   def enrich_with_ship_names(killmail) when is_map(killmail) do
-    Logger.debug("Starting ship name enrichment for killmail #{killmail["killmail_id"]}")
+    Logger.debug("Starting ship name enrichment for killmail", %{
+      killmail_id: killmail["killmail_id"]
+    })
 
     with {:ok, killmail} <- add_victim_ship_name(killmail),
          {:ok, killmail} <- add_attackers_ship_names(killmail) do
-      Logger.debug("Completed ship name enrichment for killmail #{killmail["killmail_id"]}")
+      Logger.debug("Completed ship name enrichment for killmail", %{
+        killmail_id: killmail["killmail_id"]
+      })
+
       {:ok, killmail}
     else
       error ->
-        Logger.error("Failed to enrich ship names: #{inspect(error)}")
+        Logger.error("Failed to enrich ship names", %{
+          error: inspect(error),
+          killmail_id: killmail["killmail_id"]
+        })
+
         {:ok, killmail}
     end
   end
@@ -312,9 +321,10 @@ defmodule WandererKills.Killmails.Transformations do
 
       {:error, _reason} ->
         # Log but don't fail the enrichment for missing ship names
-        Logger.debug(
-          "Could not get ship name for victim ship_type_id: #{inspect(Map.get(victim, "ship_type_id"))}"
-        )
+        Logger.debug("Could not get ship name for victim", %{
+          ship_type_id: Map.get(victim, "ship_type_id"),
+          killmail_id: Map.get(killmail, "killmail_id")
+        })
 
         {:ok, killmail}
     end
@@ -331,9 +341,10 @@ defmodule WandererKills.Killmails.Transformations do
             Map.put(attacker, "ship_name", ship_name)
 
           {:error, _reason} ->
-            Logger.debug(
-              "Could not get ship name for attacker ship_type_id: #{inspect(Map.get(attacker, "ship_type_id"))}"
-            )
+            Logger.debug("Could not get ship name for attacker", %{
+              ship_type_id: Map.get(attacker, "ship_type_id"),
+              killmail_id: Map.get(killmail, "killmail_id")
+            })
 
             attacker
         end
@@ -376,7 +387,7 @@ defmodule WandererKills.Killmails.Transformations do
 
   # Fallback to ESI if not found in cache
   defp fallback_to_esi({:error, %Error{type: :not_found}}, ship_type_id) do
-    case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
+    case WandererKills.ESI.Client.get_type(ship_type_id) do
       {:ok, %{"name" => name}} when is_binary(name) ->
         {:ok, name}
 

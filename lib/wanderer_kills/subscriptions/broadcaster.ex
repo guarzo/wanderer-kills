@@ -72,10 +72,7 @@ defmodule WandererKills.Subscriptions.Broadcaster do
     detailed_topic = PubSubTopics.system_detailed_topic(system_id)
     :ok = Phoenix.PubSub.broadcast(@pubsub_name, detailed_topic, message)
 
-    Logger.debug("Broadcasted killmail count update",
-      system_id: system_id,
-      count: count
-    )
+    Logger.debug("Broadcasted killmail count update system_id=#{system_id} count=#{count}")
 
     :ok
   end
@@ -91,13 +88,10 @@ defmodule WandererKills.Subscriptions.Broadcaster do
   defp log_broadcast(system_id, kills) do
     case kills do
       [] ->
-        Logger.debug("Broadcasted empty killmail update", system_id: system_id)
+        Logger.debug("Broadcasted empty killmail update system_id=#{system_id}")
 
       kills ->
-        Logger.debug("Broadcasted killmail update",
-          system_id: system_id,
-          kill_count: length(kills)
-        )
+        Logger.debug("Broadcasted killmail update system_id=#{system_id} kill_count=#{length(kills)}")
     end
   end
 end

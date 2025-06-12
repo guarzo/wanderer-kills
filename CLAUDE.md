@@ -58,7 +58,7 @@ docker-compose up        # Start with Redis and all services
    - `ZkbClient` - Historical data fetcher for specific queries
    - `UnifiedProcessor` - Processes both full and partial killmails
    - `Storage.KillmailStore` - ETS-based storage with event streaming
-   - `ESI.DataFetcher` - Enriches data with EVE API information
+   - `ESI.Client` - Enriches data with EVE API information
 
 3. **Caching Layer**
    - Single Cachex instance (`:wanderer_cache`) with namespace support
@@ -85,7 +85,7 @@ docker-compose up        # Start with Redis and all services
 - `Storage.KillmailStore` - Unified storage with event streaming
 
 #### External Services
-- `ESI.DataFetcher` - EVE Swagger Interface client
+- `ESI.Client` - EVE Swagger Interface client
 - `Killmails.ZkbClient` - zKillboard API client
 - `RedisQ` - Real-time data stream consumer
 - `Http.Client` - Centralized HTTP client with rate limiting

@@ -13,7 +13,7 @@ defmodule WandererKills.RedisQ do
   require Logger
 
   alias WandererKills.Killmails.UnifiedProcessor
-  alias WandererKills.ESI.DataFetcher, as: EsiClient
+  alias WandererKills.ESI.Client, as: EsiClient
   alias WandererKills.Support.Clock
   alias WandererKills.Http.Client, as: HttpClient
   alias WandererKills.Config

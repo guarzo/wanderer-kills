@@ -2,7 +2,8 @@ defmodule WandererKills.ESI.ClientBehaviour do
   @moduledoc """
   Behaviour for ESI (EVE Swagger Interface) client implementations.
 
-  This behaviour standardizes interactions with the EVE Online ESI API.
+  This behaviour standardizes interactions with the EVE Online ESI API,
+  providing both type-specific methods and a generic fetch interface.
   """
 
   alias WandererKills.Support.Error
@@ -10,6 +11,7 @@ defmodule WandererKills.ESI.ClientBehaviour do
   @type entity_id :: pos_integer()
   @type entity_data :: map()
   @type esi_result :: {:ok, entity_data()} | {:error, Error.t()}
+  @type fetch_args :: term()
 
   # Character operations
   @callback get_character(entity_id()) :: esi_result()
@@ -34,4 +36,7 @@ defmodule WandererKills.ESI.ClientBehaviour do
   # System operations
   @callback get_system(entity_id()) :: esi_result()
   @callback get_system_batch([entity_id()]) :: [esi_result()]
+
+  # Generic fetch operation (for flexibility)
+  @callback fetch(fetch_args()) :: esi_result()
 end
