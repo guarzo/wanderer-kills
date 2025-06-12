@@ -61,7 +61,7 @@ jobs:
         run: mix dialyzer
 
       - name: Run tests with coverage
-        run: mix test --max-failures=1 --partitions=4
+        run: mix test --max-failures=1
 
       - name: Generate coverage report
         run: mix test.coverage.ci
