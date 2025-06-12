@@ -8,22 +8,26 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
 
   setup :verify_on_exit!
 
-  describe "notify_webhook/4" do
-    test "successfully sends webhook notification" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "https://example.com/webhook",
-        "subscriber_id" => "user_123"
+  setup do
+    subscription = %{
+      "id" => "sub_123",
+      "callback_url" => "https://example.com/webhook",
+      "subscriber_id" => "user_123"
+    }
+
+    kills = [
+      %{
+        "killmail_id" => 123_456,
+        "solar_system_id" => 30_000_142,
+        "killmail_time" => "2024-01-01T00:00:00Z"
       }
+    ]
 
-      kills = [
-        %{
-          "killmail_id" => 123_456,
-          "solar_system_id" => 30_000_142,
-          "killmail_time" => "2024-01-01T00:00:00Z"
-        }
-      ]
+    %{subscription: subscription, kills: kills}
+  end
 
+  describe "notify_webhook/4" do
+    test "successfully sends webhook notification", %{subscription: subscription, kills: kills} do
       WandererKills.Http.Client.Mock
       |> expect(:post, fn url, body, opts ->
         assert url == "https://example.com/webhook"
@@ -31,10 +35,10 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
         assert body[:system_id] == 30_000_142
         assert body[:kills] == kills
 
-        assert opts[:headers] == [
-                 {"Content-Type", "application/json"},
-                 {"User-Agent", "WandererKills/1.0"}
-               ]
+        # Check headers are present without depending on order
+        headers = Map.new(opts[:headers])
+        assert headers["Content-Type"] == "application/json"
+        assert headers["User-Agent"] == "WandererKills/1.0"
 
         {:ok, %{status: 200, body: %{"success" => true}}}
       end)
@@ -48,13 +52,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
                )
     end
 
-    test "handles webhook failure gracefully" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "https://example.com/webhook",
-        "subscriber_id" => "user_123"
-      }
-
+    test "handles webhook failure gracefully", %{subscription: subscription} do
       kills = [%{"killmail_id" => 123_456}]
 
       WandererKills.Http.Client.Mock
@@ -72,20 +70,12 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
                )
     end
 
-    test "handles missing callback URL" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => nil,
-        "subscriber_id" => "user_123"
-      }
-
+    test "handles missing callback URL", %{subscription: subscription} do
+      subscription = %{subscription | "callback_url" => nil}
       kills = [%{"killmail_id" => 123_456}]
 
-      # Explicitly expect no HTTP calls
-      WandererKills.Http.Client.Mock
-      |> expect(:post, 0, fn _url, _body, _opts ->
-        flunk("Should not make HTTP request for nil URL")
-      end)
+      # No HTTP calls should be made for nil URL
+      # verify_on_exit! will ensure no unexpected calls are made
 
       assert :ok =
                WebhookNotifier.notify_webhook(
@@ -96,20 +86,12 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
                )
     end
 
-    test "handles empty callback URL" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "",
-        "subscriber_id" => "user_123"
-      }
-
+    test "handles empty callback URL", %{subscription: subscription} do
+      subscription = %{subscription | "callback_url" => ""}
       kills = [%{"killmail_id" => 123_456}]
 
-      # Explicitly expect no HTTP calls
-      WandererKills.Http.Client.Mock
-      |> expect(:post, 0, fn _url, _body, _opts ->
-        flunk("Should not make HTTP request for empty URL")
-      end)
+      # No HTTP calls should be made for empty URL
+      # verify_on_exit! will ensure no unexpected calls are made
 
       assert :ok =
                WebhookNotifier.notify_webhook(
@@ -122,13 +104,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
   end
 
   describe "notify_webhook_count/4" do
-    test "successfully sends kill count notification" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "https://example.com/webhook",
-        "subscriber_id" => "user_123"
-      }
-
+    test "successfully sends kill count notification", %{subscription: subscription} do
       WandererKills.Http.Client.Mock
       |> expect(:post, fn url, body, opts ->
         assert url == "https://example.com/webhook"
@@ -136,10 +112,10 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
         assert body[:system_id] == 30_000_142
         assert body[:count] == 42
 
-        assert opts[:headers] == [
-                 {"Content-Type", "application/json"},
-                 {"User-Agent", "WandererKills/1.0"}
-               ]
+        # Check headers are present without depending on order
+        headers = Map.new(opts[:headers])
+        assert headers["Content-Type"] == "application/json"
+        assert headers["User-Agent"] == "WandererKills/1.0"
 
         {:ok, %{status: 200, body: %{"success" => true}}}
       end)
@@ -153,13 +129,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
                )
     end
 
-    test "handles kill count notification failure" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "https://example.com/webhook",
-        "subscriber_id" => "user_123"
-      }
-
+    test "handles kill count notification failure", %{subscription: subscription} do
       WandererKills.Http.Client.Mock
       |> expect(:post, fn _url, _body, _opts ->
         {:error, Error.http_error(:server_error, "Internal server error", true)}
@@ -177,13 +147,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
   end
 
   describe "webhook payload structure" do
-    test "includes all required fields in killmail update" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "https://example.com/webhook",
-        "subscriber_id" => "user_123"
-      }
-
+    test "includes all required fields in killmail update", %{subscription: subscription} do
       kills = [
         %{
           "killmail_id" => 123_456,
@@ -214,13 +178,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
                )
     end
 
-    test "includes timestamp in ISO8601 format" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "https://example.com/webhook",
-        "subscriber_id" => "user_123"
-      }
-
+    test "includes timestamp in ISO8601 format", %{subscription: subscription} do
       WandererKills.Http.Client.Mock
       |> expect(:post, fn _url, body, _opts ->
         timestamp = body[:timestamp]
@@ -242,13 +200,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
   end
 
   describe "HTTP client options" do
-    test "uses appropriate timeout for webhook requests" do
-      subscription = %{
-        "id" => "sub_123",
-        "callback_url" => "https://example.com/webhook",
-        "subscriber_id" => "user_123"
-      }
-
+    test "uses appropriate timeout for webhook requests", %{subscription: subscription} do
       WandererKills.Http.Client.Mock
       |> expect(:post, fn _url, _body, opts ->
         # Should have a reasonable timeout
