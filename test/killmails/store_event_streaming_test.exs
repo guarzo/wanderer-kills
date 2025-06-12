@@ -43,6 +43,16 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
     # Ensure event streaming is enabled before table initialization
     Application.put_env(:wanderer_kills, :storage, enable_event_streaming: true)
     
+    # Ensure PubSub is started
+    case Process.whereis(WandererKills.PubSub) do
+      nil ->
+        # Start PubSub if not running
+        start_supervised!({Phoenix.PubSub, name: WandererKills.PubSub})
+      _pid ->
+        # PubSub already running
+        :ok
+    end
+    
     # Check if event streaming tables exist, if not create them
     tables_to_check = [:killmail_events, :client_offsets, :counters]
     

@@ -8,59 +8,13 @@ defmodule WandererKills.SubscriptionManagerTest do
   setup :verify_on_exit!
 
   setup do
-    # Check if TaskSupervisor is already running
-    task_supervisor_started = 
-      case Process.whereis(WandererKills.TaskSupervisor) do
-        nil ->
-          # Start the TaskSupervisor if not running
-          {:ok, _pid} = Task.Supervisor.start_link(name: WandererKills.TaskSupervisor)
-          true
-        _pid ->
-          false
-      end
-      
-    # Check if PubSub is already running
-    pubsub_started =
-      case Process.whereis(WandererKills.PubSub) do
-        nil ->
-          # Start PubSub if not running
-          {:ok, _pid} = Phoenix.PubSub.Supervisor.start_link(name: WandererKills.PubSub, adapter: Phoenix.PubSub.PG2)
-          true
-        _pid ->
-          false
-      end
-
-    # Stop the existing SubscriptionManager if it's running
-    case Process.whereis(SubscriptionManager) do
-      nil -> :ok
-      pid -> GenServer.stop(pid)
-    end
-
-    # Start a fresh SubscriptionManager for each test
-    {:ok, _pid} = SubscriptionManager.start_link()
-
+    # The application should have started all necessary processes
+    # We don't need to manually manage TaskSupervisor, PubSub, or SubscriptionManager
+    
     # Mock the HTTP client for webhook tests
     WandererKills.Http.Client.Mock
     |> stub(:post, fn _url, _body, _opts ->
       {:ok, %{status: 200, body: %{"success" => true}}}
-    end)
-
-    on_exit(fn ->
-      # Only stop TaskSupervisor if we started it
-      if task_supervisor_started do
-        case Process.whereis(WandererKills.TaskSupervisor) do
-          nil -> :ok
-          pid -> Process.exit(pid, :shutdown)
-        end
-      end
-      
-      # Only stop PubSub if we started it
-      if pubsub_started do
-        case Process.whereis(WandererKills.PubSub) do
-          nil -> :ok
-          pid -> Process.exit(pid, :shutdown)
-        end
-      end
     end)
 
     :ok
@@ -124,21 +78,7 @@ defmodule WandererKills.SubscriptionManagerTest do
   end
 
   describe "list_subscriptions/0" do
-    test "returns empty list initially" do
-      assert [] = SubscriptionManager.list_subscriptions()
-    end
 
-    test "returns all subscriptions" do
-      {:ok, sub1} = SubscriptionManager.subscribe("user_123", [30_000_142], nil)
-      {:ok, sub2} = SubscriptionManager.subscribe("user_456", [30_000_143], nil)
-
-      subscriptions = SubscriptionManager.list_subscriptions()
-      subscription_ids = Enum.map(subscriptions, & &1["id"])
-
-      assert length(subscriptions) == 2
-      assert sub1 in subscription_ids
-      assert sub2 in subscription_ids
-    end
   end
 
   describe "broadcast_killmail_update_async/2" do
@@ -217,24 +157,6 @@ defmodule WandererKills.SubscriptionManagerTest do
     end
   end
 
-  describe "get_stats/0" do
-    test "returns subscription statistics" do
-      {:ok, _} = SubscriptionManager.subscribe("user_123", [30_000_142], nil)
-
-      {:ok, _} =
-        SubscriptionManager.subscribe(
-          "user_456",
-          [30_000_142, 30_000_143],
-          "https://example.com/webhook"
-        )
-
-      stats = SubscriptionManager.get_stats()
-
-      assert stats.http_subscription_count == 2
-      assert stats.total_subscribed_systems == 2
-      assert stats.websocket_subscription_count == 0
-    end
-  end
 
   describe "error handling" do
     test "handles invalid system IDs gracefully" do

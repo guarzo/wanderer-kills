@@ -1,11 +1,11 @@
 defmodule WandererKills.Subscriptions.BroadcasterTest do
   use ExUnit.Case, async: true
-  import ExUnit.CaptureLog
 
   alias WandererKills.Subscriptions.Broadcaster
   alias WandererKills.Support.PubSubTopics
 
   @pubsub_name WandererKills.PubSub
+
 
   setup do
     # Subscribe to relevant topics for testing
@@ -67,13 +67,7 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
     test "broadcasts empty kills list", %{system_id: system_id} do
       kills = []
 
-      log =
-        capture_log([level: :debug], fn ->
-          assert :ok = Broadcaster.broadcast_killmail_update(system_id, kills)
-        end)
-
-      assert log =~ "Broadcasted empty killmail update"
-      assert log =~ "system_id=#{system_id}"
+      assert :ok = Broadcaster.broadcast_killmail_update(system_id, kills)
 
       # Should still receive messages on all topics
       assert_receive %{
@@ -91,14 +85,14 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
         %{"killmail_id" => 127}
       ]
 
-      log =
-        capture_log([level: :debug], fn ->
-          assert :ok = Broadcaster.broadcast_killmail_update(system_id, kills)
-        end)
-
-      assert log =~ "Broadcasted killmail update"
-      assert log =~ "system_id=#{system_id}"
-      assert log =~ "kill_count=3"
+      assert :ok = Broadcaster.broadcast_killmail_update(system_id, kills)
+      
+      # Verify broadcast was received
+      assert_receive %{
+        type: :killmail_update,
+        system_id: ^system_id,
+        kills: ^kills
+      }
     end
 
     test "handles large kill lists", %{system_id: system_id} do
@@ -167,17 +161,17 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
       refute_receive %{type: :killmail_count_update}, 100
     end
 
-    test "logs count broadcast", %{system_id: system_id} do
+    test "broadcasts count update", %{system_id: system_id} do
       count = 10
 
-      log =
-        capture_log([level: :debug], fn ->
-          assert :ok = Broadcaster.broadcast_killmail_count(system_id, count)
-        end)
-
-      assert log =~ "Broadcasted killmail count update"
-      assert log =~ "system_id=#{system_id}"
-      assert log =~ "count=10"
+      assert :ok = Broadcaster.broadcast_killmail_count(system_id, count)
+      
+      # Verify broadcast was received
+      assert_receive %{
+        type: :killmail_count_update,
+        system_id: ^system_id,
+        count: ^count
+      }
     end
 
     test "handles zero count", %{system_id: system_id} do

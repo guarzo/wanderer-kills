@@ -15,7 +15,7 @@ Mox.defmock(WandererKills.Zkb.Client.Mock, for: WandererKills.Killmails.ZkbClien
 Mox.defmock(EsiClientMock, for: WandererKills.ESI.ClientBehaviour)
 
 # Start the application for testing
-Application.ensure_all_started(:wanderer_kills)
+{:ok, _} = Application.ensure_all_started(:wanderer_kills)
 
 # Create a test case module that provides common setup for all tests
 defmodule WandererKills.TestCase do

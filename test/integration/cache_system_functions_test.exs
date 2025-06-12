@@ -327,8 +327,9 @@ defmodule WandererKills.Integration.CacheSystemFunctionsTest do
 
     test "handles data corruption recovery" do
       # Manually corrupt cache by setting invalid data type
-      namespaced_key = ":systems:killmails:#{@test_system_id}"
-      assert {:ok, true} = Cachex.put(:wanderer_cache, namespaced_key, "invalid_data")
+      cache_adapter = Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
+      namespaced_key = "systems:killmails:#{@test_system_id}"
+      assert {:ok, true} = cache_adapter.put(:wanderer_cache, namespaced_key, "invalid_data")
 
       # system_add_killmail should recover from corruption
       assert {:ok, true} = Helper.add_system_killmail(@test_system_id, 999)

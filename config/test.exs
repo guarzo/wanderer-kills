@@ -2,6 +2,8 @@ import Config
 
 # Configure the application for testing with nested structure
 config :wanderer_kills,
+  # Use ETS adapter for tests instead of Cachex
+  cache_adapter: WandererKills.Cache.ETSAdapter,
   # Service configuration
   services: [
     start_preloader: false,
@@ -106,6 +108,6 @@ config :cachex, :default_ttl, :timer.minutes(1)
 # Configure Mox - use global mode
 config :mox, global: true
 
-# Logger configuration for tests - already set in runtime.exs based on env
-# But override here to ensure warning level
-config :logger, :default_handler, level: :warning
+# Logger configuration for tests - set to debug to allow testing of log output
+# Note: runtime.exs may override this, so we'll handle it differently
+config :logger, :default_handler, level: :debug

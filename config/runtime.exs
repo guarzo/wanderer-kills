@@ -37,10 +37,10 @@ config :wanderer_kills, port: port
 
 # Configure logging levels based on environment
 log_level =
-  case System.get_env("MIX_ENV") || config_env() do
-    "prod" -> :info
-    "test" -> :warning
-    "dev" -> :debug
+  case config_env() do
+    :prod -> :info
+    :test -> :warning
+    :dev -> :debug
     _ -> :info
   end
 
