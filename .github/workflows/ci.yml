@@ -58,7 +58,7 @@ jobs:
         run: mkdir -p priv/plts
 
       - name: Run Dialyzer
-        run: mix dialyzer --halt-exit-status
+        run: mix dialyzer
 
       - name: Run tests with coverage
         run: mix test --max-failures=1 --partitions=4

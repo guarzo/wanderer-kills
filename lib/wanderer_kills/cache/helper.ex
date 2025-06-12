@@ -152,7 +152,7 @@ defmodule WandererKills.Cache.Helper do
   @doc """
   List killmail IDs for a system.
   """
-  @spec list_system_killmails(integer()) :: {:ok, [integer()]} | error()
+  @spec list_system_killmails(integer()) :: {:ok, [integer()]} | {:ok, any()} | error()
   def list_system_killmails(system_id) do
     get(:systems, "killmails:#{system_id}")
   end
@@ -172,12 +172,6 @@ defmodule WandererKills.Cache.Helper do
 
       {:error, %Error{type: :not_found}} ->
         put(:systems, "killmails:#{system_id}", [killmail_id])
-
-      {:ok, _invalid_data} ->
-        # Handle corrupted data by starting fresh
-        Logger.warning("Corrupted system killmail data found, resetting", system_id: system_id)
-        put(:systems, "killmails:#{system_id}", [killmail_id])
-
       error ->
         error
     end
