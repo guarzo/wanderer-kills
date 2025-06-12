@@ -32,7 +32,7 @@ jobs:
             ${{ runner.os }}-mix-27.0-1.18.4-
             ${{ runner.os }}-mix-27.0-
             ${{ runner.os }}-mix-
-            
+
       - name: Restore PLT cache
         uses: actions/cache@v4
         id: plt_cache
@@ -52,7 +52,7 @@ jobs:
 
       - name: Run Credo
         run: mix credo
-        
+
       - name: Create PLTs directory
         if: steps.plt_cache.outputs.cache-hit != 'true'
         run: mkdir -p priv/plts
@@ -62,10 +62,10 @@ jobs:
 
       - name: Run tests with coverage
         run: mix test --max-failures=1 --partitions=4
-        
+
       - name: Generate coverage report
         run: mix test.coverage.ci
-        
+
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         with:
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     # Run when a tag is pushed directly OR when docker job runs on main with a tag
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
-    
+
     permissions:
       contents: write
 
@@ -143,7 +143,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Check for version tag
         id: check_tag
         run: |
@@ -157,7 +157,7 @@ jobs:
             echo "HAS_VERSION_TAG=false" >> $GITHUB_OUTPUT
             echo "No version tag found on current commit"
           fi
-          
+
       # Skip remaining steps if no version tag
       - name: Exit if no version tag
         if: steps.check_tag.outputs.HAS_VERSION_TAG != 'true'
@@ -181,7 +181,7 @@ jobs:
         run: |
           # Get the previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
+
           # Generate changelog between tags
           if [ -z "$PREV_TAG" ]; then
             echo "CHANGELOG=Initial release" >> $GITHUB_OUTPUT
@@ -200,11 +200,11 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.VERSION }}
           body: |
             ## Changes in this release
-            
+
             ${{ steps.release_notes.outputs.CHANGELOG }}
-            
+
             ## Docker Image
-            
+
             ```bash
             docker pull guarzo/wanderer-kills:${{ steps.get_version.outputs.VERSION }}
             ```
@@ -219,7 +219,7 @@ jobs:
     runs-on: ubuntu-latest
     # Only run on direct push to main (not PRs)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip-tag]')
-    
+
     permissions:
       contents: write
 
@@ -233,16 +233,16 @@ jobs:
         run: |
           # Get the latest tag
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          
+
           # Extract version numbers
           VERSION=${LATEST_TAG#v}
           MAJOR=$(echo $VERSION | cut -d. -f1)
           MINOR=$(echo $VERSION | cut -d. -f2)
           PATCH=$(echo $VERSION | cut -d. -f3)
-          
+
           # Increment patch version
           PATCH=$((PATCH + 1))
-          
+
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Next version will be: $NEW_VERSION"

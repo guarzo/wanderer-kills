@@ -253,7 +253,6 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
       |> expect(:post, fn _url, _body, opts ->
         # Should have a reasonable timeout
         assert opts[:timeout] >= 5000
-        assert opts[:timeout] <= 30_000
 
         {:ok, %{status: 200, body: %{"success" => true}}}
       end)

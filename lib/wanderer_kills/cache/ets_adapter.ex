@@ -48,17 +48,19 @@ defmodule WandererKills.Cache.ETSAdapter do
 
   @impl true
   def put(cache_name, key, value, opts \\ []) do
-    case :ets.info(cache_name) do
+    case :ets.whereis(cache_name) do
       :undefined ->
         create_table(cache_name)
 
-      table_info ->
+      table_ref when table_ref != :undefined ->
         # Check if table has wrong keypos and recreate if needed
-        keypos = Keyword.get(table_info, :keypos, 1)
+        case :ets.info(cache_name) do
+          :undefined ->
+            # Table was deleted between whereis and info, create it
+            create_table(cache_name)
 
-        if keypos != 1 do
-          :ets.delete(cache_name)
-          create_table(cache_name)
+          table_info ->
+            check_and_fix_keypos(cache_name, table_info)
         end
     end
 
@@ -173,6 +175,15 @@ defmodule WandererKills.Cache.ETSAdapter do
       # Explicitly set key position to 1 (first element)
       {:keypos, 1}
     ])
+  end
+
+  defp check_and_fix_keypos(cache_name, table_info) do
+    keypos = Keyword.get(table_info, :keypos, 1)
+
+    if keypos != 1 do
+      :ets.delete(cache_name)
+      create_table(cache_name)
+    end
   end
 
   defp cleanup_expired(cache_name) do

@@ -24,8 +24,8 @@ defmodule WandererKills.Killmails.Transformations do
   flattened = Transformations.flatten_enriched_data(enriched_killmail)
 
   # Apply victim/attacker normalization
-  victim = Transformations.normalize_victim_data(victim_map)
-  attackers = Transformations.normalize_attackers_data(attackers_list)
+  victim = Transformations.normalize_victim(victim_map)
+  attackers = Transformations.normalize_attackers(attackers_list)
   ```
   """
 
@@ -148,7 +148,7 @@ defmodule WandererKills.Killmails.Transformations do
   @spec normalize_attackers_with_count([map()]) :: {[map()], non_neg_integer()}
   def normalize_attackers_with_count(attackers) when is_list(attackers) do
     normalized = normalize_attackers(attackers)
-    {normalized, length(normalized)}
+    {normalized, length(attackers)}
   end
 
   # ============================================================================
@@ -268,13 +268,13 @@ defmodule WandererKills.Killmails.Transformations do
   @spec enrich_with_ship_names(map()) :: {:ok, map()}
   def enrich_with_ship_names(killmail) when is_map(killmail) do
     Logger.debug("Starting ship name enrichment for killmail",
-      killmail_id: killmail["killmail_id"]
+      killmail_id: Map.get(killmail, :killmail_id) || killmail["killmail_id"]
     )
 
     with {:ok, killmail} <- add_victim_ship_name(killmail),
          {:ok, killmail} <- add_attackers_ship_names(killmail) do
       Logger.debug("Completed ship name enrichment for killmail",
-        killmail_id: killmail["killmail_id"]
+        killmail_id: Map.get(killmail, :killmail_id) || killmail["killmail_id"]
       )
 
       {:ok, killmail}
@@ -282,7 +282,7 @@ defmodule WandererKills.Killmails.Transformations do
       {:error, reason} = error ->
         Logger.warning("Failed to enrich ship names",
           reason: reason,
-          killmail_id: killmail["killmail_id"]
+          killmail_id: Map.get(killmail, :killmail_id) || killmail["killmail_id"]
         )
 
         # Return the error to allow the caller to decide how to handle it
@@ -388,6 +388,12 @@ defmodule WandererKills.Killmails.Transformations do
 
   # Fallback to ESI if not found in cache
   defp fallback_to_esi({:error, %Error{type: :not_found}}, ship_type_id) do
+    do_esi_fallback(ship_type_id)
+  end
+
+  defp fallback_to_esi(result, _ship_type_id), do: result
+
+  defp do_esi_fallback(ship_type_id) do
     case WandererKills.ESI.Client.get_type(ship_type_id) do
       {:ok, %{"name" => name}} when is_binary(name) ->
         {:ok, name}
@@ -400,8 +406,6 @@ defmodule WandererKills.Killmails.Transformations do
         {:error, reason}
     end
   end
-
-  defp fallback_to_esi(result, _ship_type_id), do: result
 
   # ============================================================================  
   # Common Normalization Patterns

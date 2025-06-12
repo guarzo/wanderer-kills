@@ -136,11 +136,18 @@ defmodule WandererKills.Config do
 
   # Handle nested key access
   def get([group | path], default) when is_atom(group) and is_list(path) do
-    group_config = Application.get_env(@app_name, group, get_in(@defaults, [group]))
+    group_config = get_group(group)
 
-    case get_in(group_config, path) do
-      nil -> default
-      value -> value
+    case path do
+      [] ->
+        # Return the entire group config if no path specified
+        group_config
+
+      _ ->
+        case get_in(group_config, path) do
+          nil -> default
+          value -> value
+        end
     end
   end
 
@@ -325,21 +332,26 @@ defmodule WandererKills.Config do
   # Private functions
 
   defp get_group(group) when is_atom(group) do
-    config = Application.get_env(@app_name, group, Map.get(@defaults, group, %{}))
+    defaults = Map.get(@defaults, group, %{})
+    env_config = Application.get_env(@app_name, group, %{})
 
-    # Convert keyword list to map if necessary
-    case config do
-      config when is_list(config) ->
-        Enum.into(config, %{})
+    # Convert env config to map if necessary
+    normalized_env_config =
+      case env_config do
+        config when is_list(config) ->
+          Enum.into(config, %{})
 
-      config when is_map(config) ->
-        config
+        config when is_map(config) ->
+          config
 
-      _ ->
-        require Logger
-        Logger.debug("Unknown config type for group #{inspect(group)}: #{inspect(config)}")
-        %{}
-    end
+        _ ->
+          require Logger
+          Logger.debug("Unknown config type for group #{inspect(group)}: #{inspect(env_config)}")
+          %{}
+      end
+
+    # Deep merge defaults with environment config, env config takes precedence
+    Map.merge(defaults, normalized_env_config)
   end
 
   defp get_endpoint_port do
@@ -383,6 +395,18 @@ defmodule WandererKills.Config do
       "websocket_" => :websocket
     }
 
+    case find_prefix_match(key_string, prefix_map) do
+      nil ->
+        require Logger
+        Logger.warning("Unrecognized config key: #{key_string}")
+        {:unknown, []}
+
+      result ->
+        result
+    end
+  end
+
+  defp find_prefix_match(key_string, prefix_map) do
     Enum.find_value(prefix_map, nil, fn {prefix, group} ->
       if String.starts_with?(key_string, prefix) do
         rest = String.trim_leading(key_string, prefix)

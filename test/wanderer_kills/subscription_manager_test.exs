@@ -167,9 +167,8 @@ defmodule WandererKills.SubscriptionManagerTest do
     test "handles invalid system IDs gracefully" do
       result = SubscriptionManager.subscribe("user_123", ["invalid", nil, 30_000_142], nil)
 
-      # Depending on implementation, this might succeed with valid IDs
-      # or fail entirely
-      assert match?({:ok, _}, result) or match?({:error, _}, result)
+      # Should fail because not all system IDs are integers
+      assert {:error, "All system IDs must be integers"} = result
     end
   end
 end

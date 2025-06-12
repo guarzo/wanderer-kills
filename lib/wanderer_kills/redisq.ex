@@ -219,8 +219,7 @@ defmodule WandererKills.RedisQ do
     %{
       stats
       | legacy_kills: stats.legacy_kills + 1,
-        kills_received: stats.kills_received + 1,
-        total_kills_received: stats.total_kills_received + 1
+        total_legacy_kills: stats.total_legacy_kills + 1
     }
   end
 
@@ -419,19 +418,9 @@ defmodule WandererKills.RedisQ do
 
   # Decide the next polling interval and updated backoff based on the last result.
   # Returns: {next_delay_ms, updated_backoff_ms}
-  defp next_schedule({:ok, :kill_received}, _old_backoff) do
+  defp next_schedule({:ok, result}, _old_backoff) when result in [:kill_received, :legacy_kill] do
     fast = Config.redisq().fast_interval_ms
-    Logger.debug("[RedisQ] Kill received → scheduling next poll in #{fast}ms; resetting backoff.")
-    {fast, Config.redisq().initial_backoff_ms}
-  end
-
-  defp next_schedule({:ok, :legacy_kill}, _old_backoff) do
-    fast = Config.redisq().fast_interval_ms
-
-    Logger.debug(
-      "[RedisQ] Legacy kill received → scheduling next poll in #{fast}ms; resetting backoff."
-    )
-
+    Logger.debug("[RedisQ] #{result} → scheduling next poll in #{fast}ms; resetting backoff.")
     {fast, Config.redisq().initial_backoff_ms}
   end
 

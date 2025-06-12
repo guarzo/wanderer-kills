@@ -401,11 +401,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
 
     case Parser.parse_partial_killmail(raw_killmail, cutoff_time) do
       {:ok, parsed} when enrich ->
-        case WandererKills.Killmails.Pipeline.Enricher.enrich_killmail(parsed) do
-          {:ok, enriched} -> {:ok, enriched}
-          # Fall back to basic data
-          {:error, _reason} -> {:ok, parsed}
-        end
+        maybe_enrich_killmail(parsed)
 
       {:ok, :kill_older} ->
         {:ok, :kill_older}
@@ -417,22 +413,34 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
         {:error, reason}
     end
   rescue
-    # Only rescue specific known exception types
-    error in [ArgumentError] ->
-      Logger.error("Invalid arguments during killmail processing", %{
-        error: Exception.message(error),
-        operation: :process_single_killmail
-      })
+    # Only rescue specific, expected error cases related to user input validation
+    error in ArgumentError ->
+      case Exception.message(error) do
+        "invalid date" <> _ ->
+          Logger.warning("Invalid date in killmail data", %{
+            error: Exception.message(error),
+            operation: :process_single_killmail
+          })
 
-      {:error, Error.validation_error(:invalid_arguments, Exception.message(error))}
+          {:error, Error.validation_error(:invalid_date, Exception.message(error))}
 
-    error in [BadMapError] ->
-      Logger.error("Invalid killmail data structure", %{
-        error: Exception.message(error),
-        operation: :process_single_killmail
-      })
+        _ ->
+          # Re-raise unexpected ArgumentErrors to maintain normal error handling
+          reraise error, __STACKTRACE__
+      end
 
-      {:error, Error.killmail_error(:invalid_format, Exception.message(error))}
+    error in BadMapError ->
+      if is_nil(raw_killmail) or raw_killmail == %{} do
+        Logger.warning("Empty or nil killmail data provided", %{
+          error: Exception.message(error),
+          operation: :process_single_killmail
+        })
+
+        {:error, Error.killmail_error(:empty_data, "Killmail data is empty or nil")}
+      else
+        # Re-raise unexpected BadMapErrors to maintain normal error handling
+        reraise error, __STACKTRACE__
+      end
   end
 
   @doc """
@@ -557,5 +565,15 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
        :invalid_type,
        "Killmails must be a list, got: #{inspect(invalid_killmails)}"
      )}
+  end
+
+  # Private helper functions
+
+  defp maybe_enrich_killmail(parsed) do
+    case WandererKills.Killmails.Pipeline.Enricher.enrich_killmail(parsed) do
+      {:ok, enriched} -> {:ok, enriched}
+      # Fall back to basic data
+      {:error, _reason} -> {:ok, parsed}
+    end
   end
 end

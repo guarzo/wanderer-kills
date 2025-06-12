@@ -27,11 +27,7 @@ defmodule WandererKills.Cache.Helper do
   alias WandererKills.Support.Error
 
   @cache_name :wanderer_cache
-
-  # Get the cache adapter from config, default to Cachex for compatibility
-  defp cache_adapter do
-    Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
-  end
+  @cache_adapter Application.compile_env(:wanderer_kills, :cache_adapter, Cachex)
 
   # Namespace configurations with TTLs
   @namespace_config %{
@@ -63,7 +59,7 @@ defmodule WandererKills.Cache.Helper do
   def get(namespace, id) when is_atom(namespace) do
     key = build_key(namespace, id)
 
-    case cache_adapter().get(@cache_name, key) do
+    case @cache_adapter.get(@cache_name, key) do
       {:ok, nil} ->
         {:error, Error.cache_error(:not_found, "Key not found", %{namespace: namespace, id: id})}
 
@@ -84,7 +80,7 @@ defmodule WandererKills.Cache.Helper do
     key = build_key(namespace, id)
     ttl = get_ttl(namespace)
 
-    case cache_adapter().put(@cache_name, key, value, ttl: ttl) do
+    case @cache_adapter.put(@cache_name, key, value, ttl: ttl) do
       {:ok, _} = result ->
         result
 
@@ -101,7 +97,7 @@ defmodule WandererKills.Cache.Helper do
   def delete(namespace, id) when is_atom(namespace) do
     key = build_key(namespace, id)
 
-    case cache_adapter().del(@cache_name, key) do
+    case @cache_adapter.del(@cache_name, key) do
       {:ok, _} = result ->
         result
 
@@ -120,7 +116,7 @@ defmodule WandererKills.Cache.Helper do
   def exists?(namespace, id) when is_atom(namespace) do
     key = build_key(namespace, id)
 
-    case cache_adapter().exists?(@cache_name, key) do
+    case @cache_adapter.exists?(@cache_name, key) do
       {:ok, exists} -> exists
       _ -> false
     end
@@ -172,6 +168,12 @@ defmodule WandererKills.Cache.Helper do
 
       {:error, %Error{type: :not_found}} ->
         put(:systems, "killmails:#{system_id}", [killmail_id])
+
+      {:ok, _invalid_data} ->
+        # Handle corrupted data by starting fresh
+        Logger.warning("Corrupted system killmail data found, resetting", system_id: system_id)
+        put(:systems, "killmails:#{system_id}", [killmail_id])
+
       error ->
         error
     end
