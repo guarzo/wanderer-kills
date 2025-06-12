@@ -64,6 +64,7 @@ defmodule WandererKills.Observability.Telemetry do
   """
 
   require Logger
+  alias WandererKills.Observability.LogFormatter
 
   # -------------------------------------------------
   # Helper functions for telemetry execution
@@ -383,6 +384,18 @@ defmodule WandererKills.Observability.Telemetry do
       nil
     )
 
+    # Supervised task handlers
+    :telemetry.attach_many(
+      "wanderer-kills-task-handler",
+      [
+        [:wanderer_kills, :task, :start],
+        [:wanderer_kills, :task, :stop],
+        [:wanderer_kills, :task, :error]
+      ],
+      &WandererKills.Observability.Telemetry.handle_task_event/4,
+      nil
+    )
+
     :ok
   end
 
@@ -401,6 +414,7 @@ defmodule WandererKills.Observability.Telemetry do
     :telemetry.detach("wanderer-kills-websocket-handler")
     :telemetry.detach("wanderer-kills-zkb-handler")
     :telemetry.detach("wanderer-kills-system-handler")
+    :telemetry.detach("wanderer-kills-task-handler")
     :ok
   end
 
@@ -574,4 +588,43 @@ defmodule WandererKills.Observability.Telemetry do
         end
     end
   end
+
+  @doc """
+  Handles supervised task telemetry events.
+  """
+  def handle_task_event([:wanderer_kills, :task, event], measurements, metadata, _config) do
+    case event do
+      :start ->
+        LogFormatter.format_operation("Task", "start", %{task_name: metadata.task_name})
+        |> Logger.debug()
+
+      :stop ->
+        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+
+        LogFormatter.format_operation("Task", "completed", %{
+          task_name: metadata.task_name,
+          duration_ms: duration_ms
+        })
+        |> Logger.debug()
+
+      :error ->
+        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+
+        LogFormatter.format_error(
+          "Task",
+          "failed",
+          %{
+            task_name: metadata.task_name,
+            duration_ms: duration_ms
+          },
+          metadata.error
+        )
+        |> Logger.error()
+
+      _ ->
+        :ok
+    end
+  end
+
+  def handle_task_event(_, _, _, _), do: :ok
 end

@@ -1,86 +1,173 @@
 import Config
 
+# Main application configuration with grouped settings
 config :wanderer_kills,
   # Cache configuration
-  cache_killmails_ttl: 3600,
-  cache_system_ttl: 1800,
-  cache_esi_ttl: 3600,
-  cache_esi_killmail_ttl: 86_400,
-  cache_system_recent_fetch_threshold: 5,
+  cache: [
+    killmails_ttl: 3600,
+    system_ttl: 1800,
+    esi_ttl: 3600,
+    esi_killmail_ttl: 86_400,
+    system_recent_fetch_threshold: 5
+  ],
 
-  # Parser configuration
-  parser_cutoff_seconds: 3_600,
-  parser_summary_interval_ms: 60_000,
-
-  # Enricher configuration
-  enricher_max_concurrency: 10,
-  enricher_task_timeout_ms: 30_000,
-  enricher_min_attackers_for_parallel: 3,
-
-  # Batch processing configuration
-  concurrency_batch_size: 100,
-
-  # Service URLs
-  esi_base_url: "https://esi.evetech.net/latest",
-  zkb_base_url: "https://zkillboard.com/api",
+  # ESI (EVE Swagger Interface) configuration
+  esi: [
+    base_url: "https://esi.evetech.net/latest",
+    request_timeout_ms: 30_000,
+    batch_concurrency: 10
+  ],
 
   # HTTP client configuration
-  http_client: WandererKills.Http.Client,
+  http: [
+    client: WandererKills.Http.Client,
+    request_timeout_ms: 10_000,
+    default_timeout_ms: 10_000,
+    retry: [
+      max_retries: 3,
+      base_delay: 1000,
+      max_delay: 30_000
+    ]
+  ],
+
+  # ZKillboard configuration
+  zkb: [
+    base_url: "https://zkillboard.com/api",
+    request_timeout_ms: 15_000,
+    batch_concurrency: 5
+  ],
+
+  # RedisQ stream configuration
+  redisq: [
+    base_url: "https://zkillredisq.stream/listen.php",
+    fast_interval_ms: 1_000,
+    idle_interval_ms: 5_000,
+    initial_backoff_ms: 1_000,
+    max_backoff_ms: 30_000,
+    backoff_factor: 2,
+    task_timeout_ms: 10_000,
+    retry: [
+      max_retries: 5,
+      base_delay: 500
+    ]
+  ],
+
+  # Parser configuration
+  parser: [
+    cutoff_seconds: 3_600,
+    summary_interval_ms: 60_000
+  ],
+
+  # Enricher configuration
+  enricher: [
+    max_concurrency: 10,
+    task_timeout_ms: 30_000,
+    min_attackers_for_parallel: 3
+  ],
+
+  # Batch processing configuration
+  batch: [
+    concurrency_size: 100,
+    default_concurrency: 5
+  ],
 
   # Storage configuration
   storage: [
-    enable_event_streaming: true
+    enable_event_streaming: true,
+    gc_interval_ms: 60_000,
+    max_events_per_system: 10_000
   ],
 
-  # Request timeout configuration (missing from original config)
-  esi_request_timeout_ms: 30_000,
-  zkb_request_timeout_ms: 15_000,
-  http_request_timeout_ms: 10_000,
-  default_request_timeout_ms: 10_000,
-
-  # Batch concurrency configuration
-  esi_batch_concurrency: 10,
-  zkb_batch_concurrency: 5,
-  default_batch_concurrency: 5,
-
-  # Retry configuration
-  retry_http_max_retries: 3,
-  retry_http_base_delay: 1000,
-  retry_http_max_delay: 30_000,
-  retry_redisq_max_retries: 5,
-  retry_redisq_base_delay: 500,
-
-  # RedisQ stream configuration
-  redisq_base_url: "https://zkillredisq.stream/listen.php",
-  redisq_fast_interval_ms: 1_000,
-  redisq_idle_interval_ms: 5_000,
-  redisq_initial_backoff_ms: 1_000,
-  redisq_max_backoff_ms: 30_000,
-  redisq_backoff_factor: 2,
-  redisq_task_timeout_ms: 10_000,
-
-  # Killmail store configuration
-  killmail_store_gc_interval_ms: 60_000,
-  killmail_store_max_events_per_system: 10_000,
-
-  # Telemetry configuration
-  telemetry_enabled_metrics: [:cache, :api, :circuit, :event],
-  telemetry_sampling_rate: 1.0,
-  # 7 days in seconds
-  telemetry_retention_period: 604_800,
-
-  # Service startup configuration
-  start_preloader: true,
-  start_redisq: true,
+  # Monitoring and telemetry configuration
+  monitoring: [
+    # 5 minutes
+    status_interval_ms: 300_000,
+    health_check_interval_ms: 60_000
+  ],
+  telemetry: [
+    enabled_metrics: [:cache, :api, :circuit, :event],
+    sampling_rate: 1.0,
+    # 7 days in seconds
+    retention_period: 604_800
+  ],
 
   # WebSocket configuration
-  websocket_degraded_threshold: 1000
+  websocket: [
+    degraded_threshold: 1000
+  ],
+
+  # Service startup configuration
+  services: [
+    start_preloader: true,
+    start_redisq: true
+  ],
+
+  # Ship types configuration
+  ship_types: [
+    # Valid ship group IDs for EVE Online ships
+    valid_group_ids: [
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      237,
+      324,
+      358,
+      380,
+      381,
+      419,
+      420,
+      463,
+      485,
+      513,
+      540,
+      541,
+      543,
+      547,
+      659,
+      830,
+      831,
+      832,
+      833,
+      834,
+      883,
+      893,
+      894,
+      898,
+      900,
+      902,
+      906,
+      941,
+      963,
+      1022,
+      1201,
+      1202,
+      1283,
+      1305,
+      1527,
+      1534,
+      1538,
+      1972,
+      2001
+    ],
+    # Validation thresholds
+    validation: [
+      min_validation_rate: 0.5,
+      min_record_count_for_rate_check: 10
+    ]
+  ]
 
 # Configure the Phoenix endpoint
 config :wanderer_kills, WandererKillsWeb.Endpoint,
   http: [port: 4004, ip: {0, 0, 0, 0}],
   server: true,
   pubsub_server: WandererKills.PubSub
+
+# Phoenix PubSub configuration
+config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG
 
 # Cachex default configuration
 config :cachex, :default_ttl, :timer.hours(24)
@@ -98,6 +185,3 @@ config :logger, :console,
 
 # Import environment specific config
 import_config "#{config_env()}.exs"
-
-# Phoenix PubSub configuration
-config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG

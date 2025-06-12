@@ -3,7 +3,7 @@ defmodule WandererKills.Integration.CacheMigrationTest do
   use WandererKills.TestCase
 
   alias WandererKills.Cache.Helper
-  alias WandererKills.ESI.DataFetcher
+  alias WandererKills.ESI.Client
 
   describe "Cachex migration integration tests" do
     test "ESI cache preserves character data with proper TTL" do
@@ -180,18 +180,18 @@ defmodule WandererKills.Integration.CacheMigrationTest do
       assert {:ok, ^killmail_data} = Helper.get(:killmails, killmail_id)
     end
 
-    test "unified ESI DataFetcher works correctly" do
+    test "unified ESI Client works correctly" do
       # Test character fetching
       character_id = 98_765_432
-      character_data = %{"character_id" => character_id, "name" => "DataFetcher Test"}
+      character_data = %{"character_id" => character_id, "name" => "Client Test"}
 
       # Mock ESI response
       {:ok, true} = Helper.put(:characters, character_id, character_data)
 
-      # Test DataFetcher behavior implementation
-      assert {:ok, ^character_data} = DataFetcher.fetch({:character, character_id})
-      assert DataFetcher.supports?({:character, character_id})
-      refute DataFetcher.supports?({:unsupported, character_id})
+      # Test Client behavior implementation
+      assert {:ok, ^character_data} = Client.fetch({:character, character_id})
+      assert Client.supports?({:character, character_id})
+      refute Client.supports?({:unsupported, character_id})
     end
 
     test "cache namespaces work correctly with Helper module" do

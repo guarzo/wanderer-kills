@@ -13,7 +13,7 @@ defmodule WandererKills.RedisQ do
   require Logger
 
   alias WandererKills.Killmails.UnifiedProcessor
-  alias WandererKills.ESI.DataFetcher, as: EsiClient
+  alias WandererKills.ESI.Client, as: EsiClient
   alias WandererKills.Support.Clock
   alias WandererKills.Http.Client, as: HttpClient
   alias WandererKills.Config
@@ -215,6 +215,14 @@ defmodule WandererKills.RedisQ do
     }
   end
 
+  defp update_stats(stats, {:ok, :legacy_kill}) do
+    %{
+      stats
+      | legacy_kills: stats.legacy_kills + 1,
+        total_legacy_kills: stats.total_legacy_kills + 1
+    }
+  end
+
   defp update_stats(stats, {:ok, :kill_older}) do
     %{stats | kills_older: stats.kills_older + 1, total_kills_older: stats.total_kills_older + 1}
   end
@@ -254,32 +262,25 @@ defmodule WandererKills.RedisQ do
       stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
 
     if total_activity > 0 or stats.errors > 0 do
-      # Get websocket stats from the observability module
-      ws_stats =
-        case WandererKills.Observability.WebSocketStats.get_stats() do
-          {:ok, stats} -> stats
-          _ -> %{kills_sent: %{total: 0, realtime: 0, preload: 0}}
-        end
+      message = """
+      [RedisQ Stats] Processed: #{stats.kills_received} | \
+      Older: #{stats.kills_older} | \
+      Skipped: #{stats.kills_skipped} | \
+      Legacy: #{stats.legacy_kills} | \
+      Systems: #{MapSet.size(stats.systems_active)} | \
+      Errors: #{stats.errors} | \
+      Duration: #{duration}s\
+      """
 
       Logger.info(
-        "📊 REDISQ SUMMARY (#{duration}s): " <>
-          "Kills processed: #{stats.kills_received}, " <>
-          "Older kills: #{stats.kills_older}, " <>
-          "Skipped: #{stats.kills_skipped}, " <>
-          "Legacy: #{stats.legacy_kills}, " <>
-          "No-kill polls: #{stats.no_kills_count}, " <>
-          "Errors: #{stats.errors}, " <>
-          "Active systems: #{MapSet.size(stats.systems_active)}, " <>
-          "Total polls: #{total_activity + stats.no_kills_count + stats.errors}, " <>
-          "WS kills sent: #{ws_stats.kills_sent.total} (RT: #{ws_stats.kills_sent.realtime}, PL: #{ws_stats.kills_sent.preload})",
-        kills_processed: stats.kills_received,
-        kills_older: stats.kills_older,
-        kills_skipped: stats.kills_skipped,
-        legacy_kills: stats.legacy_kills,
-        no_kills_polls: stats.no_kills_count,
-        errors: stats.errors,
-        active_systems: MapSet.size(stats.systems_active),
-        total_polls: total_activity + stats.no_kills_count + stats.errors
+        String.trim(message),
+        redisq_kills_processed: stats.kills_received + stats.legacy_kills,
+        redisq_kills_older: stats.kills_older,
+        redisq_kills_skipped: stats.kills_skipped,
+        redisq_legacy_kills: stats.legacy_kills,
+        redisq_active_systems: MapSet.size(stats.systems_active),
+        redisq_errors: stats.errors,
+        redisq_duration_s: duration
       )
     end
   end
@@ -365,7 +366,7 @@ defmodule WandererKills.RedisQ do
 
   # Handle legacy‐format kill → fetch full payload async and then process.
   # Returns one of:
-  #   {:ok, :kill_received}   (if Coordinator.parse... says new)
+  #   {:ok, :legacy_kill}     (if Coordinator.parse... says new)
   #   {:ok, :kill_older}      (if Coordinator returns :kill_older)
   #   {:ok, :kill_skipped}    (if Coordinator returns :kill_skipped)
   #   {:error, reason}
@@ -379,7 +380,7 @@ defmodule WandererKills.RedisQ do
     |> Task.await(Config.redisq().task_timeout_ms)
     |> case do
       {:ok, :kill_received} ->
-        {:ok, :kill_received}
+        {:ok, :legacy_kill}
 
       {:ok, :kill_older} ->
         Logger.debug("[RedisQ] Legacy kill ID=#{id} is older than cutoff → skipping.")
@@ -417,9 +418,9 @@ defmodule WandererKills.RedisQ do
 
   # Decide the next polling interval and updated backoff based on the last result.
   # Returns: {next_delay_ms, updated_backoff_ms}
-  defp next_schedule({:ok, :kill_received}, _old_backoff) do
+  defp next_schedule({:ok, result}, _old_backoff) when result in [:kill_received, :legacy_kill] do
     fast = Config.redisq().fast_interval_ms
-    Logger.debug("[RedisQ] Kill received → scheduling next poll in #{fast}ms; resetting backoff.")
+    Logger.debug("[RedisQ] #{result} → scheduling next poll in #{fast}ms; resetting backoff.")
     {fast, Config.redisq().initial_backoff_ms}
   end
 

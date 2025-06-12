@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 WandererKills is a real-time EVE Online killmail data service built with Elixir/Phoenix that:
 
-- Fetches killmail data from zKillboard API
+- Fetches killmail data from zKillboard API  
 - Provides caching and enrichment of killmail data with ESI (EVE Swagger Interface)
 - Offers REST API endpoints and WebSocket support for real-time updates
 - Uses ETS-based storage with event streaming capabilities
@@ -48,218 +48,184 @@ docker-compose up        # Start with Redis and all services
 
 ### Core Components
 
-1. **OTP Application Structure** (`WandererKills.App.Application`):
-   - Supervises all child processes including Cachex, Phoenix endpoint, and data fetchers
-   - Manages telemetry and monitoring
+1. **OTP Application** (`WandererKills.App.Application`)
+   - Supervises all child processes
+   - Manages Cachex, Phoenix endpoint, and data fetchers
+   - Handles telemetry and monitoring
 
-2. **Data Flow Pipeline**:
-   - `RedisQ` → Real-time killmail stream consumer
-   - `ZkbClient` → Historical data fetcher
-   - `UnifiedProcessor` → Handles both full and partial killmails
-   - `Storage.KillmailStore` → Unified ETS-based storage with optional event streaming
-   - `ESI.DataFetcher` → Enrichment with EVE API data
+2. **Data Flow Pipeline**
+   - `RedisQ` - Real-time killmail stream consumer from zKillboard
+   - `ZkbClient` - Historical data fetcher for specific queries
+   - `UnifiedProcessor` - Processes both full and partial killmails
+   - `Storage.KillmailStore` - ETS-based storage with event streaming
+   - `ESI.Client` - Enriches data with EVE API information
 
-3. **Caching Strategy**:
+3. **Caching Layer**
    - Single Cachex instance (`:wanderer_cache`) with namespace support
-   - Different TTLs: killmails (5min), systems (1hr), ESI data (24hr)
-   - Cache warming for ship type data from CSV files
+   - TTL configuration: killmails (5min), systems (1hr), ESI data (24hr)
+   - Ship type data preloaded from CSV files
 
-4. **API Layer**:
+4. **API & Real-time**
    - REST endpoints via Phoenix Router
-   - WebSocket channels for real-time subscriptions
-   - Standardized JSON responses with comprehensive error handling
+   - WebSocket channels for live subscriptions
+   - Standardized error responses using `Support.Error`
 
-5. **Monitoring & Observability**:
-   - Comprehensive 5-minute status reports via WebSocketStats
-   - Telemetry events throughout the application
-   - Structured logging with extensive metadata
-   - Health check endpoints
+5. **Observability**
+   - 5-minute status reports with comprehensive metrics
+   - Telemetry events for all major operations
+   - Structured logging with metadata
+   - Health check endpoints for monitoring
 
-### Key Design Patterns
+### Module Organization
 
-- **Behaviour-based design**: All external clients have behaviours for testability
-- **GenServer processes**: For stateful components (RedisQ, stores)
-- **Phoenix PubSub**: Internal real-time communication
-- **Task supervision**: Concurrent operations with fault tolerance
-- **Circuit breakers**: For external API reliability
+#### Core Business Logic
+- `Killmails.UnifiedProcessor` - Main killmail processing logic
+- `Killmails.Pipeline.*` - Processing pipeline stages (Parser, Validator, Enricher)
+- `Killmails.Transformations` - Data normalization and transformations
+- `Storage.KillmailStore` - Unified storage with event streaming
 
-## Development Guidelines
+#### External Services
+- `ESI.Client` - EVE Swagger Interface client
+- `Killmails.ZkbClient` - zKillboard API client
+- `RedisQ` - Real-time data stream consumer
+- `Http.Client` - Centralized HTTP client with rate limiting
 
-### Elixir Best Practices
+#### Support Infrastructure
+- `Support.SupervisedTask` - Supervised async tasks with telemetry
+- `Support.Error` - Standardized error structures
+- `Support.Retry` - Configurable retry logic
+- `Support.BatchProcessor` - Parallel batch processing
 
-#### Code Organization
+#### Subscriptions & Broadcasting
+- `SubscriptionManager` - Manages WebSocket and webhook subscriptions
+- `Subscriptions.Broadcaster` - PubSub message broadcasting
+- `Subscriptions.WebhookNotifier` - HTTP webhook delivery
+- `Subscriptions.Preloader` - Historical data preloading
 
-- Organize code around business domains using Domain-Driven Design
-- Implement functional core with imperative shell pattern
-- Use explicit code over implicit - clarity is paramount
-- Favor composition over inheritance
-- Each module and function should have single responsibility
-- Design for changeability and maintainability
-- Follow YAGNI principle - avoid unnecessary features
+#### Ship Types Management
+- `ShipTypes.CSV` - Orchestrates CSV data loading
+- `ShipTypes.Parser` - CSV parsing and extraction
+- `ShipTypes.Validator` - Data validation rules
+- `ShipTypes.Cache` - Ship type caching operations
 
-#### Style Guidelines
+#### Health & Monitoring
+- `Observability.HealthChecks` - Unified health check interface
+- `Observability.ApplicationHealth` - Application metrics
+- `Observability.CacheHealth` - Cache performance metrics
+- `Observability.WebSocketStats` - Real-time connection statistics
 
-- Use 2 spaces for indentation, never tabs
-- Unix-style line endings throughout
-- Remove trailing whitespace
-- Limit line length for readability
-- Use snake_case for functions/variables/files
-- Use PascalCase for modules and protocols
-- Choose clear, descriptive names without abbreviations
+## Key Design Patterns
 
-#### Functions and Modules
+### Behaviours for Testability
 
-- Use `def` for public, `defp` for private functions
-- Keep modules small and focused on single concern
-- Group related functions together
-- Pattern match in function heads for different cases
-- Use guard clauses for additional constraints
+All external service clients implement behaviours, allowing easy mocking in tests:
+- `Http.ClientBehaviour` - HTTP client interface
+- `ESI.ClientBehaviour` - ESI API interface  
+- `Observability.HealthCheckBehaviour` - Health check interface
 
-#### Pipe Operator Usage
+### Supervised Async Work
 
-- Chain functions with `|>` for linear data transformation
-- Each pipe operation on its own line when chaining multiple
-- Ensure clear data flow without interruptions
-- Left side must provide correct input for next function
+All async operations use `Support.SupervisedTask`:
+```elixir
+SupervisedTask.start_child(
+  fn -> process_data() end,
+  task_name: "process_data",
+  metadata: %{data_id: id}
+)
+```
 
-#### Documentation
+### Standardized Error Handling
 
-- Document every public module with `@moduledoc`
-- Document public functions with `@doc`
-- Write inline comments only for non-obvious logic
-- Keep documentation succinct yet informative
-- Update docs as code evolves
+All errors use `Support.Error` for consistency:
+```elixir
+{:error, Error.http_error(:timeout, "Request timed out", true)}
+{:error, Error.validation_error(:invalid_format, "Invalid data")}
+```
 
-### Phoenix-Specific Practices
+### Event-Driven Architecture
 
-- Use LiveView as primary UI technology for real-time features
-- Implement function components for reusable UI elements
-- Utilize Phoenix PubSub for real-time communication
-- Respect context boundaries in controllers and LiveViews
-- Keep controllers thin - delegate business logic to contexts
-- Prioritize security (CSRF, XSS protection)
-
-### Ecto Best Practices
-
-- Use Ecto.Changeset for data validation at boundaries
-- Implement proper error handling with result tuples
-- Avoid N+1 queries - use preloading and joins
-- Implement pagination for large result sets
-- Use Ecto's type specifications for type safety
-
-### GenServer and OTP
-
-- Use GenServer for managing stateful processes
-- Implement proper supervision trees
-- Use Registry pattern for dynamic process lookup
-- Use Task.Supervisor for concurrent, potentially failing operations
-- Design processes to crash independently
-- Embrace "let it crash" philosophy with proper supervision
-
-### Testing Approach
-
-- Focus on testing public APIs of contexts
-- Use Mox for mocking external dependencies (all clients have behaviours)
-- Use ExMachina for test data factories
-- Write tests as documentation
-- Structure tests with Arrange-Act-Assert pattern
-- Test files in `test/` directory mirror `lib/` structure
-
-### HTTP and External APIs
-
-- Use Req library for HTTP client operations
-- Define behaviours for all API clients
-- Implement proper error handling for network failures
-- Set appropriate timeouts for external calls
-- Use circuit breakers for critical services
-- All external clients are configurable via application config
-
-### Error Handling
-
-- Use pattern matching and guard clauses
-- Return `{:ok, result}` or `{:error, %Error{}}` tuples using Support.Error module
-- Favor explicit error handling over exceptions
-- Implement fail-fast error handling
-- Let processes crash when appropriate with supervision
-- Special cases like `{:ok, :kill_older}` are preserved where semantically meaningful
-
-## Project-Specific Patterns
-
-### Naming Conventions
-
-- Always use `killmail` (not `kill`) for consistency
-- Use `get_*` for local/cache operations
-- Use `fetch_*` for external API calls
-- Use `list_*` for operations returning collections
-- Use `_async` suffix for asynchronous operations
-- Use `system_id` internally (normalized from `solar_system_id`)
-
-### Cache Key Conventions
-
-- Killmails: `"killmail:{id}"`
-- Systems: `"system:{id}"`
-- ESI data: `"esi:{type}:{id}"`
-
-### Event Streaming
-
-- Storage.KillmailStore publishes events with client offset tracking (when enabled)
-- Supports both polling and push-based consumption
-- Events include full killmail data and metadata
-- Configured via `:storage, :enable_event_streaming` (default: true)
-
-### Configuration
-
-- Main config in `config/config.exs`
-- Environment-specific in `config/{env}.exs`
-- Runtime config in `config/runtime.exs`
-- Test environment uses mocked clients
-- All configuration access through Config module
-
-### Monitoring and Observability
-
-- Comprehensive 5-minute status reports showing:
-  - WebSocket activity (connections, subscriptions, delivery rates)
-  - RedisQ processing statistics
-  - Cache performance metrics
-  - Storage utilization
-- Telemetry events throughout the application
-- Health check endpoint at `/health`
-- Extensive logging with structured metadata
-- Prometheus metrics support
+- Phoenix PubSub for internal communication
+- Storage events for data changes
+- Telemetry events for monitoring
 
 ## Common Development Tasks
 
-### Adding New Endpoints
+### Adding New API Endpoints
 
-1. Define route in `lib/wanderer_kills_web/router.ex`
-2. Create controller in `lib/wanderer_kills_web/controllers/`
-3. Add context function in appropriate module under `lib/wanderer_kills/`
-4. Write tests for both controller and context
+1. Define route in `router.ex`
+2. Create controller action
+3. Implement context function
+4. Add tests for both layers
 
-### Working with External APIs
+### Adding External Service Clients
 
-1. Define behaviour in `lib/wanderer_kills/{service}/client_behaviour.ex`
-2. Implement client with Req library
-3. Configure mock in test config
-4. Use dependency injection via application config
+1. Define behaviour in `client_behaviour.ex`
+2. Implement client using `Http.Client`
+3. Configure mock in test environment
+4. Use dependency injection via config
 
-### Modifying Kill Processing
+### Processing Pipeline Extensions
 
-1. Pipeline stages are in `lib/wanderer_kills/killmails/pipeline/`
-2. UnifiedProcessor handles both full and partial killmails
-3. Parser handles initial validation
-4. Enricher adds additional data
-5. All stages use behaviours for testability
+1. Add new stage in `pipeline/` directory
+2. Implement behaviour callbacks
+3. Update `UnifiedProcessor` to include stage
+4. Add comprehensive tests
 
-## Recent Refactoring (2025-01-06)
+### Health Check Extensions
 
-The codebase has undergone significant refactoring to improve consistency and maintainability:
+1. Implement `HealthCheckBehaviour`
+2. Add to health check aggregator
+3. Define metrics and thresholds
+4. Test failure scenarios
 
-1. **Consolidated Storage**: Merged Store and KillStore into Storage.KillmailStore
-2. **Standardized Errors**: All errors now use Support.Error module
-3. **Unified HTTP Client**: All HTTP requests go through Http.Client
-4. **Consistent Naming**: Standardized on killmail terminology and naming patterns
-5. **Consolidated Normalization**: All field normalization in Transformations module
-6. **Enhanced Monitoring**: Added comprehensive 5-minute status reports
+## Configuration Patterns
 
-See CODE_REVIEW.md for detailed documentation of all changes.
+### Environment Configuration
+
+- Base: `config/config.exs`
+- Environment: `config/{dev,test,prod}.exs`
+- Runtime: `config/runtime.exs`
+- Access via: `WandererKills.Config`
+
+### Feature Flags
+
+- Event streaming: `:storage, :enable_event_streaming`
+- RedisQ start: `:start_redisq`
+- Monitoring intervals: `:monitoring, :status_interval_ms`
+
+## Best Practices
+
+### Naming Conventions
+
+- Use `killmail` consistently (not `kill`)
+- `get_*` for cache/local operations
+- `fetch_*` for external API calls
+- `list_*` for collections
+- `_async` suffix for async operations
+
+### Cache Keys
+
+- Killmails: `"killmail:{id}"`
+- Systems: `"system:{id}"`  
+- ESI data: `"esi:{type}:{id}"`
+- Ship types: `"ship_types:{id}"`
+
+### Testing Strategy
+
+- Mock external services via behaviours
+- Test public APIs, not implementation
+- Use factories for test data
+- Comprehensive error case coverage
+
+### Performance Considerations
+
+- Batch operations when possible
+- Use ETS for high-frequency reads
+- Implement circuit breakers for external services
+- Monitor memory usage of GenServers
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

@@ -11,7 +11,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
 
   alias WandererKills.Support.Error
   alias WandererKills.Killmails.Transformations
-  alias WandererKills.Killmails.Pipeline.{UnifiedValidator, DataBuilder, ESIFetcher}
+  alias WandererKills.Killmails.Pipeline.{Validator, DataBuilder, ESIFetcher}
   alias WandererKills.Killmails.Enrichment.BatchEnricher
   alias WandererKills.Storage.KillmailStore
   alias WandererKills.Observability.Monitoring
@@ -157,72 +157,20 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
   end
 
   defp process_full(killmail, cutoff_time, opts) do
-    store? = Keyword.get(opts, :store, true)
-    enrich? = Keyword.get(opts, :enrich, true)
-    validate_only? = Keyword.get(opts, :validate_only, false)
-
     killmail_id = Transformations.get_killmail_id(killmail)
 
     log_debug("Processing full killmail",
       killmail_id: killmail_id,
-      store: store?,
-      enrich: enrich?,
-      validate_only: validate_only?
+      store: Keyword.get(opts, :store, true),
+      enrich: Keyword.get(opts, :enrich, true),
+      validate_only: Keyword.get(opts, :validate_only, false)
     )
 
-    # Use unified validator
-    case UnifiedValidator.validate_killmail(killmail, cutoff_time) do
-      {:ok, validated} ->
-        if validate_only? do
-          {:ok, validated}
-        else
-          process_validated_killmail(validated, store?, enrich?)
-        end
-
-      {:error, %Error{type: :kill_too_old}} ->
-        {:ok, :kill_older}
-
-      {:error, reason} ->
-        log_error("Killmail validation failed",
-          killmail_id: killmail_id,
-          error: reason
-        )
-
-        {:error, reason}
+    # Delegate to process_batch for consistent validation and processing
+    case process_batch([killmail], cutoff_time, opts) do
+      {:ok, [result]} -> {:ok, result}
+      {:ok, []} -> {:ok, :kill_older}
     end
-  end
-
-  defp process_validated_killmail(killmail, store?, enrich?) do
-    with {:ok, built} <- DataBuilder.build_killmail_data(killmail),
-         {:ok, processed} <- maybe_enrich(built, enrich?) do
-      if store? do
-        store_killmail_async(processed)
-      end
-
-      {:ok, processed}
-    end
-  end
-
-  defp maybe_enrich(killmail, true) do
-    # Import enrichment logic from original Processor
-    case enrich_killmail(killmail) do
-      {:ok, enriched} ->
-        ESIFetcher.cache_enriched_killmail(enriched)
-        {:ok, enriched}
-
-      _ ->
-        log_warning("Failed to enrich killmail, using basic data",
-          killmail_id: killmail["killmail_id"]
-        )
-
-        ESIFetcher.cache_enriched_killmail(killmail)
-        {:ok, killmail}
-    end
-  end
-
-  defp maybe_enrich(killmail, false) do
-    ESIFetcher.cache_enriched_killmail(killmail)
-    {:ok, killmail}
   end
 
   defp store_killmail_async(killmail) do
@@ -256,7 +204,7 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
   end
 
   defp validate_and_build_killmail(killmail, cutoff_time) do
-    case UnifiedValidator.validate_killmail(killmail, cutoff_time) do
+    case Validator.validate_killmail(killmail, cutoff_time) do
       {:ok, validated} ->
         DataBuilder.build_killmail_data(validated)
 
@@ -273,15 +221,6 @@ defmodule WandererKills.Killmails.UnifiedProcessor do
       {:error, _}, acc -> acc
     end)
     |> Enum.reverse()
-  end
-
-  defp enrich_killmail(killmail) do
-    {:ok, enriched_list} = BatchEnricher.enrich_killmails_batch([killmail])
-
-    case enriched_list do
-      [enriched_killmail] -> {:ok, enriched_killmail}
-      [] -> {:error, :enrichment_failed}
-    end
   end
 
   defp fetch_and_merge_partial(id, zkb, partial) do

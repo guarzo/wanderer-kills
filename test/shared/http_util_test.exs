@@ -1,5 +1,5 @@
 defmodule WandererKills.Http.UtilTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias WandererKills.Http.Client
 

@@ -310,7 +310,7 @@ defmodule WandererKills.Client do
   """
   @spec broadcast_killmail_update(integer(), [map()]) :: :ok
   def broadcast_killmail_update(system_id, killmails) do
-    SubscriptionManager.broadcast_killmail_update(system_id, killmails)
+    SubscriptionManager.broadcast_killmail_update_async(system_id, killmails)
   end
 
   @doc """
@@ -319,7 +319,7 @@ defmodule WandererKills.Client do
   """
   @spec broadcast_killmail_count_update(integer(), integer()) :: :ok
   def broadcast_killmail_count_update(system_id, count) do
-    SubscriptionManager.broadcast_killmail_count_update(system_id, count)
+    SubscriptionManager.broadcast_killmail_count_update_async(system_id, count)
   end
 
   @doc """

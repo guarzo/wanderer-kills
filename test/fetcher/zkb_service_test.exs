@@ -1,5 +1,5 @@
 defmodule WandererKills.Killmails.ZkbClientTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Mox
 
   @moduletag :external
@@ -7,6 +7,9 @@ defmodule WandererKills.Killmails.ZkbClientTest do
   alias WandererKills.Killmails.ZkbClient, as: ZKB
   alias WandererKills.TestHelpers
   alias WandererKills.Http.Client.Mock, as: HttpClientMock
+
+  # Get base URL from config
+  @base_url Application.compile_env(:wanderer_kills, :zkb)[:base_url]
 
   setup :verify_on_exit!
 
@@ -31,7 +34,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/killID/123456/", _opts ->
+        "#{@base_url}/killID/123456/", _opts ->
           {:ok, %{status: 200, body: Jason.encode!([killmail])}}
       end)
 
@@ -43,7 +46,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/killID/999999/", _opts ->
+        "#{@base_url}/killID/999999/", _opts ->
           {:ok, %{status: 200, body: "[]"}}
       end)
 
@@ -58,7 +61,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/killID/123456/", _opts ->
+        "#{@base_url}/killID/123456/", _opts ->
           {:error, :rate_limited}
       end)
 
@@ -86,7 +89,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/systemID/30000142/", _opts ->
+        "#{@base_url}/systemID/30000142/", _opts ->
           {:ok, %{status: 200, body: Jason.encode!(killmails)}}
       end)
 
@@ -98,7 +101,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/systemID/30000142/", _opts ->
+        "#{@base_url}/systemID/30000142/", _opts ->
           {:ok, %{status: 200, body: "[]"}}
       end)
 
@@ -110,7 +113,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/systemID/30000142/", _opts ->
+        "#{@base_url}/systemID/30000142/", _opts ->
           {:error, :timeout}
       end)
 
@@ -139,7 +142,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/systemID/30000142/", _opts ->
+        "#{@base_url}/systemID/30000142/", _opts ->
           {:ok, %{status: 200, body: Jason.encode!(kill_list)}}
       end)
 
@@ -151,7 +154,7 @@ defmodule WandererKills.Killmails.ZkbClientTest do
 
       HttpClientMock
       |> expect(:get_with_rate_limit, fn
-        "https://zkillboard.com/api/systemID/30000142/", _opts ->
+        "#{@base_url}/systemID/30000142/", _opts ->
           {:error, :not_found}
       end)
 

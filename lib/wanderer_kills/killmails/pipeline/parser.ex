@@ -82,9 +82,8 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
       killmail_keys: Map.keys(killmail) |> Enum.sort()
     )
 
-    with {:ok, validated} <- Validator.validate_structure(killmail),
-         {:ok, time_checked} <- Validator.check_time_cutoff(validated, cutoff_time),
-         {:ok, built} <- DataBuilder.build_killmail_data(time_checked),
+    with {:ok, validated} <- Validator.validate_killmail(killmail, cutoff_time),
+         {:ok, built} <- DataBuilder.build_killmail_data(validated),
          {:ok, enriched} <- enrich_killmail_data(built) do
       {:ok, enriched}
     else
@@ -157,21 +156,6 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
           {:ok, merged_killmail()} | {:error, term()}
   def merge_killmail_data(esi_data, zkb_data) do
     DataBuilder.merge_killmail_data(esi_data, zkb_data)
-  end
-
-  @doc """
-  Validates killmail timestamp and parses it.
-
-  ## Parameters
-  - `killmail` - Killmail data containing time information
-
-  ## Returns
-  - `{:ok, datetime}` - On successful parsing
-  - `{:error, reason}` - On failure
-  """
-  @spec validate_killmail_time(killmail()) :: {:ok, DateTime.t()} | {:error, term()}
-  def validate_killmail_time(killmail) do
-    Validator.validate_time(killmail)
   end
 
   # Private functions for internal implementation

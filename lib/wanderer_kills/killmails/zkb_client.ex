@@ -37,8 +37,6 @@ defmodule WandererKills.Killmails.ZkbClient do
   alias WandererKills.Observability.Telemetry
   alias WandererKills.Config
 
-  @base_url Application.compile_env(:wanderer_kills, :zkb_base_url)
-
   @type killmail_id :: pos_integer()
   @type system_id :: pos_integer()
   @type killmail :: map()
@@ -471,7 +469,7 @@ defmodule WandererKills.Killmails.ZkbClient do
   Gets the base URL for zKillboard API calls.
   """
   def base_url do
-    @base_url
+    Config.zkb().base_url
   end
 
   # Note: Response parsing now handled by WandererKills.Http.Client

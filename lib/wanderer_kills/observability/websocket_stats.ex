@@ -39,6 +39,7 @@ defmodule WandererKills.Observability.WebSocketStats do
   use GenServer
   require Logger
   alias WandererKills.Support.Clock
+  alias WandererKills.Observability.LogFormatter
 
   @stats_summary_interval :timer.minutes(5)
 
@@ -139,7 +140,8 @@ defmodule WandererKills.Observability.WebSocketStats do
         )
 
       {:error, reason} ->
-        Logger.warning("Failed to measure WebSocket metrics: #{inspect(reason)}")
+        LogFormatter.format_error("WebSocket", "metrics_failed", %{}, inspect(reason))
+        |> Logger.warning()
     end
   end
 
@@ -343,50 +345,11 @@ defmodule WandererKills.Observability.WebSocketStats do
     # Gather additional system-wide statistics
     {redisq_stats, cache_stats, store_stats} = gather_system_stats()
 
-    # Log comprehensive status summary
-    Logger.info(
-      "\n" <>
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" <>
-        "📊 WANDERER KILLS STATUS REPORT (5-minute summary)\n" <>
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" <>
-        "\n" <>
-        "🌐 WEBSOCKET ACTIVITY:\n" <>
-        "   Active Connections: #{stats.connections.active}\n" <>
-        "   Total Connected: #{stats.connections.total_connected} | Disconnected: #{stats.connections.total_disconnected}\n" <>
-        "   Active Subscriptions: #{stats.subscriptions.active} (covering #{stats.subscriptions.total_systems} systems)\n" <>
-        "   Avg Systems/Subscription: #{Float.round(stats.rates.average_systems_per_subscription, 1)}\n" <>
-        "\n" <>
-        "📤 KILL DELIVERY:\n" <>
-        "   Total Kills Sent: #{stats.kills_sent.total} (Realtime: #{stats.kills_sent.realtime}, Preload: #{stats.kills_sent.preload})\n" <>
-        "   Delivery Rate: #{Float.round(stats.rates.kills_per_minute, 1)} kills/minute\n" <>
-        "   Connection Rate: #{Float.round(stats.rates.connections_per_minute, 2)} connections/minute\n" <>
-        "\n" <>
-        "#{format_redisq_stats(redisq_stats)}" <>
-        "\n" <>
-        "\n" <>
-        "#{format_cache_stats(cache_stats)}" <>
-        "\n" <>
-        "\n" <>
-        "#{format_store_stats(store_stats)}" <>
-        "\n" <>
-        "\n" <>
-        "⏰ Report Generated: #{stats.timestamp}\n" <>
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      # Structured metadata for filtering/searching
-      websocket_active_connections: stats.connections.active,
-      websocket_kills_sent_total: stats.kills_sent.total,
-      websocket_kills_sent_realtime: stats.kills_sent.realtime,
-      websocket_kills_sent_preload: stats.kills_sent.preload,
-      websocket_active_subscriptions: stats.subscriptions.active,
-      websocket_total_systems: stats.subscriptions.total_systems,
-      websocket_kills_per_minute: Float.round(stats.rates.kills_per_minute, 2),
-      websocket_connections_per_minute: Float.round(stats.rates.connections_per_minute, 2),
-      redisq_kills_processed: Map.get(redisq_stats, :kills_processed, 0),
-      redisq_active_systems: Map.get(redisq_stats, :active_systems, 0),
-      cache_size: Map.get(cache_stats, :size, 0),
-      store_total_killmails: Map.get(store_stats, :total_killmails, 0),
-      store_unique_systems: Map.get(store_stats, :unique_systems, 0)
-    )
+    # Log each component as a separate line item
+    log_websocket_stats(stats)
+    log_redisq_stats(redisq_stats)
+    log_cache_stats(cache_stats)
+    log_store_stats(store_stats)
 
     # Emit telemetry for the summary
     :telemetry.execute(
@@ -401,6 +364,100 @@ defmodule WandererKills.Observability.WebSocketStats do
       %{period: "5_minutes"}
     )
   end
+
+  defp log_websocket_stats(stats) do
+    LogFormatter.format_stats("WebSocket", %{
+      connections_active: stats.connections.active,
+      connections_total: stats.connections.total_connected,
+      subscriptions: stats.subscriptions.active,
+      systems: stats.subscriptions.total_systems,
+      kills_sent: stats.kills_sent.total,
+      kills_per_min: Float.round(stats.rates.kills_per_minute, 1)
+    })
+    |> Logger.info(
+      websocket_active_connections: stats.connections.active,
+      websocket_kills_sent_total: stats.kills_sent.total,
+      websocket_kills_sent_realtime: stats.kills_sent.realtime,
+      websocket_kills_sent_preload: stats.kills_sent.preload,
+      websocket_active_subscriptions: stats.subscriptions.active,
+      websocket_total_systems: stats.subscriptions.total_systems,
+      websocket_kills_per_minute: Float.round(stats.rates.kills_per_minute, 2)
+    )
+  end
+
+  defp log_redisq_stats(redisq_stats) when map_size(redisq_stats) > 0 do
+    Logger.info(
+      "[RedisQ Stats] Kills processed: #{Map.get(redisq_stats, :kills_processed, 0)} | " <>
+        "Active systems: #{Map.get(redisq_stats, :active_systems, 0)} | " <>
+        "Queue size: #{Map.get(redisq_stats, :queue_size, 0)}",
+      redisq_kills_processed: Map.get(redisq_stats, :kills_processed, 0),
+      redisq_active_systems: Map.get(redisq_stats, :active_systems, 0),
+      redisq_queue_size: Map.get(redisq_stats, :queue_size, 0)
+    )
+  end
+
+  defp log_redisq_stats(_), do: :ok
+
+  defp log_cache_stats(cache_stats) when map_size(cache_stats) > 0 do
+    # Ensure memory_mb is a float before rounding
+    memory_mb_raw = Map.get(cache_stats, :memory_mb, 0.0)
+    size_mb = Float.round(memory_mb_raw / 1, 1)
+
+    # Extract all metrics
+    size = Map.get(cache_stats, :size, 0)
+    hit_rate = Map.get(cache_stats, :hit_rate, "N/A")
+    miss_rate = Map.get(cache_stats, :miss_rate, 0.0)
+    evictions = Map.get(cache_stats, :eviction_count, 0)
+    expirations = Map.get(cache_stats, :expiration_count, 0)
+    updates = Map.get(cache_stats, :update_count, 0)
+
+    # Operation counts
+    ops = Map.get(cache_stats, :operation_counts, %{})
+    gets = Map.get(ops, :gets, 0)
+    puts = Map.get(ops, :puts, 0)
+    deletes = Map.get(ops, :deletes, 0)
+
+    # Calculate memory efficiency (entries per MB)
+    memory_efficiency = if size_mb > 0, do: Float.round(size / size_mb, 1), else: 0.0
+
+    Logger.info(
+      "[Cache Stats] Size: #{size} entries | " <>
+        "Memory: #{size_mb} MB (#{memory_efficiency} entries/MB) | " <>
+        "Hit/Miss: #{hit_rate}%/#{miss_rate}% | " <>
+        "Evictions: #{evictions} | Expirations: #{expirations} | " <>
+        "Ops (G/P/D): #{gets}/#{puts}/#{deletes}",
+      cache_size: size,
+      cache_memory_mb: size_mb,
+      cache_memory_efficiency: memory_efficiency,
+      cache_hit_rate: hit_rate,
+      cache_miss_rate: miss_rate,
+      cache_eviction_count: evictions,
+      cache_expiration_count: expirations,
+      cache_update_count: updates,
+      cache_gets: gets,
+      cache_puts: puts,
+      cache_deletes: deletes
+    )
+  end
+
+  defp log_cache_stats(_), do: :ok
+
+  defp log_store_stats(store_stats) when map_size(store_stats) > 0 do
+    # Ensure memory_mb is a float before rounding
+    memory_mb_raw = Map.get(store_stats, :memory_mb, 0.0)
+    memory_mb = Float.round(memory_mb_raw / 1, 1)
+
+    Logger.info(
+      "[Store Stats] Killmails: #{Map.get(store_stats, :total_killmails, 0)} | " <>
+        "Systems: #{Map.get(store_stats, :unique_systems, 0)} | " <>
+        "Memory: #{memory_mb} MB",
+      store_total_killmails: Map.get(store_stats, :total_killmails, 0),
+      store_unique_systems: Map.get(store_stats, :unique_systems, 0),
+      store_memory_mb: memory_mb
+    )
+  end
+
+  defp log_store_stats(_), do: :ok
 
   # Gather statistics from other system components
   defp gather_system_stats do
@@ -424,15 +481,86 @@ defmodule WandererKills.Observability.WebSocketStats do
   end
 
   defp get_cache_stats do
-    # Get cache size from Cachex
+    # Get cache stats from Cachex
     try do
       case Cachex.size(:wanderer_cache) do
-        {:ok, size} -> %{size: size}
-        _ -> %{size: 0}
+        {:ok, size} ->
+          stats = fetch_cache_stats()
+          build_cache_metrics(size, stats)
+
+        _ ->
+          empty_cache_stats()
       end
     catch
-      _, _ -> %{size: 0}
+      _, _ ->
+        empty_cache_stats()
     end
+  end
+
+  defp fetch_cache_stats do
+    case Cachex.stats(:wanderer_cache) do
+      {:ok, cache_stats} -> cache_stats
+      _ -> %{}
+    end
+  end
+
+  defp build_cache_metrics(size, stats) do
+    # Extract statistics
+    metrics = extract_cache_metrics(stats)
+
+    # Calculate rates
+    hit_rate = calculate_hit_rate(stats)
+    miss_rate = calculate_miss_rate(metrics.hits, metrics.misses)
+
+    # Estimate memory usage (rough calculation)
+    # Rough estimate: 1KB per entry, convert KB to MB using binary units
+    memory_mb = size / 1024
+
+    %{
+      size: size,
+      memory_mb: memory_mb,
+      hit_rate: hit_rate,
+      miss_rate: miss_rate,
+      eviction_count: metrics.evictions,
+      expiration_count: metrics.expirations,
+      update_count: metrics.updates,
+      operation_counts: %{
+        gets: metrics.gets,
+        puts: metrics.puts,
+        deletes: metrics.deletes
+      }
+    }
+  end
+
+  defp extract_cache_metrics(stats) do
+    %{
+      hits: get_in(stats, [:hits, :value]) || 0,
+      misses: get_in(stats, [:misses, :value]) || 0,
+      evictions: get_in(stats, [:evictions, :value]) || 0,
+      expirations: get_in(stats, [:expirations, :value]) || 0,
+      updates: get_in(stats, [:updates, :value]) || 0,
+      gets: get_in(stats, [:gets, :value]) || 0,
+      puts: get_in(stats, [:puts, :value]) || 0,
+      deletes: get_in(stats, [:deletes, :value]) || 0
+    }
+  end
+
+  defp calculate_miss_rate(hits, misses) do
+    total = hits + misses
+    if total > 0, do: Float.round(misses / total * 100, 1), else: 0.0
+  end
+
+  defp empty_cache_stats do
+    %{
+      size: 0,
+      memory_mb: 0.0,
+      hit_rate: "N/A",
+      miss_rate: 0.0,
+      eviction_count: 0,
+      expiration_count: 0,
+      update_count: 0,
+      operation_counts: %{gets: 0, puts: 0, deletes: 0}
+    }
   end
 
   defp get_store_stats do
@@ -449,46 +577,34 @@ defmodule WandererKills.Observability.WebSocketStats do
           0.0
         end
 
+      # Estimate memory usage for ETS tables (rough calculation)
+      # Approximate 200 bytes per killmail entry
+      memory_mb = killmails_count * 200 / (1024 * 1024)
+
       %{
         total_killmails: killmails_count,
         unique_systems: systems_count,
-        avg_killmails_per_system: avg_per_system
+        avg_killmails_per_system: avg_per_system,
+        memory_mb: memory_mb
       }
     catch
       _, _ -> %{}
     end
   end
 
-  defp format_redisq_stats(stats) when map_size(stats) == 0 do
-    "🔄 REDISQ ACTIVITY:\n" <>
-      "   Kills Processed: 0\n" <>
-      "   Older Kills: 0 | Skipped: 0\n" <>
-      "   Active Systems: 0\n" <>
-      "   Total Polls: 0 | Errors: 0"
+  # Helper function to calculate hit rate from Cachex stats
+  defp calculate_hit_rate(stats) when is_map(stats) and map_size(stats) > 0 do
+    # Cachex stats returns a nested structure with counters
+    hits = get_in(stats, [:hits, :value]) || 0
+    misses = get_in(stats, [:misses, :value]) || 0
+    total_ops = hits + misses
+
+    if total_ops > 0 do
+      Float.round(hits / total_ops * 100, 1)
+    else
+      "N/A"
+    end
   end
 
-  defp format_redisq_stats(stats) do
-    "🔄 REDISQ ACTIVITY:\n" <>
-      "   Kills Processed: #{Map.get(stats, :kills_processed, 0)}\n" <>
-      "   Older Kills: #{Map.get(stats, :kills_older, 0)} | Skipped: #{Map.get(stats, :kills_skipped, 0)}\n" <>
-      "   Active Systems: #{Map.get(stats, :active_systems, 0)}\n" <>
-      "   Total Polls: #{Map.get(stats, :total_polls, 0)} | Errors: #{Map.get(stats, :errors, 0)}"
-  end
-
-  defp format_cache_stats(stats) do
-    "💾 CACHE:\n" <>
-      "   Total Entries: #{Map.get(stats, :size, 0)}"
-  end
-
-  defp format_store_stats(stats) when map_size(stats) == 0 do
-    "📦 STORAGE METRICS:\n" <>
-      "   Status: Not available"
-  end
-
-  defp format_store_stats(stats) do
-    "📦 STORAGE METRICS:\n" <>
-      "   Total Killmails: #{Map.get(stats, :total_killmails, 0)}\n" <>
-      "   Unique Systems: #{Map.get(stats, :unique_systems, 0)}\n" <>
-      "   Avg Killmails/System: #{Map.get(stats, :avg_killmails_per_system, 0.0)}"
-  end
+  defp calculate_hit_rate(_), do: "N/A"
 end

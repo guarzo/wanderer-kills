@@ -68,6 +68,8 @@ defmodule WandererKills.Test.SharedContexts do
   - `%{}` - Empty context (KillStore is global)
   """
   def with_kill_store(_context \\ %{}) do
+    # Ensure tables exist before clearing
+    WandererKills.Storage.KillmailStore.init_tables!()
     WandererKills.Storage.KillmailStore.clear()
     %{}
   end

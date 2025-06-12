@@ -27,6 +27,12 @@ defmodule WandererKills.Cache.Helper do
   alias WandererKills.Support.Error
 
   @cache_name :wanderer_cache
+  @cache_adapter Application.compile_env(:wanderer_kills, :cache_adapter, Cachex)
+
+  # Runtime function to get cache adapter
+  defp cache_adapter do
+    @cache_adapter
+  end
 
   # Namespace configurations with TTLs
   @namespace_config %{
@@ -58,7 +64,7 @@ defmodule WandererKills.Cache.Helper do
   def get(namespace, id) when is_atom(namespace) do
     key = build_key(namespace, id)
 
-    case Cachex.get(@cache_name, key) do
+    case cache_adapter().get(@cache_name, key) do
       {:ok, nil} ->
         {:error, Error.cache_error(:not_found, "Key not found", %{namespace: namespace, id: id})}
 
@@ -79,7 +85,7 @@ defmodule WandererKills.Cache.Helper do
     key = build_key(namespace, id)
     ttl = get_ttl(namespace)
 
-    case Cachex.put(@cache_name, key, value, ttl: ttl) do
+    case cache_adapter().put(@cache_name, key, value, ttl: ttl) do
       {:ok, _} = result ->
         result
 
@@ -96,7 +102,7 @@ defmodule WandererKills.Cache.Helper do
   def delete(namespace, id) when is_atom(namespace) do
     key = build_key(namespace, id)
 
-    case Cachex.del(@cache_name, key) do
+    case cache_adapter().del(@cache_name, key) do
       {:ok, _} = result ->
         result
 
@@ -115,7 +121,7 @@ defmodule WandererKills.Cache.Helper do
   def exists?(namespace, id) when is_atom(namespace) do
     key = build_key(namespace, id)
 
-    case Cachex.exists?(@cache_name, key) do
+    case cache_adapter().exists?(@cache_name, key) do
       {:ok, exists} -> exists
       _ -> false
     end
@@ -147,7 +153,7 @@ defmodule WandererKills.Cache.Helper do
   @doc """
   List killmail IDs for a system.
   """
-  @spec list_system_killmails(integer()) :: {:ok, [integer()]} | error()
+  @spec list_system_killmails(integer()) :: {:ok, [integer()]} | {:ok, any()} | error()
   def list_system_killmails(system_id) do
     get(:systems, "killmails:#{system_id}")
   end
@@ -158,7 +164,7 @@ defmodule WandererKills.Cache.Helper do
   @spec add_system_killmail(integer(), integer()) :: {:ok, boolean()} | error()
   def add_system_killmail(system_id, killmail_id) do
     case list_system_killmails(system_id) do
-      {:ok, existing_ids} ->
+      {:ok, existing_ids} when is_list(existing_ids) ->
         if killmail_id in existing_ids do
           {:ok, true}
         else
@@ -166,6 +172,11 @@ defmodule WandererKills.Cache.Helper do
         end
 
       {:error, %Error{type: :not_found}} ->
+        put(:systems, "killmails:#{system_id}", [killmail_id])
+
+      {:ok, _invalid_data} ->
+        # Handle corrupted data by starting fresh
+        Logger.warning("Corrupted system killmail data found, resetting", system_id: system_id)
         put(:systems, "killmails:#{system_id}", [killmail_id])
 
       error ->

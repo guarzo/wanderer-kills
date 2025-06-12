@@ -1,19 +1,22 @@
-defmodule WandererKills.ESI.DataFetcher do
+defmodule WandererKills.ESI.Client do
   @moduledoc """
-  Unified ESI (EVE Swagger Interface) API client.
+  ESI (EVE Swagger Interface) API client.
 
   This module provides data fetching capabilities for EVE Online's ESI API.
   It handles caching, concurrent requests, error handling, and rate limiting
   for all ESI operations including characters, corporations, alliances,
   ship types, systems, and killmails.
 
-  This module serves as both the main interface for ESI operations and
-  the implementation, consolidating what was previously split between
-  ESI.Client and ESI.DataFetcher.
+  ## Features
+
+  - Type-specific methods for each ESI entity type
+  - Automatic caching with configurable TTLs
+  - Concurrent batch operations
+  - Rate limiting and error handling
+  - Generic fetch interface for flexibility
   """
 
   @behaviour WandererKills.ESI.ClientBehaviour
-  @behaviour WandererKills.ESI.DataFetcherBehaviour
 
   require Logger
   import WandererKills.Support.Logger
@@ -90,11 +93,9 @@ defmodule WandererKills.ESI.DataFetcher do
 
   @impl true
   def get_system(system_id) when is_integer(system_id) do
-    result = fetch_from_api(:system, system_id)
-    {:ok, result}
-  rescue
-    error ->
-      {:error, error}
+    Helper.get_or_set(:systems, system_id, fn ->
+      fetch_from_api(:system, system_id)
+    end)
   end
 
   @impl true
@@ -103,7 +104,7 @@ defmodule WandererKills.ESI.DataFetcher do
   end
 
   # ============================================================================
-  # ESI.DataFetcherBehaviour Implementation
+  # Generic Fetch Implementation
   # ============================================================================
 
   @impl true
@@ -116,12 +117,9 @@ defmodule WandererKills.ESI.DataFetcher do
   def fetch({:killmail, killmail_id, killmail_hash}), do: get_killmail(killmail_id, killmail_hash)
   def fetch(_), do: {:error, Error.esi_error(:unsupported, "Unsupported fetch operation")}
 
-  @impl true
-  def fetch_many(fetch_args) when is_list(fetch_args) do
-    Enum.map(fetch_args, &fetch/1)
-  end
-
-  @impl true
+  @doc """
+  Checks if the given fetch operation is supported.
+  """
   def supports?({:character, _}), do: true
   def supports?({:corporation, _}), do: true
   def supports?({:alliance, _}), do: true
@@ -312,11 +310,12 @@ defmodule WandererKills.ESI.DataFetcher do
           error: reason
         )
 
-        raise Error.esi_error(:api_error, "Failed to fetch #{entity_type} from ESI", false, %{
-                entity_type: entity_type,
-                entity_id: entity_id,
-                reason: reason
-              })
+        {:error,
+         Error.esi_error(:api_error, "Failed to fetch #{entity_type} from ESI", false, %{
+           entity_type: entity_type,
+           entity_id: entity_id,
+           reason: reason
+         })}
     end
   end
 
@@ -333,30 +332,34 @@ defmodule WandererKills.ESI.DataFetcher do
         parse_killmail_response(killmail_id, killmail_hash, response)
 
       {:error, %{status: 404}} ->
-        raise Error.esi_error(:not_found, "Killmail not found", false, %{
-                killmail_id: killmail_id,
-                killmail_hash: killmail_hash
-              })
+        {:error,
+         Error.esi_error(:not_found, "Killmail not found", false, %{
+           killmail_id: killmail_id,
+           killmail_hash: killmail_hash
+         })}
 
       {:error, %{status: 403}} ->
-        raise Error.esi_error(:forbidden, "Killmail access forbidden", false, %{
-                killmail_id: killmail_id,
-                killmail_hash: killmail_hash
-              })
+        {:error,
+         Error.esi_error(:forbidden, "Killmail access forbidden", false, %{
+           killmail_id: killmail_id,
+           killmail_hash: killmail_hash
+         })}
 
       {:error, %{status: status}} when status >= 500 ->
-        raise Error.esi_error(:server_error, "ESI server error", false, %{
-                killmail_id: killmail_id,
-                killmail_hash: killmail_hash,
-                status: status
-              })
+        {:error,
+         Error.esi_error(:server_error, "ESI server error", true, %{
+           killmail_id: killmail_id,
+           killmail_hash: killmail_hash,
+           status: status
+         })}
 
       {:error, reason} ->
-        raise Error.esi_error(:api_error, "Failed to fetch killmail from ESI", false, %{
-                killmail_id: killmail_id,
-                killmail_hash: killmail_hash,
-                reason: reason
-              })
+        {:error,
+         Error.esi_error(:api_error, "Failed to fetch killmail from ESI", false, %{
+           killmail_id: killmail_id,
+           killmail_hash: killmail_hash,
+           reason: reason
+         })}
     end
   end
 
@@ -502,10 +505,10 @@ defmodule WandererKills.ESI.DataFetcher do
     - `group_ids` - List of group IDs to fetch (optional)
 
   ## Examples
-      iex> WandererKills.ESI.DataFetcher.update()
+      iex> WandererKills.ESI.Client.update()
       :ok
 
-      iex> WandererKills.ESI.DataFetcher.update(group_ids: [23, 16])
+      iex> WandererKills.ESI.Client.update(group_ids: [23, 16])
       :ok
   """
   def update(opts \\ []) do

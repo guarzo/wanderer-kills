@@ -5,17 +5,21 @@ defmodule WandererKills.App.Application do
   OTP Application entry point for WandererKills.
 
   Supervises:
-    1. A Task.Supervisor for background jobs
-    2. Cachex instances for different cache namespaces
-    3. The preloader supervisor tree (conditionally)
-    4. The HTTP endpoint (Plug.Cowboy)
-    5. Observability/monitoring processes
-    6. The Telemetry.Poller for periodic measurements
+    1. EtsManager for WebSocket stats tracking
+    2. A Task.Supervisor for background jobs
+    3. Phoenix.PubSub for event broadcasting
+    4. SubscriptionManager for subscription handling
+    5. Cachex instance for unified caching
+    6. Observability/monitoring processes
+    7. Phoenix Endpoint (WandererKillsWeb.Endpoint)
+    8. Telemetry.Poller for periodic measurements
+    9. RedisQ for real-time killmail streaming (conditionally)
   """
 
   use Application
   require Logger
   alias WandererKills.Config
+  alias WandererKills.Support.SupervisedTask
   import Cachex.Spec
 
   @impl true
@@ -42,7 +46,6 @@ defmodule WandererKills.App.Application do
            WandererKillsWeb.Endpoint,
            {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
          ])
-      |> maybe_preloader()
       |> maybe_redisq()
 
     # 4) Start the supervisor
@@ -60,7 +63,6 @@ defmodule WandererKills.App.Application do
 
   # Create a single Cachex instance with namespace support
   defp cache_children do
-    # Use a reasonable default TTL - we'll set specific TTLs per key when needed
     default_ttl_ms = Config.cache().esi_ttl * 1_000
 
     opts = [
@@ -71,8 +73,9 @@ defmodule WandererKills.App.Application do
           default: default_ttl_ms,
           lazy: true
         ),
-      # Enable statistics tracking
-      stats: true
+      hooks: [
+        hook(module: Cachex.Stats)
+      ]
     ]
 
     [
@@ -90,14 +93,6 @@ defmodule WandererKills.App.Application do
     ]
   end
 
-  defp maybe_preloader(children) do
-    if Config.start_preloader?() do
-      children ++ [WandererKills.Preloader.Supervisor]
-    else
-      children
-    end
-  end
-
   defp maybe_redisq(children) do
     if Config.start_redisq?() do
       children ++ [WandererKills.RedisQ]
@@ -108,17 +103,19 @@ defmodule WandererKills.App.Application do
 
   @spec start_ship_type_update() :: :ok
   defp start_ship_type_update do
-    Task.start(fn ->
-      WandererKills.ShipTypes.Info.warm_cache()
+    SupervisedTask.start_child(
+      fn ->
+        case WandererKills.ShipTypes.Updater.update_ship_types() do
+          {:error, reason} ->
+            Logger.error("Failed to update ship types: #{inspect(reason)}")
 
-      case WandererKills.ShipTypes.Updater.update_ship_types() do
-        {:error, reason} ->
-          Logger.error("Failed to update ship types: #{inspect(reason)}")
-
-        _ ->
-          :ok
-      end
-    end)
+          _ ->
+            :ok
+        end
+      end,
+      task_name: "ship_type_update",
+      metadata: %{module: __MODULE__}
+    )
 
     :ok
   end

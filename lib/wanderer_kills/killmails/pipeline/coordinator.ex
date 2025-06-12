@@ -59,6 +59,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   alias WandererKills.Killmails.Pipeline.Parser
   alias WandererKills.Killmails.Transformations
   alias WandererKills.Storage.KillmailStore
+  alias WandererKills.Support.SupervisedTask
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -122,7 +123,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   defp handle_parse_result({:ok, parsed}, killmail_id) do
     with {:ok, enriched} <- enrich_and_log_killmail(parsed, killmail_id),
          {:ok, system_id} <- extract_system_id(enriched, killmail_id) do
-      store_killmail_async(system_id, enriched, killmail_id)
+      store_killmail_async(system_id, enriched)
       {:ok, enriched}
     end
   end
@@ -201,40 +202,46 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
      )}
   end
 
-  @spec store_killmail_async(integer(), killmail(), term()) :: :ok
-  defp store_killmail_async(system_id, enriched, killmail_id) do
-    Task.start(fn ->
-      try do
-        killmail_id = enriched["killmail_id"]
-        :ok = KillmailStore.put(killmail_id, system_id, enriched)
+  @spec store_killmail_async(integer(), killmail()) :: :ok
+  defp store_killmail_async(system_id, enriched) do
+    killmail_id = enriched["killmail_id"] || "<unknown>"
 
-        Logger.debug("Successfully enriched and stored killmail", %{
-          killmail_id: killmail_id,
-          system_id: system_id,
-          operation: :process_killmail,
-          status: :success
-        })
-      rescue
-        # Only rescue specific known exception types to avoid masking bugs
-        error in [ArgumentError] ->
-          Logger.error("Invalid arguments when storing killmail", %{
+    SupervisedTask.start_child(
+      fn ->
+        try do
+          :ok = KillmailStore.put(killmail_id, system_id, enriched)
+
+          Logger.debug("Successfully enriched and stored killmail", %{
             killmail_id: killmail_id,
             system_id: system_id,
             operation: :process_killmail,
-            error: Exception.message(error),
-            status: :error
+            status: :success
           })
+        rescue
+          # Consolidate rescue clauses for identical logging
+          error in [ArgumentError, BadMapError] ->
+            common_metadata = %{
+              killmail_id: killmail_id,
+              system_id: system_id,
+              operation: :process_killmail,
+              status: :error
+            }
 
-        error in [BadMapError] ->
-          Logger.error("Invalid killmail data structure", %{
-            killmail_id: killmail_id,
-            system_id: system_id,
-            operation: :process_killmail,
-            error: Exception.message(error),
-            status: :error
-          })
-      end
-    end)
+            error_msg =
+              case error do
+                %ArgumentError{} -> "Invalid arguments when storing killmail"
+                %BadMapError{} -> "Invalid killmail data structure"
+              end
+
+            Logger.error(
+              error_msg,
+              Map.merge(common_metadata, %{error: Exception.message(error)})
+            )
+        end
+      end,
+      task_name: "store_killmail",
+      metadata: %{system_id: system_id, killmail_id: killmail_id}
+    )
 
     :ok
   end
@@ -291,7 +298,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
       step: :start
     })
 
-    case WandererKills.ESI.DataFetcher.get_killmail_raw(id, hash) do
+    case WandererKills.ESI.Client.get_killmail_raw(id, hash) do
       {:ok, full} ->
         Logger.debug("Successfully fetched full killmail from ESI", %{
           killmail_id: id,
@@ -342,35 +349,35 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
           {:ok, [killmail()]} | {:error, term()}
   def process_killmails(raw_killmails, system_id, since_hours)
       when is_list(raw_killmails) and is_integer(system_id) and is_integer(since_hours) do
-    Logger.debug("Processing killmails",
+    Logger.debug("Processing killmails", %{
       system_id: system_id,
       raw_count: length(raw_killmails),
       since_hours: since_hours,
       operation: :process_killmails,
       step: :start
-    )
+    })
 
     with {:ok, parsed_killmails} <- parse_killmails(raw_killmails, since_hours),
          {:ok, enriched_killmails} <- enrich_killmails(parsed_killmails, system_id) do
-      Logger.debug("Successfully processed killmails",
+      Logger.debug("Successfully processed killmails", %{
         system_id: system_id,
         raw_count: length(raw_killmails),
         parsed_count: length(parsed_killmails),
         enriched_count: length(enriched_killmails),
         operation: :process_killmails,
         step: :success
-      )
+      })
 
       {:ok, enriched_killmails}
     else
       {:error, reason} ->
-        Logger.error("Failed to process killmails",
+        Logger.error("Failed to process killmails", %{
           system_id: system_id,
           raw_count: length(raw_killmails),
           error: reason,
           operation: :process_killmails,
           step: :error
-        )
+        })
 
         {:error, reason}
     end
@@ -394,11 +401,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
 
     case Parser.parse_partial_killmail(raw_killmail, cutoff_time) do
       {:ok, parsed} when enrich ->
-        case WandererKills.Killmails.Pipeline.Enricher.enrich_killmail(parsed) do
-          {:ok, enriched} -> {:ok, enriched}
-          # Fall back to basic data
-          {:error, _reason} -> {:ok, parsed}
-        end
+        maybe_enrich_killmail(parsed)
 
       {:ok, :kill_older} ->
         {:ok, :kill_older}
@@ -410,22 +413,34 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
         {:error, reason}
     end
   rescue
-    # Only rescue specific known exception types
-    error in [ArgumentError] ->
-      Logger.error("Invalid arguments during killmail processing",
-        error: Exception.message(error),
-        operation: :process_single_killmail
-      )
+    # Only rescue specific, expected error cases related to user input validation
+    error in ArgumentError ->
+      case Exception.message(error) do
+        "invalid date" <> _ ->
+          Logger.warning("Invalid date in killmail data", %{
+            error: Exception.message(error),
+            operation: :process_single_killmail
+          })
 
-      {:error, Error.validation_error(:invalid_arguments, Exception.message(error))}
+          {:error, Error.validation_error(:invalid_date, Exception.message(error))}
 
-    error in [BadMapError] ->
-      Logger.error("Invalid killmail data structure",
-        error: Exception.message(error),
-        operation: :process_single_killmail
-      )
+        _ ->
+          # Re-raise unexpected ArgumentErrors to maintain normal error handling
+          reraise error, __STACKTRACE__
+      end
 
-      {:error, Error.killmail_error(:invalid_format, Exception.message(error))}
+    error in BadMapError ->
+      if is_nil(raw_killmail) or raw_killmail == %{} do
+        Logger.warning("Empty or nil killmail data provided", %{
+          error: Exception.message(error),
+          operation: :process_single_killmail
+        })
+
+        {:error, Error.killmail_error(:empty_data, "Killmail data is empty or nil")}
+      else
+        # Re-raise unexpected BadMapErrors to maintain normal error handling
+        reraise error, __STACKTRACE__
+      end
   end
 
   @doc """
@@ -437,13 +452,13 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
     # Calculate cutoff time
     cutoff_time = DateTime.utc_now() |> DateTime.add(-since_hours * 60 * 60, :second)
 
-    Logger.debug("Parsing killmails with time filter",
+    Logger.debug("Parsing killmails with time filter", %{
       raw_count: length(raw_killmails),
       since_hours: since_hours,
       cutoff_time: cutoff_time,
       operation: :parse_killmails,
       step: :start
-    )
+    })
 
     parsed =
       raw_killmails
@@ -457,26 +472,27 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
         {:ok, killmails} when is_list(killmails) -> killmails
       end)
 
-    Logger.debug("Successfully parsed killmails",
+    Logger.debug("Successfully parsed killmails", %{
       raw_count: length(raw_killmails),
       parsed_count: length(parsed),
       parser_type: "partial_killmail",
       cutoff_time: cutoff_time,
       operation: :parse_killmails,
       step: :success
-    )
+    })
 
     {:ok, parsed}
   rescue
-    error ->
-      Logger.error("Exception during killmail parsing",
+    error in [ArgumentError, KeyError, MatchError] ->
+      Logger.error("Parsing exception during killmail processing",
         raw_count: length(raw_killmails),
         error: inspect(error),
+        error_type: error.__struct__,
         operation: :parse_killmails,
         step: :exception
       )
 
-      {:error, Error.parsing_error(:exception, "Exception during killmail parsing")}
+      {:error, Error.parsing_error(:exception, "Parsing exception: #{inspect(error)}")}
   end
 
   def parse_killmails(invalid_killmails, _since_hours) do
@@ -493,12 +509,12 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   @spec enrich_killmails([killmail()], pos_integer()) :: {:ok, [killmail()]} | {:error, term()}
   def enrich_killmails(parsed_killmails, system_id)
       when is_list(parsed_killmails) and is_integer(system_id) do
-    Logger.debug("Enriching killmails",
+    Logger.debug("Enriching killmails", %{
       system_id: system_id,
       parsed_count: length(parsed_killmails),
       operation: :enrich_killmails,
       step: :start
-    )
+    })
 
     enriched =
       parsed_killmails
@@ -509,36 +525,36 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
 
           # Fall back to original if enrichment fails
           {:error, reason} ->
-            Logger.debug("Enrichment failed for killmail, using basic data",
+            Logger.debug("Enrichment failed for killmail, using basic data", %{
               killmail_id: Map.get(killmail, "killmail_id"),
               system_id: system_id,
               error: reason,
               operation: :enrich_killmails,
               step: :fallback
-            )
+            })
 
             killmail
         end
       end)
 
-    Logger.debug("Successfully enriched killmails",
+    Logger.debug("Successfully enriched killmails", %{
       system_id: system_id,
       parsed_count: length(parsed_killmails),
       enriched_count: length(enriched),
       operation: :enrich_killmails,
       step: :success
-    )
+    })
 
     {:ok, enriched}
   rescue
     error ->
-      Logger.error("Exception during killmail enrichment",
+      Logger.error("Exception during killmail enrichment", %{
         system_id: system_id,
         parsed_count: length(parsed_killmails),
         error: inspect(error),
         operation: :enrich_killmails,
         step: :exception
-      )
+      })
 
       {:error, Error.enrichment_error(:exception, "Exception during killmail enrichment")}
   end
@@ -549,5 +565,15 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
        :invalid_type,
        "Killmails must be a list, got: #{inspect(invalid_killmails)}"
      )}
+  end
+
+  # Private helper functions
+
+  defp maybe_enrich_killmail(parsed) do
+    case WandererKills.Killmails.Pipeline.Enricher.enrich_killmail(parsed) do
+      {:ok, enriched} -> {:ok, enriched}
+      # Fall back to basic data
+      {:error, _reason} -> {:ok, parsed}
+    end
   end
 end
