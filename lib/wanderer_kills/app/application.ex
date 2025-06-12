@@ -5,12 +5,15 @@ defmodule WandererKills.App.Application do
   OTP Application entry point for WandererKills.
 
   Supervises:
-    1. A Task.Supervisor for background jobs
-    2. Cachex instances for different cache namespaces
-    3. The preloader supervisor tree (conditionally)
-    4. The HTTP endpoint (Plug.Cowboy)
-    5. Observability/monitoring processes
-    6. The Telemetry.Poller for periodic measurements
+    1. EtsManager for WebSocket stats tracking
+    2. A Task.Supervisor for background jobs
+    3. Phoenix.PubSub for event broadcasting
+    4. SubscriptionManager for subscription handling
+    5. Cachex instance for unified caching
+    6. Observability/monitoring processes
+    7. Phoenix Endpoint (WandererKillsWeb.Endpoint)
+    8. Telemetry.Poller for periodic measurements
+    9. RedisQ for real-time killmail streaming (conditionally)
   """
 
   use Application
@@ -43,7 +46,6 @@ defmodule WandererKills.App.Application do
            WandererKillsWeb.Endpoint,
            {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
          ])
-      |> maybe_preloader()
       |> maybe_redisq()
 
     # 4) Start the supervisor
@@ -81,7 +83,6 @@ defmodule WandererKills.App.Application do
     ]
   end
 
-
   defp telemetry_measurements do
     [
       {WandererKills.Observability.Monitoring, :measure_http_requests, []},
@@ -90,12 +91,6 @@ defmodule WandererKills.App.Application do
       {WandererKills.Observability.Monitoring, :measure_system_resources, []},
       {WandererKills.Observability.WebSocketStats, :measure_websocket_metrics, []}
     ]
-  end
-
-  defp maybe_preloader(children) do
-    # Preloader.Supervisor was removed - it was unused dead code
-    # The actual preloading is handled by WandererKills.Preloader
-    children
   end
 
   defp maybe_redisq(children) do

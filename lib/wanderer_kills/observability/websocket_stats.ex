@@ -403,13 +403,40 @@ defmodule WandererKills.Observability.WebSocketStats do
     memory_mb_raw = Map.get(cache_stats, :memory_mb, 0.0)
     size_mb = Float.round(memory_mb_raw / 1, 1)
 
+    # Extract all metrics
+    size = Map.get(cache_stats, :size, 0)
+    hit_rate = Map.get(cache_stats, :hit_rate, "N/A")
+    miss_rate = Map.get(cache_stats, :miss_rate, 0.0)
+    evictions = Map.get(cache_stats, :eviction_count, 0)
+    expirations = Map.get(cache_stats, :expiration_count, 0)
+    updates = Map.get(cache_stats, :update_count, 0)
+
+    # Operation counts
+    ops = Map.get(cache_stats, :operation_counts, %{})
+    gets = Map.get(ops, :gets, 0)
+    puts = Map.get(ops, :puts, 0)
+    deletes = Map.get(ops, :deletes, 0)
+
+    # Calculate memory efficiency (entries per MB)
+    memory_efficiency = if size_mb > 0, do: Float.round(size / size_mb, 1), else: 0.0
+
     Logger.info(
-      "[Cache Stats] Size: #{Map.get(cache_stats, :size, 0)} entries | " <>
-        "Memory: #{size_mb} MB | " <>
-        "Hit rate: #{Map.get(cache_stats, :hit_rate, "N/A")}%",
-      cache_size: Map.get(cache_stats, :size, 0),
+      "[Cache Stats] Size: #{size} entries | " <>
+        "Memory: #{size_mb} MB (#{memory_efficiency} entries/MB) | " <>
+        "Hit/Miss: #{hit_rate}%/#{miss_rate}% | " <>
+        "Evictions: #{evictions} | Expirations: #{expirations} | " <>
+        "Ops (G/P/D): #{gets}/#{puts}/#{deletes}",
+      cache_size: size,
       cache_memory_mb: size_mb,
-      cache_hit_rate: Map.get(cache_stats, :hit_rate, 0)
+      cache_memory_efficiency: memory_efficiency,
+      cache_hit_rate: hit_rate,
+      cache_miss_rate: miss_rate,
+      cache_eviction_count: evictions,
+      cache_expiration_count: expirations,
+      cache_update_count: updates,
+      cache_gets: gets,
+      cache_puts: puts,
+      cache_deletes: deletes
     )
   end
 
@@ -465,24 +492,67 @@ defmodule WandererKills.Observability.WebSocketStats do
               _ -> %{}
             end
 
+          # Extract all available statistics
+          hits = get_in(stats, [:hits, :value]) || 0
+          misses = get_in(stats, [:misses, :value]) || 0
+          evictions = get_in(stats, [:evictions, :value]) || 0
+          expirations = get_in(stats, [:expirations, :value]) || 0
+          updates = get_in(stats, [:updates, :value]) || 0
+
+          # Operation counts
+          gets = get_in(stats, [:gets, :value]) || 0
+          puts = get_in(stats, [:puts, :value]) || 0
+          deletes = get_in(stats, [:deletes, :value]) || 0
+
           # Estimate memory usage (rough calculation)
           # Rough estimate: 1KB per entry, convert KB to MB using binary units
           memory_mb = size / 1024
 
-          # Calculate hit rate from Cachex stats structure
+          # Calculate rates
           hit_rate = calculate_hit_rate(stats)
+
+          miss_rate =
+            if hits + misses > 0, do: Float.round(misses / (hits + misses) * 100, 1), else: 0.0
 
           %{
             size: size,
             memory_mb: memory_mb,
-            hit_rate: hit_rate
+            hit_rate: hit_rate,
+            miss_rate: miss_rate,
+            eviction_count: evictions,
+            expiration_count: expirations,
+            update_count: updates,
+            operation_counts: %{
+              gets: gets,
+              puts: puts,
+              deletes: deletes
+            }
           }
 
         _ ->
-          %{size: 0, memory_mb: 0.0, hit_rate: "N/A"}
+          %{
+            size: 0,
+            memory_mb: 0.0,
+            hit_rate: "N/A",
+            miss_rate: 0.0,
+            eviction_count: 0,
+            expiration_count: 0,
+            update_count: 0,
+            operation_counts: %{gets: 0, puts: 0, deletes: 0}
+          }
       end
     catch
-      _, _ -> %{size: 0, memory_mb: 0.0, hit_rate: "N/A"}
+      _, _ ->
+        %{
+          size: 0,
+          memory_mb: 0.0,
+          hit_rate: "N/A",
+          miss_rate: 0.0,
+          eviction_count: 0,
+          expiration_count: 0,
+          update_count: 0,
+          operation_counts: %{gets: 0, puts: 0, deletes: 0}
+        }
     end
   end
 

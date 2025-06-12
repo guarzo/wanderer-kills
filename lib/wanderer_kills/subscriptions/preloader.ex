@@ -100,9 +100,10 @@ defmodule WandererKills.Subscriptions.Preloader do
         error_type: error.__struct__,
         error: Exception.message(error)
       )
-      
+
     error ->
       stacktrace = __STACKTRACE__
+
       Logger.error("❌ Failed to preload kills for subscription - unexpected error",
         subscription_id: subscription["id"],
         error_type: error.__struct__,

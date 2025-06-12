@@ -115,7 +115,7 @@
     - Add examples for new features (batch operations, webhooks)
   - Consider using OpenAPI/Swagger for API documentation
 
-- [ ] **Improve Cachex statistics logging in status reports**
+- [x] **Improve Cachex statistics logging in status reports**
   - Current state: Only logging cache size, memory, and hit rate in periodic status reports
   - Available Cachex stats being collected but not logged:
     - `miss_rate` - Cache miss percentage

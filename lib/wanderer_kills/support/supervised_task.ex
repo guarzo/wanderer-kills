@@ -51,7 +51,7 @@ defmodule WandererKills.Support.SupervisedTask do
 
     # Reuse the telemetry wrapper from start_child
     wrapped_fun = wrap_with_telemetry(fun, task_name, metadata)
-    
+
     task = Task.Supervisor.async(WandererKills.TaskSupervisor, wrapped_fun)
 
     try do
@@ -62,7 +62,7 @@ defmodule WandererKills.Support.SupervisedTask do
         {:error, :timeout}
     end
   end
-  
+
   # Extract the telemetry wrapping logic to avoid duplication
   defp wrap_with_telemetry(fun, task_name, metadata) do
     fn ->

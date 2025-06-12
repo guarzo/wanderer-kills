@@ -147,10 +147,10 @@ defmodule WandererKills.ShipTypes.Parser do
     cond do
       ship_type.type_id == 0 ->
         {:error, "Invalid ship type: missing or invalid typeID"}
-      
+
       ship_type.name == "" ->
         {:error, "Invalid ship type: missing typeName"}
-        
+
       true ->
         {:ok, ship_type}
     end

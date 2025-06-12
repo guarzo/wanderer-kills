@@ -74,7 +74,7 @@ defmodule WandererKills.Observability.ApplicationHealth do
     error ->
       stacktrace = __STACKTRACE__
       formatted_error = Exception.format(:error, error, stacktrace)
-      
+
       Logger.error("Health check failed for #{inspect(health_module)}: #{formatted_error}")
 
       %{
@@ -97,7 +97,7 @@ defmodule WandererKills.Observability.ApplicationHealth do
     error ->
       stacktrace = __STACKTRACE__
       formatted_error = Exception.format(:error, error, stacktrace)
-      
+
       Logger.error("Metrics collection failed for #{inspect(health_module)}: #{formatted_error}")
 
       %{
