@@ -205,7 +205,7 @@ defmodule WandererKills.Killmails.Pipeline.Validator do
 
   @doc """
   Determines which validation step failed based on error type.
-  
+
   This function helps with debugging and monitoring by categorizing
   validation failures into specific steps.
   """

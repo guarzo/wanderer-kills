@@ -41,8 +41,8 @@ defmodule WandererKills.ShipTypes.Info do
         Logger.debug("Successfully warmed cache with CSV data")
         :ok
 
-      result ->
-        Logger.warning("Failed to warm cache with CSV data: #{inspect(result)}")
+      {:error, _reason} = error ->
+        Logger.warning("Failed to warm cache with CSV data: #{inspect(error)}")
         # Don't fail if CSV loading fails - ESI fallback will work
         :ok
     end

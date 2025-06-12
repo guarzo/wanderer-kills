@@ -10,6 +10,7 @@ defmodule WandererKills.Subscriptions.Preloader do
   require Logger
   alias WandererKills.Preloader
   alias WandererKills.Subscriptions.{Broadcaster, WebhookNotifier}
+  alias WandererKills.Support.SupervisedTask
 
   # Preload configuration
   @default_limit_per_system 5
@@ -38,8 +39,6 @@ defmodule WandererKills.Subscriptions.Preloader do
     since_hours = Keyword.get(opts, :since_hours, @default_since_hours)
 
     # Start supervised async task
-    alias WandererKills.Support.SupervisedTask
-    
     SupervisedTask.start_child(
       fn -> do_preload(subscription, limit_per_system, since_hours) end,
       task_name: "subscription_preload",
@@ -71,7 +70,7 @@ defmodule WandererKills.Subscriptions.Preloader do
     )
 
     # Process each system
-    results = 
+    results =
       system_ids
       |> Enum.map(&preload_system(&1, limit_per_system, since_hours))
       |> Enum.filter(fn {_system_id, kills} -> length(kills) > 0 end)
@@ -95,16 +94,25 @@ defmodule WandererKills.Subscriptions.Preloader do
       total_kills: total_kills
     )
   rescue
-    error ->
-      Logger.error("❌ Failed to preload kills for subscription",
+    error in [ArgumentError, KeyError] ->
+      Logger.error("❌ Failed to preload kills for subscription - invalid data",
         subscription_id: subscription["id"],
-        error: inspect(error)
+        error_type: error.__struct__,
+        error: Exception.message(error)
+      )
+      
+    error ->
+      stacktrace = __STACKTRACE__
+      Logger.error("❌ Failed to preload kills for subscription - unexpected error",
+        subscription_id: subscription["id"],
+        error_type: error.__struct__,
+        error: Exception.format(:error, error, stacktrace)
       )
   end
 
   defp preload_system(system_id, limit, since_hours) do
     kills = Preloader.preload_kills_for_system(system_id, limit, since_hours)
-    
+
     if length(kills) > 0 do
       Logger.debug("📦 Preloaded kills for system",
         system_id: system_id,

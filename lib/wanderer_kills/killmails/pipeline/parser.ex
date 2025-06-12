@@ -45,8 +45,6 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
     ESIFetcher
   }
 
-  alias WandererKills.Killmails.TimeFilters
-
   alias WandererKills.Killmails.Transformations
 
   @type killmail :: map()
@@ -158,21 +156,6 @@ defmodule WandererKills.Killmails.Pipeline.Parser do
           {:ok, merged_killmail()} | {:error, term()}
   def merge_killmail_data(esi_data, zkb_data) do
     DataBuilder.merge_killmail_data(esi_data, zkb_data)
-  end
-
-  @doc """
-  Validates killmail timestamp and parses it.
-
-  ## Parameters
-  - `killmail` - Killmail data containing time information
-
-  ## Returns
-  - `{:ok, datetime}` - On successful parsing
-  - `{:error, reason}` - On failure
-  """
-  @spec validate_killmail_time(killmail()) :: {:ok, DateTime.t()} | {:error, term()}
-  def validate_killmail_time(killmail) do
-    TimeFilters.extract_killmail_time(killmail)
   end
 
   # Private functions for internal implementation

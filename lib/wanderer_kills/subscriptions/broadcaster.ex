@@ -40,8 +40,9 @@ defmodule WandererKills.Subscriptions.Broadcaster do
     detailed_topic = PubSubTopics.system_detailed_topic(system_id)
     :ok = Phoenix.PubSub.broadcast(@pubsub_name, detailed_topic, message)
 
-    # Note: There's no "all systems" topic in PubSubTopics, so we'll use a general topic
-    :ok = Phoenix.PubSub.broadcast(@pubsub_name, "zkb:all_systems", message)
+    # Broadcast to all systems topic
+    all_systems_topic = PubSubTopics.all_systems_topic()
+    :ok = Phoenix.PubSub.broadcast(@pubsub_name, all_systems_topic, message)
 
     log_broadcast(system_id, kills)
     :ok

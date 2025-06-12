@@ -199,5 +199,4 @@ defmodule WandererKills.Support.BatchProcessor do
         {successes, [{:unexpected, other} | failures]}
     end)
   end
-
 end

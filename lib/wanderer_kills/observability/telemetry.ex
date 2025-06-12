@@ -64,6 +64,7 @@ defmodule WandererKills.Observability.Telemetry do
   """
 
   require Logger
+  alias WandererKills.Observability.LogFormatter
 
   # -------------------------------------------------
   # Helper functions for telemetry execution
@@ -594,17 +595,36 @@ defmodule WandererKills.Observability.Telemetry do
   def handle_task_event([:wanderer_kills, :task, event], measurements, metadata, _config) do
     case event do
       :start ->
-        Logger.debug("[Task] Started #{metadata.task_name}")
+        LogFormatter.format_operation("Task", "start", %{task_name: metadata.task_name})
+        |> Logger.debug()
 
       :stop ->
         duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-        Logger.debug("[Task] Completed #{metadata.task_name} in #{duration_ms}ms")
+
+        LogFormatter.format_operation("Task", "completed", %{
+          task_name: metadata.task_name,
+          duration_ms: duration_ms
+        })
+        |> Logger.debug()
 
       :error ->
         duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-        Logger.error(
-          "[Task] Failed #{metadata.task_name} after #{duration_ms}ms - #{metadata.error}"
+
+        LogFormatter.format_error(
+          "Task",
+          "failed",
+          %{
+            task_name: metadata.task_name,
+            duration_ms: duration_ms
+          },
+          metadata.error
         )
+        |> Logger.error()
+
+      _ ->
+        :ok
     end
   end
+
+  def handle_task_event(_, _, _, _), do: :ok
 end

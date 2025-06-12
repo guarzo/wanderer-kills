@@ -151,7 +151,6 @@ defmodule WandererKills.Killmails.Transformations do
     {normalized, length(normalized)}
   end
 
-
   # ============================================================================
   # Data Flattening Operations
   # ============================================================================
@@ -367,9 +366,10 @@ defmodule WandererKills.Killmails.Transformations do
   # Extract ship name from ship data, handling both atom and string keys
   defp extract_ship_name(ship_data) when is_map(ship_data) do
     case Map.get(ship_data, :name) || Map.get(ship_data, "name") do
-      name when is_binary(name) -> 
+      name when is_binary(name) ->
         {:ok, name}
-      _ -> 
+
+      _ ->
         {:error, Error.ship_types_error(:invalid_ship_data, "Ship data missing name field")}
     end
   end
@@ -377,11 +377,13 @@ defmodule WandererKills.Killmails.Transformations do
   # Fallback to ESI if not found in cache
   defp fallback_to_esi({:error, %Error{type: :not_found}}, ship_type_id) do
     case WandererKills.ESI.DataFetcher.get_type(ship_type_id) do
-      {:ok, %{"name" => name}} when is_binary(name) -> 
+      {:ok, %{"name" => name}} when is_binary(name) ->
         {:ok, name}
-      {:ok, _} -> 
+
+      {:ok, _} ->
         {:error, Error.ship_types_error(:invalid_ship_data, "ESI data missing name field")}
-      {:error, _reason} -> 
+
+      {:error, _reason} ->
         {:error, Error.ship_types_error(:ship_name_not_found, "Ship type not found")}
     end
   end
@@ -394,7 +396,7 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Applies default values to a data structure.
-  
+
   Generic function for merging defaults with provided data.
   """
   @spec apply_defaults(map(), map()) :: map()
@@ -404,7 +406,7 @@ defmodule WandererKills.Killmails.Transformations do
 
   @doc """
   Normalizes a list of entities with defaults.
-  
+
   Generic function for normalizing lists of data structures.
   """
   @spec normalize_entity_list([map()], map()) :: [map()]

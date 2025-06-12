@@ -16,6 +16,7 @@ defmodule WandererKills.App.Application do
   use Application
   require Logger
   alias WandererKills.Config
+  alias WandererKills.Support.SupervisedTask
   import Cachex.Spec
 
   @impl true
@@ -60,7 +61,6 @@ defmodule WandererKills.App.Application do
 
   # Create a single Cachex instance with namespace support
   defp cache_children do
-    # Use a reasonable default TTL - we'll set specific TTLs per key when needed
     default_ttl_ms = Config.cache().esi_ttl * 1_000
 
     opts = [
@@ -71,14 +71,16 @@ defmodule WandererKills.App.Application do
           default: default_ttl_ms,
           lazy: true
         ),
-      # Enable statistics tracking
-      stats: true
+      hooks: [
+        hook(module: Cachex.Stats)
+      ]
     ]
 
     [
       {Cachex, [:wanderer_cache, opts]}
     ]
   end
+
 
   defp telemetry_measurements do
     [
@@ -106,8 +108,6 @@ defmodule WandererKills.App.Application do
 
   @spec start_ship_type_update() :: :ok
   defp start_ship_type_update do
-    alias WandererKills.Support.SupervisedTask
-    
     SupervisedTask.start_child(
       fn ->
         case WandererKills.ShipTypes.Updater.update_ship_types() do

@@ -39,6 +39,7 @@ defmodule WandererKills.Observability.WebSocketStats do
   use GenServer
   require Logger
   alias WandererKills.Support.Clock
+  alias WandererKills.Observability.LogFormatter
 
   @stats_summary_interval :timer.minutes(5)
 
@@ -139,7 +140,8 @@ defmodule WandererKills.Observability.WebSocketStats do
         )
 
       {:error, reason} ->
-        Logger.warning("Failed to measure WebSocket metrics: #{inspect(reason)}")
+        LogFormatter.format_error("WebSocket", "metrics_failed", %{}, inspect(reason))
+        |> Logger.warning()
     end
   end
 
@@ -349,7 +351,6 @@ defmodule WandererKills.Observability.WebSocketStats do
     log_cache_stats(cache_stats)
     log_store_stats(store_stats)
 
-    
     # Emit telemetry for the summary
     :telemetry.execute(
       [:wanderer_kills, :websocket, :summary],
@@ -363,12 +364,17 @@ defmodule WandererKills.Observability.WebSocketStats do
       %{period: "5_minutes"}
     )
   end
-  
+
   defp log_websocket_stats(stats) do
-    Logger.info(
-      "[WS Stats] Connections: #{stats.connections.active} active, #{stats.connections.total_connected} total | " <>
-      "Subscriptions: #{stats.subscriptions.active} (#{stats.subscriptions.total_systems} systems) | " <>
-      "Kills sent: #{stats.kills_sent.total} (#{Float.round(stats.rates.kills_per_minute, 1)}/min)",
+    LogFormatter.format_stats("WebSocket", %{
+      connections_active: stats.connections.active,
+      connections_total: stats.connections.total_connected,
+      subscriptions: stats.subscriptions.active,
+      systems: stats.subscriptions.total_systems,
+      kills_sent: stats.kills_sent.total,
+      kills_per_min: Float.round(stats.rates.kills_per_minute, 1)
+    })
+    |> Logger.info(
       websocket_active_connections: stats.connections.active,
       websocket_kills_sent_total: stats.kills_sent.total,
       websocket_kills_sent_realtime: stats.kills_sent.realtime,
@@ -378,47 +384,52 @@ defmodule WandererKills.Observability.WebSocketStats do
       websocket_kills_per_minute: Float.round(stats.rates.kills_per_minute, 2)
     )
   end
-  
+
   defp log_redisq_stats(redisq_stats) when map_size(redisq_stats) > 0 do
     Logger.info(
       "[RedisQ Stats] Kills processed: #{Map.get(redisq_stats, :kills_processed, 0)} | " <>
-      "Active systems: #{Map.get(redisq_stats, :active_systems, 0)} | " <>
-      "Queue size: #{Map.get(redisq_stats, :queue_size, 0)}",
+        "Active systems: #{Map.get(redisq_stats, :active_systems, 0)} | " <>
+        "Queue size: #{Map.get(redisq_stats, :queue_size, 0)}",
       redisq_kills_processed: Map.get(redisq_stats, :kills_processed, 0),
       redisq_active_systems: Map.get(redisq_stats, :active_systems, 0),
       redisq_queue_size: Map.get(redisq_stats, :queue_size, 0)
     )
   end
-  
+
   defp log_redisq_stats(_), do: :ok
-  
+
   defp log_cache_stats(cache_stats) when map_size(cache_stats) > 0 do
-    size_mb = Float.round(Map.get(cache_stats, :memory_mb, 0.0), 1)
+    # Ensure memory_mb is a float before rounding
+    memory_mb_raw = Map.get(cache_stats, :memory_mb, 0.0)
+    size_mb = Float.round(memory_mb_raw / 1, 1)
+
     Logger.info(
       "[Cache Stats] Size: #{Map.get(cache_stats, :size, 0)} entries | " <>
-      "Memory: #{size_mb} MB | " <>
-      "Hit rate: #{Map.get(cache_stats, :hit_rate, "N/A")}%",
+        "Memory: #{size_mb} MB | " <>
+        "Hit rate: #{Map.get(cache_stats, :hit_rate, "N/A")}%",
       cache_size: Map.get(cache_stats, :size, 0),
       cache_memory_mb: size_mb,
       cache_hit_rate: Map.get(cache_stats, :hit_rate, 0)
     )
   end
-  
+
   defp log_cache_stats(_), do: :ok
-  
+
   defp log_store_stats(store_stats) when map_size(store_stats) > 0 do
-    memory_mb = Map.get(store_stats, :memory_mb, 0.0)
-    
+    # Ensure memory_mb is a float before rounding
+    memory_mb_raw = Map.get(store_stats, :memory_mb, 0.0)
+    memory_mb = Float.round(memory_mb_raw / 1, 1)
+
     Logger.info(
       "[Store Stats] Killmails: #{Map.get(store_stats, :total_killmails, 0)} | " <>
-      "Systems: #{Map.get(store_stats, :unique_systems, 0)} | " <>
-      "Memory: #{Float.round(memory_mb, 1)} MB",
+        "Systems: #{Map.get(store_stats, :unique_systems, 0)} | " <>
+        "Memory: #{memory_mb} MB",
       store_total_killmails: Map.get(store_stats, :total_killmails, 0),
       store_unique_systems: Map.get(store_stats, :unique_systems, 0),
-      store_memory_mb: Float.round(memory_mb, 1)
+      store_memory_mb: memory_mb
     )
   end
-  
+
   defp log_store_stats(_), do: :ok
 
   # Gather statistics from other system components
@@ -448,24 +459,30 @@ defmodule WandererKills.Observability.WebSocketStats do
       case Cachex.size(:wanderer_cache) do
         {:ok, size} ->
           # Try to get additional stats
-          stats = case Cachex.stats(:wanderer_cache) do
-            {:ok, cache_stats} -> cache_stats
-            _ -> %{}
-          end
-          
+          stats =
+            case Cachex.stats(:wanderer_cache) do
+              {:ok, cache_stats} -> cache_stats
+              _ -> %{}
+            end
+
           # Estimate memory usage (rough calculation)
-          memory_mb = size * 0.001  # Rough estimate: 1KB per entry
-          
+          # Rough estimate: 1KB per entry, convert KB to MB using binary units
+          memory_mb = size / 1024
+
+          # Calculate hit rate from Cachex stats structure
+          hit_rate = calculate_hit_rate(stats)
+
           %{
             size: size,
             memory_mb: memory_mb,
-            hit_rate: Map.get(stats, :hit_rate, "N/A")
+            hit_rate: hit_rate
           }
-        _ -> 
-          %{size: 0, memory_mb: 0, hit_rate: "N/A"}
+
+        _ ->
+          %{size: 0, memory_mb: 0.0, hit_rate: "N/A"}
       end
     catch
-      _, _ -> %{size: 0, memory_mb: 0, hit_rate: "N/A"}
+      _, _ -> %{size: 0, memory_mb: 0.0, hit_rate: "N/A"}
     end
   end
 
@@ -483,13 +500,34 @@ defmodule WandererKills.Observability.WebSocketStats do
           0.0
         end
 
+      # Estimate memory usage for ETS tables (rough calculation)
+      # Approximate 200 bytes per killmail entry
+      memory_mb = killmails_count * 200 / (1024 * 1024)
+
       %{
         total_killmails: killmails_count,
         unique_systems: systems_count,
-        avg_killmails_per_system: avg_per_system
+        avg_killmails_per_system: avg_per_system,
+        memory_mb: memory_mb
       }
     catch
       _, _ -> %{}
     end
   end
+
+  # Helper function to calculate hit rate from Cachex stats
+  defp calculate_hit_rate(stats) when is_map(stats) and map_size(stats) > 0 do
+    # Cachex stats returns a nested structure with counters
+    hits = get_in(stats, [:hits, :value]) || 0
+    misses = get_in(stats, [:misses, :value]) || 0
+    total_ops = hits + misses
+
+    if total_ops > 0 do
+      Float.round(hits / total_ops * 100, 1)
+    else
+      "N/A"
+    end
+  end
+
+  defp calculate_hit_rate(_), do: "N/A"
 end

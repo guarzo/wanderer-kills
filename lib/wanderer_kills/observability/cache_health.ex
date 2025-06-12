@@ -28,7 +28,7 @@ defmodule WandererKills.Observability.CacheHealth do
         component: "cache_system",
         caches: cache_checks,
         total_caches: length(cache_names),
-        healthy_caches: Enum.count(cache_checks, & &1.healthy)
+        healthy_caches: Enum.count(cache_checks, fn cache_check -> cache_check.healthy end)
       },
       timestamp: Clock.now_iso8601()
     }
@@ -61,7 +61,6 @@ defmodule WandererKills.Observability.CacheHealth do
 
     [
       cache_names: cache_names,
-      include_stats: true,
       timeout_ms: 5_000
     ]
   end

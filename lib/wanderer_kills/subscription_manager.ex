@@ -116,7 +116,6 @@ defmodule WandererKills.SubscriptionManager do
     GenServer.call(__MODULE__, :get_stats)
   end
 
-
   # ============================================================================
   # Server Callbacks
   # ============================================================================
@@ -124,7 +123,7 @@ defmodule WandererKills.SubscriptionManager do
   @impl true
   def init(_opts) do
     Logger.info("SubscriptionManager started")
-    
+
     state = %State{
       subscriptions: %{},
       websocket_subscriptions: %{}
@@ -138,7 +137,7 @@ defmodule WandererKills.SubscriptionManager do
     case validate_subscription(subscriber_id, system_ids) do
       :ok ->
         subscription_id = generate_subscription_id()
-        
+
         subscription = %{
           "id" => subscription_id,
           "subscriber_id" => subscriber_id,
@@ -168,7 +167,7 @@ defmodule WandererKills.SubscriptionManager do
 
   @impl true
   def handle_call({:unsubscribe, subscriber_id}, _from, state) do
-    subscription_ids = 
+    subscription_ids =
       state.subscriptions
       |> Enum.filter(fn {_id, sub} -> sub["subscriber_id"] == subscriber_id end)
       |> Enum.map(fn {id, _sub} -> id end)
@@ -302,12 +301,12 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   defp generate_subscription_id do
-    "sub_" <> :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    ("sub_" <> :crypto.strong_rand_bytes(16)) |> Base.url_encode64(padding: false)
   end
 
   defp send_webhook_notifications(subscriptions, system_id, kills) do
     subscriptions
-    |> Enum.filter(fn {_id, sub} -> 
+    |> Enum.filter(fn {_id, sub} ->
       system_id in sub["system_ids"] and sub["callback_url"] != nil
     end)
     |> Enum.each(fn {id, sub} ->
@@ -317,7 +316,7 @@ defmodule WandererKills.SubscriptionManager do
 
   defp send_webhook_count_notifications(subscriptions, system_id, count) do
     subscriptions
-    |> Enum.filter(fn {_id, sub} -> 
+    |> Enum.filter(fn {_id, sub} ->
       system_id in sub["system_ids"] and sub["callback_url"] != nil
     end)
     |> Enum.each(fn {id, sub} ->
@@ -326,7 +325,7 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   defp count_unique_systems(state) do
-    http_systems = 
+    http_systems =
       state.subscriptions
       |> Map.values()
       |> Enum.flat_map(& &1["system_ids"])

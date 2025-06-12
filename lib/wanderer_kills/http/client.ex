@@ -298,11 +298,6 @@ defmodule WandererKills.Http.Client do
     end
   end
 
-  @spec retriable_error?(term()) :: boolean()
-  def retriable_error?(error) do
-    retryable_error?(error)
-  end
-
   # ============================================================================
   # Consolidated Utility Functions (from Http.Util)
   # ============================================================================
@@ -433,12 +428,12 @@ defmodule WandererKills.Http.Client do
   defp map_status_code(status), do: {:error, {:http_error, status}}
 
   # Determines if an HTTP error is retryable
-  @spec retryable_error?(term()) :: boolean()
-  defp retryable_error?({:error, :rate_limited}), do: true
-  defp retryable_error?({:error, {:server_error, _}}), do: true
-  defp retryable_error?({:error, {:client_error, _}}), do: false
-  defp retryable_error?({:error, :not_found}), do: false
-  defp retryable_error?(_), do: false
+  @spec retriable_error?(term()) :: boolean()
+  def retriable_error?({:error, :rate_limited}), do: true
+  def retriable_error?({:error, {:server_error, _}}), do: true
+  def retriable_error?({:error, {:client_error, _}}), do: false
+  def retriable_error?({:error, :not_found}), do: false
+  def retriable_error?(_), do: false
 
   # Configures retry options for a service
   @spec retry_options(atom(), keyword()) :: keyword()
@@ -449,7 +444,7 @@ defmodule WandererKills.Http.Client do
       max_retries: config.http_max_retries,
       base_delay: config.http_base_delay,
       max_delay: config.http_max_delay,
-      retry?: &retryable_error?/1
+      retry?: &retriable_error?/1
     ]
 
     # Use default retry counts for services

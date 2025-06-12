@@ -59,6 +59,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   alias WandererKills.Killmails.Pipeline.Parser
   alias WandererKills.Killmails.Transformations
   alias WandererKills.Storage.KillmailStore
+  alias WandererKills.Support.SupervisedTask
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -122,7 +123,7 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
   defp handle_parse_result({:ok, parsed}, killmail_id) do
     with {:ok, enriched} <- enrich_and_log_killmail(parsed, killmail_id),
          {:ok, system_id} <- extract_system_id(enriched, killmail_id) do
-      store_killmail_async(system_id, enriched, killmail_id)
+      store_killmail_async(system_id, enriched)
       {:ok, enriched}
     end
   end
@@ -201,14 +202,13 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
      )}
   end
 
-  @spec store_killmail_async(integer(), killmail(), term()) :: :ok
-  defp store_killmail_async(system_id, enriched, killmail_id) do
-    alias WandererKills.Support.SupervisedTask
-    
+  @spec store_killmail_async(integer(), killmail()) :: :ok
+  defp store_killmail_async(system_id, enriched) do
+    killmail_id = enriched["killmail_id"] || "<unknown>"
+
     SupervisedTask.start_child(
       fn ->
         try do
-          killmail_id = enriched["killmail_id"]
           :ok = KillmailStore.put(killmail_id, system_id, enriched)
 
           Logger.debug("Successfully enriched and stored killmail", %{
@@ -218,28 +218,29 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
             status: :success
           })
         rescue
-          # Only rescue specific known exception types to avoid masking bugs
-          error in [ArgumentError] ->
-          Logger.error("Invalid arguments when storing killmail", %{
-            killmail_id: killmail_id,
-            system_id: system_id,
-            operation: :process_killmail,
-            error: Exception.message(error),
-            status: :error
-          })
+          # Consolidate rescue clauses for identical logging
+          error in [ArgumentError, BadMapError] ->
+            common_metadata = %{
+              killmail_id: killmail_id,
+              system_id: system_id,
+              operation: :process_killmail,
+              status: :error
+            }
 
-        error in [BadMapError] ->
-          Logger.error("Invalid killmail data structure", %{
-            killmail_id: killmail_id,
-            system_id: system_id,
-            operation: :process_killmail,
-            error: Exception.message(error),
-            status: :error
-          })
-      end
-    end,
-    task_name: "store_killmail",
-    metadata: %{system_id: system_id, killmail_id: killmail_id}
+            error_msg =
+              case error do
+                %ArgumentError{} -> "Invalid arguments when storing killmail"
+                %BadMapError{} -> "Invalid killmail data structure"
+              end
+
+            Logger.error(
+              error_msg,
+              Map.merge(common_metadata, %{error: Exception.message(error)})
+            )
+        end
+      end,
+      task_name: "store_killmail",
+      metadata: %{system_id: system_id, killmail_id: killmail_id}
     )
 
     :ok

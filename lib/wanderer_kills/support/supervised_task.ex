@@ -31,53 +31,9 @@ defmodule WandererKills.Support.SupervisedTask do
   def start_child(fun, opts \\ []) do
     task_name = Keyword.get(opts, :task_name, "unnamed")
     metadata = Keyword.get(opts, :metadata, %{})
-    
-    wrapped_fun = fn ->
-      start_time = System.monotonic_time()
-      task_metadata = Map.merge(metadata, %{task_name: task_name})
-      
-      # Emit start event
-      :telemetry.execute(
-        [:wanderer_kills, :task, :start],
-        %{system_time: System.system_time()},
-        task_metadata
-      )
-      
-      try do
-        result = fun.()
-        
-        # Emit stop event on success
-        duration = System.monotonic_time() - start_time
-        :telemetry.execute(
-          [:wanderer_kills, :task, :stop],
-          %{duration: duration},
-          task_metadata
-        )
-        
-        result
-      rescue
-        error ->
-          # Emit error event
-          duration = System.monotonic_time() - start_time
-          
-          error_metadata = Map.merge(task_metadata, %{
-            error: Exception.format(:error, error),
-            error_type: error.__struct__
-          })
-          
-          :telemetry.execute(
-            [:wanderer_kills, :task, :error],
-            %{duration: duration},
-            error_metadata
-          )
-          
-          Logger.error("Supervised task failed", error_metadata)
-          
-          # Re-raise to let supervisor handle
-          reraise error, __STACKTRACE__
-      end
-    end
-    
+
+    wrapped_fun = wrap_with_telemetry(fun, task_name, metadata)
+
     Task.Supervisor.start_child(WandererKills.TaskSupervisor, wrapped_fun)
   end
 
@@ -85,23 +41,76 @@ defmodule WandererKills.Support.SupervisedTask do
   Starts a supervised task and awaits the result with a timeout.
 
   This is useful when you need the result of the async operation.
+  Uses the same telemetry instrumentation as start_child/2.
   """
   @spec async(fun(), keyword()) :: {:ok, term()} | {:error, term()}
   def async(fun, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 30_000)
+    task_name = Keyword.get(opts, :task_name, "unnamed_async")
+    metadata = Keyword.get(opts, :metadata, %{})
+
+    # Reuse the telemetry wrapper from start_child
+    wrapped_fun = wrap_with_telemetry(fun, task_name, metadata)
     
-    case Task.Supervisor.async(WandererKills.TaskSupervisor, fun) do
-      %Task{} = task ->
-        try do
-          {:ok, Task.await(task, timeout)}
-        catch
-          :exit, {:timeout, _} ->
-            Task.Supervisor.terminate_child(WandererKills.TaskSupervisor, task.pid)
-            {:error, :timeout}
-        end
-        
-      error ->
-        error
+    task = Task.Supervisor.async(WandererKills.TaskSupervisor, wrapped_fun)
+
+    try do
+      {:ok, Task.await(task, timeout)}
+    catch
+      :exit, {:timeout, _} ->
+        Task.Supervisor.terminate_child(WandererKills.TaskSupervisor, task.pid)
+        {:error, :timeout}
+    end
+  end
+  
+  # Extract the telemetry wrapping logic to avoid duplication
+  defp wrap_with_telemetry(fun, task_name, metadata) do
+    fn ->
+      start_time = System.monotonic_time()
+      task_metadata = Map.merge(metadata, %{task_name: task_name})
+
+      # Emit start event
+      :telemetry.execute(
+        [:wanderer_kills, :task, :start],
+        %{system_time: System.system_time()},
+        task_metadata
+      )
+
+      try do
+        result = fun.()
+
+        # Emit stop event on success
+        duration = System.monotonic_time() - start_time
+
+        :telemetry.execute(
+          [:wanderer_kills, :task, :stop],
+          %{duration: duration},
+          task_metadata
+        )
+
+        result
+      rescue
+        error ->
+          # Emit error event
+          duration = System.monotonic_time() - start_time
+
+          error_metadata =
+            Map.merge(task_metadata, %{
+              error: Exception.format(:error, error, __STACKTRACE__),
+              error_type: error.__struct__
+            })
+
+          :telemetry.execute(
+            [:wanderer_kills, :task, :error],
+            %{duration: duration},
+            error_metadata
+          )
+
+          Logger.error("Supervised task failed", Map.to_list(error_metadata))
+
+          # Re-raise to let supervisor handle
+          reraise error, __STACKTRACE__
+      end
     end
   end
 end

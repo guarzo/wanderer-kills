@@ -63,7 +63,7 @@ docker-compose up        # Start with Redis and all services
 3. **Caching Layer**
    - Single Cachex instance (`:wanderer_cache`) with namespace support
    - TTL configuration: killmails (5min), systems (1hr), ESI data (24hr)
-   - Ship type data pre-loaded from CSV files
+   - Ship type data preloaded from CSV files
 
 4. **API & Real-time**
    - REST endpoints via Phoenix Router

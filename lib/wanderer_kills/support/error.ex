@@ -72,10 +72,10 @@ defmodule WandererKills.Support.Error do
 
   @doc """
   Creates a new error with the specified domain.
-  
+
   This is the main constructor for all errors. Domain-specific convenience
   functions are provided for backward compatibility.
-  
+
   ## Parameters
   - `domain` - Error domain (:http, :cache, :killmail, etc.)
   - `type` - Specific error type within the domain

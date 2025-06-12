@@ -197,13 +197,9 @@ defmodule WandererKills.ShipTypes.Updater do
         Logger.debug("CSV ship type update completed successfully")
         :ok
 
-      {:error, reason} ->
-        Logger.error("CSV ship type update failed: #{inspect(reason)}")
-
-        {:error,
-         Error.ship_types_error(:csv_update_failed, "CSV ship type update failed", false, %{
-           underlying_error: reason
-         })}
+      {:error, _reason} = error ->
+        Logger.error("CSV ship type update failed: #{inspect(error)}")
+        error
     end
   end
 

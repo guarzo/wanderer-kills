@@ -27,10 +27,12 @@ defmodule WandererKills.ShipTypes.Cache do
 
       {:error, reason} ->
         Logger.error("Failed to cache ship type #{type_id}: #{inspect(reason)}")
-        {:error, Error.cache_error(:write_failed, "Failed to cache ship type", %{
-          type_id: type_id,
-          reason: reason
-        })}
+
+        {:error,
+         Error.cache_error(:write_failed, "Failed to cache ship type", %{
+           type_id: type_id,
+           reason: reason
+         })}
     end
   end
 
@@ -48,16 +50,18 @@ defmodule WandererKills.ShipTypes.Cache do
 
       {:error, reason} ->
         Logger.error("Failed to get ship type #{type_id} from cache: #{inspect(reason)}")
-        {:error, Error.cache_error(:read_failed, "Failed to read from cache", %{
-          type_id: type_id,
-          reason: reason
-        })}
+
+        {:error,
+         Error.cache_error(:read_failed, "Failed to read from cache", %{
+           type_id: type_id,
+           reason: reason
+         })}
     end
   end
 
   @doc """
   Stores the complete ship types map in cache.
-  
+
   This is used for quick lookups of all ship types at once.
   """
   @spec put_ship_types_map(map()) :: cache_result()
@@ -69,10 +73,12 @@ defmodule WandererKills.ShipTypes.Cache do
 
       {:error, reason} ->
         Logger.error("Failed to cache ship types map: #{inspect(reason)}")
-        {:error, Error.cache_error(:write_failed, "Failed to cache ship types map", %{
-          count: map_size(ship_types_map),
-          reason: reason
-        })}
+
+        {:error,
+         Error.cache_error(:write_failed, "Failed to cache ship types map", %{
+           count: map_size(ship_types_map),
+           reason: reason
+         })}
     end
   end
 
@@ -90,29 +96,32 @@ defmodule WandererKills.ShipTypes.Cache do
 
       {:error, reason} ->
         Logger.error("Failed to get ship types map from cache: #{inspect(reason)}")
-        {:error, Error.cache_error(:read_failed, "Failed to read ship types map", %{
-          reason: reason
-        })}
+
+        {:error,
+         Error.cache_error(:read_failed, "Failed to read ship types map", %{
+           reason: reason
+         })}
     end
   end
 
   @doc """
   Stores multiple ship types in cache efficiently.
-  
+
   Uses batch operations for better performance.
   """
   @spec put_ship_types_batch([{integer(), ship_type()}]) :: cache_result()
   def put_ship_types_batch(ship_types) when is_list(ship_types) do
-    results = 
+    results =
       ship_types
       |> Enum.map(fn {type_id, ship_type} ->
         put_ship_type(type_id, ship_type)
       end)
 
-    failed = Enum.count(results, fn
-      {:error, _} -> true
-      _ -> false
-    end)
+    failed =
+      Enum.count(results, fn
+        {:error, _} -> true
+        _ -> false
+      end)
 
     if failed > 0 do
       Logger.warning("Failed to cache #{failed} out of #{length(ship_types)} ship types")
@@ -131,7 +140,7 @@ defmodule WandererKills.ShipTypes.Cache do
 
   @doc """
   Warms the cache with ship types data.
-  
+
   This is typically called during application startup or
   after updating ship type data.
   """
@@ -142,18 +151,11 @@ defmodule WandererKills.ShipTypes.Cache do
     # Store the complete map for quick access
     with {:ok, _} <- put_ship_types_map(ship_types_map) do
       # Also store individual ship types for direct lookups
-      ship_types_list = 
-        ship_types_map
-        |> Enum.map(fn {type_id, ship_type} -> {type_id, ship_type} end)
+      ship_types_list = Map.to_list(ship_types_map)
 
-      case put_ship_types_batch(ship_types_list) do
-        {:ok, count} ->
-          Logger.debug("Cache warming complete: #{count} ship types cached")
-          {:ok, count}
-
-        error ->
-          error
-      end
+      {:ok, count} = put_ship_types_batch(ship_types_list)
+      Logger.debug("Cache warming complete: #{count} ship types cached")
+      {:ok, count}
     end
   end
 
@@ -163,14 +165,14 @@ defmodule WandererKills.ShipTypes.Cache do
   @spec clear_cache() :: :ok
   def clear_cache do
     Logger.info("Clearing ship types cache")
-    
+
     # Clear the map
     Helper.delete(:ship_types, "map")
-    
+
     # Note: Individual ship type entries will expire naturally
     # due to TTL. Clearing them all would require pattern matching
     # which is expensive in most cache implementations.
-    
+
     :ok
   end
 
@@ -179,7 +181,7 @@ defmodule WandererKills.ShipTypes.Cache do
   """
   @spec get_cache_stats() :: map()
   def get_cache_stats do
-    map_exists = 
+    map_exists =
       case get_ship_types_map() do
         {:ok, map} -> %{exists: true, count: map_size(map)}
         _ -> %{exists: false, count: 0}

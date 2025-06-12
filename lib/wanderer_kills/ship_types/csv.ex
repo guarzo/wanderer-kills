@@ -24,6 +24,7 @@ defmodule WandererKills.ShipTypes.CSV do
   require Logger
   alias WandererKills.Support.Error
   alias WandererKills.ShipTypes.{Parser, Validator, Cache}
+  alias WandererKills.Http.Client, as: HttpClient
 
   @required_files ["invTypes.csv", "invGroups.csv"]
 
@@ -49,8 +50,8 @@ defmodule WandererKills.ShipTypes.CSV do
       Logger.info("Successfully loaded #{count} ship types from CSV")
       {:ok, count}
     else
-      {:error, reason} = error ->
-        Logger.error("Failed to load ship types: #{inspect(reason)}")
+      {:error, _reason} = error ->
+        Logger.error("Failed to load ship types: #{inspect(error)}")
         error
     end
   end
@@ -73,14 +74,14 @@ defmodule WandererKills.ShipTypes.CSV do
   @spec ship_types_loaded?() :: boolean()
   def ship_types_loaded? do
     case Cache.get_ship_types_map() do
-      {:ok, _} -> true
+      {:ok, map} when map_size(map) > 0 -> true
       _ -> false
     end
   end
 
   @doc """
   Reloads ship types from CSV files.
-  
+
   This clears the cache and reloads all data.
   """
   @spec reload_ship_types() :: {:ok, integer()} | {:error, Error.t()}
@@ -94,17 +95,17 @@ defmodule WandererKills.ShipTypes.CSV do
   Compatibility function for Updater module.
   Updates ship types by loading them from CSV files.
   """
-  @spec update_ship_types() :: :ok | {:error, term()}
+  @spec update_ship_types() :: :ok | {:error, Error.t()}
   def update_ship_types do
     case load_ship_types() do
       {:ok, _count} -> :ok
-      error -> error
+      {:error, _} = error -> error
     end
   end
 
   @doc """
   Downloads CSV files if missing.
-  
+
   Options:
   - `:force_download` - Download even if files exist (default: false)
   """
@@ -112,7 +113,7 @@ defmodule WandererKills.ShipTypes.CSV do
   def download_csv_files(opts \\ []) do
     force_download = Keyword.get(opts, :force_download, false)
     data_dir = get_data_directory()
-    
+
     if force_download do
       Logger.info("Force downloading CSV files")
       # Delete existing files
@@ -123,7 +124,7 @@ defmodule WandererKills.ShipTypes.CSV do
         |> File.rm()
       end)
     end
-    
+
     ensure_csv_files()
   end
 
@@ -131,19 +132,20 @@ defmodule WandererKills.ShipTypes.CSV do
   # Private Functions - File Management
   # ============================================================================
 
+  @spec ensure_csv_files() :: {:ok, map()} | {:error, Error.t()}
   defp ensure_csv_files do
     data_dir = get_data_directory()
-    
+
     case get_missing_files(data_dir) do
       [] ->
         {:ok, get_file_paths(data_dir)}
 
       missing_files ->
         Logger.info("Missing CSV files: #{inspect(missing_files)}")
-        
+
         case download_files(missing_files, data_dir) do
           :ok -> {:ok, get_file_paths(data_dir)}
-          error -> error
+          {:error, _} = error -> error
         end
     end
   end
@@ -168,13 +170,14 @@ defmodule WandererKills.ShipTypes.CSV do
     }
   end
 
+  @spec download_files(list(String.t()), String.t()) :: :ok | {:error, Error.t()}
   defp download_files(file_names, data_dir) do
     Logger.info("Downloading missing CSV files from fuzzwork.co.uk")
-    
+
     # Ensure directory exists
     File.mkdir_p!(data_dir)
 
-    results = 
+    results =
       file_names
       |> Enum.map(&download_single_file(&1, data_dir))
 
@@ -198,41 +201,60 @@ defmodule WandererKills.ShipTypes.CSV do
     else
       error ->
         Logger.error("Failed to download #{file_name}: #{inspect(error)}")
-        {:error, Error.csv_error(:download_failed, "Failed to download #{file_name}", %{
-          url: url,
-          error: error
-        })}
+
+        {:error,
+         Error.csv_error(:download_failed, "Failed to download #{file_name}", %{
+           url: url,
+           error: error
+         })}
     end
   end
 
   defp download_file(url) do
-    case :httpc.request(:get, {String.to_charlist(url), []}, [], []) do
-      {:ok, {{_, 200, _}, _, body}} ->
-        {:ok, :erlang.list_to_binary(body)}
-      
-      {:ok, {{_, status, _}, _, _}} ->
+    # Use centralized HTTP client for consistent error handling and rate limiting
+    case HttpClient.get(url, [], timeout: 30_000) do
+      {:ok, %{status: 200, body: body}} ->
+        {:ok, body}
+
+      {:ok, %{status: status}} ->
         {:error, "HTTP #{status}"}
-      
+
       {:error, reason} ->
         {:error, reason}
     end
   end
 
   defp decompress_bz2(compressed_data) do
-    # Use external bzip2 command since :bz2 module may not be available
-    with {:ok, temp_path} <- write_temp_file(compressed_data, ".bz2"),
-         {:ok, decompressed} <- run_bzip2_decompress(temp_path) do
-      File.rm(temp_path)
-      {:ok, decompressed}
-    else
-      error ->
-        error
+    # Check if bzip2 is available
+    case System.find_executable("bzip2") do
+      nil ->
+        {:error, "bzip2 command not found - please install bzip2 to decompress files"}
+
+      _path ->
+        # Use external bzip2 command since :bz2 module may not be available
+        case write_temp_file(compressed_data, ".bz2") do
+          {:ok, temp_path} ->
+            try do
+              case run_bzip2_decompress(temp_path) do
+                {:ok, decompressed} -> {:ok, decompressed}
+                error -> error
+              end
+            after
+              # Always clean up temp file
+              File.rm(temp_path)
+            end
+
+          error ->
+            error
+        end
     end
   end
 
   defp write_temp_file(data, extension) do
-    temp_path = Path.join(System.tmp_dir!(), "wanderer_kills_#{:rand.uniform(1_000_000)}#{extension}")
-    
+    # Use UUID for unique filename to avoid collisions
+    uuid = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    temp_path = Path.join(System.tmp_dir!(), "wanderer_kills_#{uuid}#{extension}")
+
     case File.write(temp_path, data) do
       :ok -> {:ok, temp_path}
       error -> error
@@ -250,6 +272,7 @@ defmodule WandererKills.ShipTypes.CSV do
   # Private Functions - Data Processing
   # ============================================================================
 
+  @spec process_csv_files(map()) :: {:ok, map()} | {:error, Error.t()}
   defp process_csv_files(%{types_path: types_path, groups_path: groups_path}) do
     with {:ok, groups} <- parse_groups_file(groups_path),
          {:ok, types} <- parse_types_file(types_path),
@@ -258,20 +281,26 @@ defmodule WandererKills.ShipTypes.CSV do
     end
   end
 
+  @spec parse_groups_file(String.t()) :: {:ok, map()} | {:error, Error.t()}
   defp parse_groups_file(groups_path) do
-    with {:ok, {groups_data, _parse_stats}} <- Parser.read_file(groups_path, &Parser.parse_group_row/1),
-         {:ok, valid_groups, _stats} <- Validator.validate_batch(groups_data, &Validator.valid_ship_group?/1) do
+    with {:ok, {groups_data, _parse_stats}} <-
+           Parser.read_file(groups_path, &Parser.parse_group_row/1),
+         {:ok, valid_groups, _stats} <-
+           Validator.validate_batch(groups_data, &Validator.valid_ship_group?/1) do
       {:ok, build_groups_map(valid_groups)}
     end
   end
 
+  @spec parse_types_file(String.t()) :: {:ok, list()} | {:error, Error.t()}
   defp parse_types_file(types_path) do
-    with {:ok, {types_data, _parse_stats}} <- Parser.read_file(types_path, &Parser.parse_type_row/1),
-         valid_types = Enum.filter(types_data, &Validator.valid_ship_type?/1) do
+    with {:ok, {types_data, _parse_stats}} <-
+           Parser.read_file(types_path, &Parser.parse_type_row/1) do
+      valid_types = Enum.filter(types_data, &Validator.valid_ship_type?/1)
       {:ok, valid_types}
     end
   end
 
+  @spec build_groups_map(list()) :: map()
   defp build_groups_map(groups) do
     groups
     |> Enum.reduce(%{}, fn group, acc ->
@@ -283,6 +312,7 @@ defmodule WandererKills.ShipTypes.CSV do
     end)
   end
 
+  @spec build_ship_types_map(list(), map()) :: {:ok, map()}
   defp build_ship_types_map(types, groups_map) do
     ship_types_map =
       types

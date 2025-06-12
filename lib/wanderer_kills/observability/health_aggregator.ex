@@ -78,7 +78,7 @@ defmodule WandererKills.Observability.HealthAggregator do
   @spec check_component(health_component(), pos_integer()) :: health_status()
   defp check_component(component, timeout) do
     module = get_health_module(component)
-    
+
     case safe_check_health(module, timeout: timeout) do
       {:ok, health} ->
         health
@@ -96,7 +96,7 @@ defmodule WandererKills.Observability.HealthAggregator do
   @spec get_component_metrics(health_component(), pos_integer()) :: metrics()
   defp get_component_metrics(component, timeout) do
     module = get_health_module(component)
-    
+
     case safe_get_metrics(module, timeout: timeout) do
       {:ok, metrics} ->
         metrics

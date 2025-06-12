@@ -57,7 +57,7 @@ defmodule WandererKills.ShipTypes.Parser do
     - `:max_errors` - Maximum parse errors before giving up (default: 10)
   """
   @spec read_file(String.t(), parser_function(), keyword()) ::
-          {:ok, [term()]} | {:error, Error.t()}
+          {:ok, {[term()], map()}} | {:error, Error.t()}
   def read_file(file_path, parser, opts \\ []) do
     skip_invalid = Keyword.get(opts, :skip_invalid, true)
     max_errors = Keyword.get(opts, :max_errors, 10)
@@ -81,7 +81,7 @@ defmodule WandererKills.ShipTypes.Parser do
   Parses CSV content and returns parsed records.
   """
   @spec parse_csv_content(String.t(), parser_function(), boolean(), integer()) ::
-          {:ok, [term()]} | {:error, Error.t()}
+          {:ok, {[term()], map()}} | {:error, Error.t()}
   def parse_csv_content(content, parser, skip_invalid, max_errors) do
     try do
       parsed_data = CSVParser.parse_string(content, skip_headers: false)
@@ -122,9 +122,11 @@ defmodule WandererKills.ShipTypes.Parser do
   @doc """
   Parses a ship type row from CSV data.
   """
-  @spec parse_type_row(map()) :: ship_type() | nil
+  @spec parse_type_row(map()) :: {:ok, ship_type()} | {:error, String.t()}
   def parse_type_row(row) when is_map(row) do
-    %{
+    # Build the ship type data structure
+    # All parsing functions return safe defaults, so this should not fail
+    ship_type = %{
       type_id: parse_number_with_default(row["typeID"], :integer, 0),
       name: Map.get(row, "typeName", ""),
       group_id: parse_number_with_default(row["groupID"], :integer, 0),
@@ -140,14 +142,28 @@ defmodule WandererKills.ShipTypes.Parser do
       sound_id: parse_number_with_default(row["soundID"], :integer, 0),
       graphic_id: parse_number_with_default(row["graphicID"], :integer, 0)
     }
-  rescue
-    error ->
-      Logger.warning("Failed to parse ship type row: #{inspect(error)}, row: #{inspect(row)}")
-      nil
+
+    # Validate required fields
+    cond do
+      ship_type.type_id == 0 ->
+        {:error, "Invalid ship type: missing or invalid typeID"}
+      
+      ship_type.name == "" ->
+        {:error, "Invalid ship type: missing typeName"}
+        
+      true ->
+        {:ok, ship_type}
+    end
   end
+
+  def parse_type_row(_row), do: {:error, "Invalid row format: expected map"}
 
   @doc """
   Parses a ship group row from CSV data.
+
+  Returns the parsed ship group or nil if parsing fails.
+  This function is designed to work with Parser.read_file which
+  handles nil returns appropriately.
   """
   @spec parse_group_row(map()) :: ship_group() | nil
   def parse_group_row(row) when is_map(row) do
@@ -167,6 +183,8 @@ defmodule WandererKills.ShipTypes.Parser do
       Logger.warning("Failed to parse ship group row: #{inspect(error)}, row: #{inspect(row)}")
       nil
   end
+
+  def parse_group_row(_row), do: nil
 
   # ============================================================================
   # Number Parsing Utilities
@@ -236,7 +254,7 @@ defmodule WandererKills.ShipTypes.Parser do
 
   @doc """
   Parses a number with a default value on failure.
-  
+
   This is a convenience function that attempts to parse a value
   and returns a default if parsing fails.
   """
@@ -272,20 +290,7 @@ defmodule WandererKills.ShipTypes.Parser do
     {records, stats} =
       data_rows
       |> Enum.reduce_while({[], %{parsed: 0, skipped: 0, errors: 0}}, fn row, {acc, stats} ->
-        if stats.errors >= max_errors do
-          {:halt, {acc, stats}}
-        else
-          case parse_and_validate_row(row, headers, parser, skip_invalid) do
-            {:ok, record} ->
-              {:cont, {[record | acc], %{stats | parsed: stats.parsed + 1}}}
-
-            {:skip, _reason} ->
-              {:cont, {acc, %{stats | skipped: stats.skipped + 1}}}
-
-            {:error, _reason} ->
-              {:cont, {acc, %{stats | errors: stats.errors + 1}}}
-          end
-        end
+        process_single_row(row, {acc, stats}, headers, parser, skip_invalid, max_errors)
       end)
 
     if stats.errors >= max_errors do
@@ -301,10 +306,37 @@ defmodule WandererKills.ShipTypes.Parser do
     end
   end
 
+  defp process_single_row(row, {acc, stats}, headers, parser, skip_invalid, max_errors) do
+    if stats.errors >= max_errors do
+      {:halt, {acc, stats}}
+    else
+      case parse_and_validate_row(row, headers, parser, skip_invalid) do
+        {:ok, record} ->
+          {:cont, {[record | acc], %{stats | parsed: stats.parsed + 1}}}
+
+        {:skip, _reason} ->
+          {:cont, {acc, %{stats | skipped: stats.skipped + 1}}}
+
+        {:error, _reason} ->
+          {:cont, {acc, %{stats | errors: stats.errors + 1}}}
+      end
+    end
+  end
+
   defp parse_and_validate_row(row, headers, parser, skip_invalid) do
     row_map = parse_row(row, headers)
 
     case parser.(row_map) do
+      {:ok, record} ->
+        {:ok, record}
+
+      {:error, reason} when skip_invalid ->
+        {:skip, reason}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      # Fallback for parsers that still return nil/records directly
       nil when skip_invalid ->
         {:skip, :parser_returned_nil}
 

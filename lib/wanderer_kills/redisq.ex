@@ -254,14 +254,18 @@ defmodule WandererKills.RedisQ do
       stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
 
     if total_activity > 0 or stats.errors > 0 do
+      message = """
+      [RedisQ Stats] Processed: #{stats.kills_received} | \
+      Older: #{stats.kills_older} | \
+      Skipped: #{stats.kills_skipped} | \
+      Legacy: #{stats.legacy_kills} | \
+      Systems: #{MapSet.size(stats.systems_active)} | \
+      Errors: #{stats.errors} | \
+      Duration: #{duration}s\
+      """
+
       Logger.info(
-        "[RedisQ Stats] Processed: #{stats.kills_received} | " <>
-        "Older: #{stats.kills_older} | " <>
-        "Skipped: #{stats.kills_skipped} | " <>
-        "Legacy: #{stats.legacy_kills} | " <>
-        "Systems: #{MapSet.size(stats.systems_active)} | " <>
-        "Errors: #{stats.errors} | " <>
-        "Duration: #{duration}s",
+        String.trim(message),
         redisq_kills_processed: stats.kills_received,
         redisq_kills_older: stats.kills_older,
         redisq_kills_skipped: stats.kills_skipped,

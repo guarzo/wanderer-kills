@@ -61,8 +61,7 @@ defmodule WandererKills.Observability.ApplicationHealth do
       health_modules: [
         CacheHealth
       ],
-      timeout_ms: 10_000,
-      include_system_metrics: true
+      timeout_ms: 10_000
     ]
   end
 
@@ -73,7 +72,10 @@ defmodule WandererKills.Observability.ApplicationHealth do
     health_module.check_health()
   rescue
     error ->
-      Logger.error("Health check failed for #{inspect(health_module)}: #{inspect(error)}")
+      stacktrace = __STACKTRACE__
+      formatted_error = Exception.format(:error, error, stacktrace)
+      
+      Logger.error("Health check failed for #{inspect(health_module)}: #{formatted_error}")
 
       %{
         healthy: false,
@@ -81,7 +83,8 @@ defmodule WandererKills.Observability.ApplicationHealth do
         details: %{
           component: inspect(health_module),
           error: "Health check failed",
-          reason: inspect(error)
+          reason: inspect(error),
+          stacktrace: formatted_error
         },
         timestamp: Clock.now_iso8601()
       }
@@ -92,14 +95,18 @@ defmodule WandererKills.Observability.ApplicationHealth do
     health_module.get_metrics()
   rescue
     error ->
-      Logger.error("Metrics collection failed for #{inspect(health_module)}: #{inspect(error)}")
+      stacktrace = __STACKTRACE__
+      formatted_error = Exception.format(:error, error, stacktrace)
+      
+      Logger.error("Metrics collection failed for #{inspect(health_module)}: #{formatted_error}")
 
       %{
         component: inspect(health_module),
         timestamp: Clock.now_iso8601(),
         metrics: %{
           error: "Metrics collection failed",
-          reason: inspect(error)
+          reason: inspect(error),
+          stacktrace: formatted_error
         }
       }
   end

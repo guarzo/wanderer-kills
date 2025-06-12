@@ -47,6 +47,18 @@ defmodule WandererKills.Support.PubSubTopics do
   end
 
   @doc """
+  Returns the topic for all systems killmail updates.
+
+  ## Examples
+      iex> WandererKills.Support.PubSubTopics.all_systems_topic()
+      "zkb:all_systems"
+  """
+  @spec all_systems_topic() :: String.t()
+  def all_systems_topic do
+    "zkb:all_systems"
+  end
+
+  @doc """
   Validates that a topic follows the expected format.
 
   Returns `true` if the topic is a valid system topic, `false` otherwise.

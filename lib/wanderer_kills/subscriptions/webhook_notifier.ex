@@ -41,6 +41,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
           subscription_id: subscription_id,
           url: webhook_url
         )
+
         :ok
 
       {:error, reason} ->
@@ -49,6 +50,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
           url: webhook_url,
           error: inspect(reason)
         )
+
         {:error, reason}
     end
   end
@@ -66,7 +68,8 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
   - `:ok` on success
   - `{:error, reason}` on failure
   """
-  @spec notify_webhook_count(String.t(), integer(), integer(), String.t()) :: :ok | {:error, term()}
+  @spec notify_webhook_count(String.t(), integer(), integer(), String.t()) ::
+          :ok | {:error, term()}
   def notify_webhook_count(webhook_url, system_id, count, subscription_id) do
     payload = build_count_payload(system_id, count)
 
@@ -83,6 +86,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
           subscription_id: subscription_id,
           url: webhook_url
         )
+
         :ok
 
       {:error, reason} ->
@@ -91,6 +95,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
           url: webhook_url,
           error: inspect(reason)
         )
+
         {:error, reason}
     end
   end
@@ -117,8 +122,8 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
 
   defp send_webhook_request(url, payload) do
     headers = [
-      {"content-type", "application/json"},
-      {"user-agent", "WandererKills/1.0"}
+      {"Content-Type", "application/json"},
+      {"User-Agent", "WandererKills/1.0"}
     ]
 
     HttpClient.post(url, payload, headers: headers, timeout: @webhook_timeout)
