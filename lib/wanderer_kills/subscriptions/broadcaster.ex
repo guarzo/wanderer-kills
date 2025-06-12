@@ -91,7 +91,9 @@ defmodule WandererKills.Subscriptions.Broadcaster do
         Logger.debug("Broadcasted empty killmail update system_id=#{system_id}")
 
       kills ->
-        Logger.debug("Broadcasted killmail update system_id=#{system_id} kill_count=#{length(kills)}")
+        Logger.debug(
+          "Broadcasted killmail update system_id=#{system_id} kill_count=#{length(kills)}"
+        )
     end
   end
 end

@@ -170,12 +170,12 @@ defmodule WandererKills.Cache.Helper do
           put(:systems, "killmails:#{system_id}", [killmail_id | existing_ids])
         end
 
-      {:ok, _corrupted_data} ->
-        # Data corruption detected, replace with fresh list
-        Logger.warning("Corrupted killmail data detected for system #{system_id}, replacing with fresh list")
+      {:error, %Error{type: :not_found}} ->
         put(:systems, "killmails:#{system_id}", [killmail_id])
 
-      {:error, %Error{type: :not_found}} ->
+      {:ok, _invalid_data} ->
+        # Handle corrupted data by starting fresh
+        Logger.warning("Corrupted system killmail data found, resetting", system_id: system_id)
         put(:systems, "killmails:#{system_id}", [killmail_id])
 
       error ->

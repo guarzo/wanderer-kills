@@ -6,10 +6,30 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
 
   @pubsub_name WandererKills.PubSub
 
+  # Helper function to collect messages up to a count or timeout
+  defp receive_messages_until(expected_count, timeout) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    collect_messages([], expected_count, deadline)
+  end
+
+  defp collect_messages(messages, expected_count, _deadline)
+       when length(messages) >= expected_count do
+    messages
+  end
+
+  defp collect_messages(messages, expected_count, deadline) do
+    remaining_time = max(0, deadline - System.monotonic_time(:millisecond))
+
+    receive do
+      msg -> collect_messages([msg | messages], expected_count, deadline)
+    after
+      remaining_time -> messages
+    end
+  end
 
   setup do
     # Subscribe to relevant topics for testing
-    system_id = 30000142
+    system_id = 30_000_142
     system_topic = PubSubTopics.system_topic(system_id)
     detailed_topic = PubSubTopics.system_detailed_topic(system_id)
     all_systems_topic = PubSubTopics.all_systems_topic()
@@ -86,7 +106,7 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
       ]
 
       assert :ok = Broadcaster.broadcast_killmail_update(system_id, kills)
-      
+
       # Verify broadcast was received
       assert_receive %{
         type: :killmail_update,
@@ -97,13 +117,14 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
 
     test "handles large kill lists", %{system_id: system_id} do
       # Generate a large list of kills
-      kills = Enum.map(1..100, fn i ->
-        %{
-          "killmail_id" => 1000 + i,
-          "killmail_time" => "2024-01-01T00:00:00Z",
-          "victim" => %{"ship_type_id" => 587}
-        }
-      end)
+      kills =
+        Enum.map(1..100, fn i ->
+          %{
+            "killmail_id" => 1000 + i,
+            "killmail_time" => "2024-01-01T00:00:00Z",
+            "victim" => %{"ship_type_id" => 587}
+          }
+        end)
 
       assert :ok = Broadcaster.broadcast_killmail_update(system_id, kills)
 
@@ -119,7 +140,7 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
 
     test "message includes timestamp", %{system_id: system_id} do
       kills = [%{"killmail_id" => 128}]
-      
+
       before_broadcast = DateTime.utc_now()
       assert :ok = Broadcaster.broadcast_killmail_update(system_id, kills)
       after_broadcast = DateTime.utc_now()
@@ -165,7 +186,7 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
       count = 10
 
       assert :ok = Broadcaster.broadcast_killmail_count(system_id, count)
-      
+
       # Verify broadcast was received
       assert_receive %{
         type: :killmail_count_update,
@@ -210,40 +231,42 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
   describe "concurrent broadcasts" do
     test "handles concurrent broadcasts to same system", %{system_id: system_id} do
       # Spawn multiple processes to broadcast concurrently
-      tasks = Enum.map(1..10, fn i ->
-        Task.async(fn ->
-          kills = [%{"killmail_id" => 2000 + i}]
-          Broadcaster.broadcast_killmail_update(system_id, kills)
+      tasks =
+        Enum.map(1..10, fn i ->
+          Task.async(fn ->
+            kills = [%{"killmail_id" => 2000 + i}]
+            Broadcaster.broadcast_killmail_update(system_id, kills)
+          end)
         end)
-      end)
 
       # Wait for all tasks to complete
       results = Task.await_many(tasks)
       assert Enum.all?(results, &(&1 == :ok))
 
       # Should receive all 10 messages (x3 for each topic)
-      received = for _ <- 1..30 do
-        assert_receive %{type: :killmail_update}, 1000
-      end
+      # Collect all messages within a reasonable timeout
+      received = receive_messages_until(30, 2000)
 
       assert length(received) == 30
+      assert Enum.all?(received, &(&1.type == :killmail_update))
     end
 
     test "handles broadcasts to different systems concurrently" do
-      system_ids = [30000142, 30000143, 30000144]
-      
+      system_ids = [30_000_142, 30_000_143, 30_000_144]
+
       # Subscribe to all system topics
       Enum.each(system_ids, fn sys_id ->
         Phoenix.PubSub.subscribe(@pubsub_name, PubSubTopics.system_topic(sys_id))
       end)
 
       # Broadcast to different systems concurrently
-      tasks = Enum.map(system_ids, fn sys_id ->
-        Task.async(fn ->
-          kills = [%{"killmail_id" => 3000 + sys_id}]
-          Broadcaster.broadcast_killmail_update(sys_id, kills)
+      tasks =
+        Enum.map(system_ids, fn sys_id ->
+          Task.async(fn ->
+            kills = [%{"killmail_id" => 3000 + sys_id}]
+            Broadcaster.broadcast_killmail_update(sys_id, kills)
+          end)
         end)
-      end)
 
       # Wait for all tasks to complete
       results = Task.await_many(tasks)
@@ -264,23 +287,23 @@ defmodule WandererKills.Subscriptions.BroadcasterTest do
       # The PubSubTopics module expects integer system_ids
       # Invalid types should raise FunctionClauseError
       invalid_ids = [nil, "not_an_id", 1.5, %{}, []]
-      
+
       Enum.each(invalid_ids, fn invalid_id ->
         # These should raise due to the guard clause in PubSubTopics
         assert_raise FunctionClauseError, fn ->
           Broadcaster.broadcast_killmail_update(invalid_id, [])
         end
-        
+
         assert_raise FunctionClauseError, fn ->
           Broadcaster.broadcast_killmail_count(invalid_id, 0)
         end
       end)
     end
-    
+
     test "handles edge case system_ids" do
       # These are valid integers, so should work
       edge_ids = [-1, 0, 999_999_999]
-      
+
       Enum.each(edge_ids, fn system_id ->
         # Should not raise with valid integers
         assert :ok = Broadcaster.broadcast_killmail_update(system_id, [])

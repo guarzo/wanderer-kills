@@ -215,6 +215,15 @@ defmodule WandererKills.RedisQ do
     }
   end
 
+  defp update_stats(stats, {:ok, :legacy_kill}) do
+    %{
+      stats
+      | legacy_kills: stats.legacy_kills + 1,
+        kills_received: stats.kills_received + 1,
+        total_kills_received: stats.total_kills_received + 1
+    }
+  end
+
   defp update_stats(stats, {:ok, :kill_older}) do
     %{stats | kills_older: stats.kills_older + 1, total_kills_older: stats.total_kills_older + 1}
   end
@@ -358,7 +367,7 @@ defmodule WandererKills.RedisQ do
 
   # Handle legacy‐format kill → fetch full payload async and then process.
   # Returns one of:
-  #   {:ok, :kill_received}   (if Coordinator.parse... says new)
+  #   {:ok, :legacy_kill}     (if Coordinator.parse... says new)
   #   {:ok, :kill_older}      (if Coordinator returns :kill_older)
   #   {:ok, :kill_skipped}    (if Coordinator returns :kill_skipped)
   #   {:error, reason}
@@ -372,7 +381,7 @@ defmodule WandererKills.RedisQ do
     |> Task.await(Config.redisq().task_timeout_ms)
     |> case do
       {:ok, :kill_received} ->
-        {:ok, :kill_received}
+        {:ok, :legacy_kill}
 
       {:ok, :kill_older} ->
         Logger.debug("[RedisQ] Legacy kill ID=#{id} is older than cutoff → skipping.")
@@ -413,6 +422,16 @@ defmodule WandererKills.RedisQ do
   defp next_schedule({:ok, :kill_received}, _old_backoff) do
     fast = Config.redisq().fast_interval_ms
     Logger.debug("[RedisQ] Kill received → scheduling next poll in #{fast}ms; resetting backoff.")
+    {fast, Config.redisq().initial_backoff_ms}
+  end
+
+  defp next_schedule({:ok, :legacy_kill}, _old_backoff) do
+    fast = Config.redisq().fast_interval_ms
+
+    Logger.debug(
+      "[RedisQ] Legacy kill received → scheduling next poll in #{fast}ms; resetting backoff."
+    )
+
     {fast, Config.redisq().initial_backoff_ms}
   end
 

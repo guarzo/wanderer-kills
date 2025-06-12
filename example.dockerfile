@@ -83,7 +83,7 @@ RUN apk add --no-cache \
  && adduser -S -G app app
 
 # Copy the built release from the build stage, with ownership set to the 'app' user
-COPY --from=build --chown=app:app /app/_build/prod/rel/wanderer_notifier ./
+COPY --from=build --chown=app:app /app/_build/prod/rel/wanderer_kills ./
 
 # Allow runtime configuration via environment variables
 ENV REPLACE_OS_VARS=true \
@@ -101,7 +101,7 @@ LABEL org.opencontainers.image.created=$BUILD_DATE \
 USER app
 
 # Define entrypoint and default command to start the release
-ENTRYPOINT ["bin/wanderer_notifier"]
+ENTRYPOINT ["bin/wanderer_kills"]
 CMD ["start"]
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

@@ -59,8 +59,20 @@ defmodule WandererKills.Storage.KillmailStore do
   def init_tables! do
     # Core tables - create only if they don't exist
     ensure_table_exists(@killmails_table, [:set, :named_table, :public, {:read_concurrency, true}])
-    ensure_table_exists(@system_killmails_table, [:set, :named_table, :public, {:read_concurrency, true}])
-    ensure_table_exists(@system_kill_counts_table, [:set, :named_table, :public, {:read_concurrency, true}])
+
+    ensure_table_exists(@system_killmails_table, [
+      :set,
+      :named_table,
+      :public,
+      {:read_concurrency, true}
+    ])
+
+    ensure_table_exists(@system_kill_counts_table, [
+      :set,
+      :named_table,
+      :public,
+      {:read_concurrency, true}
+    ])
 
     ensure_table_exists(@system_fetch_timestamps_table, [
       :set,
@@ -85,8 +97,19 @@ defmodule WandererKills.Storage.KillmailStore do
         {:read_concurrency, true}
       ])
 
-      ensure_table_exists(@client_offsets_table, [:set, :named_table, :public, {:read_concurrency, true}])
-      ensure_table_exists(@counters_table, [:set, :named_table, :public, {:read_concurrency, true}])
+      ensure_table_exists(@client_offsets_table, [
+        :set,
+        :named_table,
+        :public,
+        {:read_concurrency, true}
+      ])
+
+      ensure_table_exists(@counters_table, [
+        :set,
+        :named_table,
+        :public,
+        {:read_concurrency, true}
+      ])
 
       # Initialize counters
       :ets.insert(@counters_table, {:event_counter, 0})
@@ -400,15 +423,15 @@ defmodule WandererKills.Storage.KillmailStore do
     if :ets.info(@killmails_table) != :undefined do
       :ets.delete_all_objects(@killmails_table)
     end
-    
+
     if :ets.info(@system_killmails_table) != :undefined do
       :ets.delete_all_objects(@system_killmails_table)
     end
-    
+
     if :ets.info(@system_kill_counts_table) != :undefined do
       :ets.delete_all_objects(@system_kill_counts_table)
     end
-    
+
     if :ets.info(@system_fetch_timestamps_table) != :undefined do
       :ets.delete_all_objects(@system_fetch_timestamps_table)
     end
@@ -417,10 +440,11 @@ defmodule WandererKills.Storage.KillmailStore do
       if :ets.info(@killmail_events_table) != :undefined do
         :ets.delete_all_objects(@killmail_events_table)
       end
-      
+
       if :ets.info(@client_offsets_table) != :undefined do
         :ets.delete_all_objects(@client_offsets_table)
       end
+
       if :ets.info(@counters_table) != :undefined do
         :ets.delete_all_objects(@counters_table)
         # Reinitialize counters

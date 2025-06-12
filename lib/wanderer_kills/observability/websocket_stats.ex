@@ -485,75 +485,82 @@ defmodule WandererKills.Observability.WebSocketStats do
     try do
       case Cachex.size(:wanderer_cache) do
         {:ok, size} ->
-          # Try to get additional stats
-          stats =
-            case Cachex.stats(:wanderer_cache) do
-              {:ok, cache_stats} -> cache_stats
-              _ -> %{}
-            end
-
-          # Extract all available statistics
-          hits = get_in(stats, [:hits, :value]) || 0
-          misses = get_in(stats, [:misses, :value]) || 0
-          evictions = get_in(stats, [:evictions, :value]) || 0
-          expirations = get_in(stats, [:expirations, :value]) || 0
-          updates = get_in(stats, [:updates, :value]) || 0
-
-          # Operation counts
-          gets = get_in(stats, [:gets, :value]) || 0
-          puts = get_in(stats, [:puts, :value]) || 0
-          deletes = get_in(stats, [:deletes, :value]) || 0
-
-          # Estimate memory usage (rough calculation)
-          # Rough estimate: 1KB per entry, convert KB to MB using binary units
-          memory_mb = size / 1024
-
-          # Calculate rates
-          hit_rate = calculate_hit_rate(stats)
-
-          miss_rate =
-            if hits + misses > 0, do: Float.round(misses / (hits + misses) * 100, 1), else: 0.0
-
-          %{
-            size: size,
-            memory_mb: memory_mb,
-            hit_rate: hit_rate,
-            miss_rate: miss_rate,
-            eviction_count: evictions,
-            expiration_count: expirations,
-            update_count: updates,
-            operation_counts: %{
-              gets: gets,
-              puts: puts,
-              deletes: deletes
-            }
-          }
+          stats = fetch_cache_stats()
+          build_cache_metrics(size, stats)
 
         _ ->
-          %{
-            size: 0,
-            memory_mb: 0.0,
-            hit_rate: "N/A",
-            miss_rate: 0.0,
-            eviction_count: 0,
-            expiration_count: 0,
-            update_count: 0,
-            operation_counts: %{gets: 0, puts: 0, deletes: 0}
-          }
+          empty_cache_stats()
       end
     catch
       _, _ ->
-        %{
-          size: 0,
-          memory_mb: 0.0,
-          hit_rate: "N/A",
-          miss_rate: 0.0,
-          eviction_count: 0,
-          expiration_count: 0,
-          update_count: 0,
-          operation_counts: %{gets: 0, puts: 0, deletes: 0}
-        }
+        empty_cache_stats()
     end
+  end
+
+  defp fetch_cache_stats do
+    case Cachex.stats(:wanderer_cache) do
+      {:ok, cache_stats} -> cache_stats
+      _ -> %{}
+    end
+  end
+
+  defp build_cache_metrics(size, stats) do
+    # Extract statistics
+    metrics = extract_cache_metrics(stats)
+
+    # Calculate rates
+    hit_rate = calculate_hit_rate(stats)
+    miss_rate = calculate_miss_rate(metrics.hits, metrics.misses)
+
+    # Estimate memory usage (rough calculation)
+    # Rough estimate: 1KB per entry, convert KB to MB using binary units
+    memory_mb = size / 1024
+
+    %{
+      size: size,
+      memory_mb: memory_mb,
+      hit_rate: hit_rate,
+      miss_rate: miss_rate,
+      eviction_count: metrics.evictions,
+      expiration_count: metrics.expirations,
+      update_count: metrics.updates,
+      operation_counts: %{
+        gets: metrics.gets,
+        puts: metrics.puts,
+        deletes: metrics.deletes
+      }
+    }
+  end
+
+  defp extract_cache_metrics(stats) do
+    %{
+      hits: get_in(stats, [:hits, :value]) || 0,
+      misses: get_in(stats, [:misses, :value]) || 0,
+      evictions: get_in(stats, [:evictions, :value]) || 0,
+      expirations: get_in(stats, [:expirations, :value]) || 0,
+      updates: get_in(stats, [:updates, :value]) || 0,
+      gets: get_in(stats, [:gets, :value]) || 0,
+      puts: get_in(stats, [:puts, :value]) || 0,
+      deletes: get_in(stats, [:deletes, :value]) || 0
+    }
+  end
+
+  defp calculate_miss_rate(hits, misses) do
+    total = hits + misses
+    if total > 0, do: Float.round(misses / total * 100, 1), else: 0.0
+  end
+
+  defp empty_cache_stats do
+    %{
+      size: 0,
+      memory_mb: 0.0,
+      hit_rate: "N/A",
+      miss_rate: 0.0,
+      eviction_count: 0,
+      expiration_count: 0,
+      update_count: 0,
+      operation_counts: %{gets: 0, puts: 0, deletes: 0}
+    }
   end
 
   defp get_store_stats do

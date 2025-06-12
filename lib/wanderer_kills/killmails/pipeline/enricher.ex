@@ -180,10 +180,10 @@ defmodule WandererKills.Killmails.Pipeline.Enricher do
       {:ok, flattened}
     rescue
       error ->
-        Logger.warning("Failed to flatten enriched data", %{
+        Logger.warning("Failed to flatten enriched data",
           error: inspect(error),
           killmail_id: killmail["killmail_id"]
-        })
+        )
 
         # Return original killmail if flattening fails
         {:ok, killmail}

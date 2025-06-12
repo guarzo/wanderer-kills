@@ -10,13 +10,13 @@ config :wanderer_kills,
     start_redisq: false
   ],
 
-  # Cache configuration - fast expiry for tests
+  # Cache configuration - stable TTL for tests to prevent flakiness
   cache: [
-    killmails_ttl: 1,
-    system_ttl: 1,
-    esi_ttl: 1,
-    esi_killmail_ttl: 1,
-    system_recent_fetch_threshold: 1
+    killmails_ttl: 10,
+    system_ttl: 10,
+    esi_ttl: 10,
+    esi_killmail_ttl: 10,
+    system_recent_fetch_threshold: 5
   ],
 
   # HTTP retry configuration

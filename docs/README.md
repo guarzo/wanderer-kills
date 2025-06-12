@@ -4,7 +4,7 @@ Welcome to the WandererKills service documentation.
 
 ## 📖 [API & Integration Guide](API_AND_INTEGRATION_GUIDE.md)
 
-**Complete documentation** - This is the primary documentation source for WandererKills service.
+**Complete documentation** - This is the primary documentation source for the WandererKills service.
 
 **Covers everything you need:**
 - REST API endpoints with examples
@@ -33,15 +33,19 @@ Welcome to the WandererKills service documentation.
 ## Common Integration Patterns
 
 ### 1. REST API (HTTP)
+
 Best for batch processing and simple integrations.
 
 ### 2. WebSocket
+
 Best for real-time dashboards and low-latency applications.
 
 ### 3. PubSub (Elixir)
+
 Best for Elixir applications in the same environment requiring high throughput.
 
 ### 4. Client Library (Elixir)
+
 Best for type-safe integration with compile-time interface validation.
 
 ## Getting Help

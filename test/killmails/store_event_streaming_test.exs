@@ -42,44 +42,55 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
   defp ensure_event_streaming_tables(_context) do
     # Ensure event streaming is enabled before table initialization
     Application.put_env(:wanderer_kills, :storage, enable_event_streaming: true)
-    
+
     # Ensure PubSub is started
     case Process.whereis(WandererKills.PubSub) do
       nil ->
         # Start PubSub if not running
         start_supervised!({Phoenix.PubSub, name: WandererKills.PubSub})
+
       _pid ->
         # PubSub already running
         :ok
     end
-    
+
     # Check if event streaming tables exist, if not create them
     tables_to_check = [:killmail_events, :client_offsets, :counters]
-    
+
     Enum.each(tables_to_check, fn table ->
-      case :ets.info(table) do
-        :undefined ->
-          case table do
-            :killmail_events ->
-              :ets.new(table, [:ordered_set, :named_table, :public, {:read_concurrency, true}])
-            :client_offsets ->
-              :ets.new(table, [:set, :named_table, :public, {:read_concurrency, true}])
-            :counters ->
-              :ets.new(table, [:set, :named_table, :public, {:read_concurrency, true}])
-              :ets.insert(table, {:event_counter, 0})
-              :ets.insert(table, {:killmail_seq, 0})
-          end
-        _ ->
-          # Table already exists
-          :ok
-      end
+      ensure_table_exists(table)
     end)
-    
-    on_exit(fn -> 
+
+    on_exit(fn ->
       Application.delete_env(:wanderer_kills, :storage)
     end)
-    
+
     :ok
+  end
+
+  defp ensure_table_exists(table) do
+    case :ets.info(table) do
+      :undefined ->
+        create_table(table)
+
+      _ ->
+        # Table already exists
+        :ok
+    end
+  end
+
+  defp create_table(:killmail_events) do
+    :ets.new(:killmail_events, [:ordered_set, :named_table, :public, {:read_concurrency, true}])
+  end
+
+  defp create_table(:client_offsets) do
+    :ets.new(:client_offsets, [:set, :named_table, :public, {:read_concurrency, true}])
+  end
+
+  defp create_table(:counters) do
+    :ets.new(:counters, [:set, :named_table, :public, {:read_concurrency, true}])
+    :ets.insert(:counters, {:event_counter, 0})
+    :ets.insert(:counters, {:killmail_seq, 0})
   end
 
   describe "event streaming - insert_event/2" do
@@ -111,12 +122,12 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
 
       # Fetch events and verify sequential IDs
       {:ok, events} = KillmailStore.fetch_for_client(@client_id, [@system_id_1, @system_id_2])
-      
+
       # Events should be in order with sequential IDs
       assert length(events) == 3
       event_ids = Enum.map(events, fn {id, _, _} -> id end)
       assert event_ids == Enum.sort(event_ids)
-      
+
       # Verify consecutive nature
       [id1, id2, id3] = event_ids
       assert id2 == id1 + 1
@@ -182,7 +193,7 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
       # Fetch and process system 1
       {:ok, sys1_events} = KillmailStore.fetch_for_client(@client_id, [@system_id_1])
       {sys1_last_id, _, _} = hd(sys1_events)
-      
+
       # Update offset only for system 1
       assert :ok = KillmailStore.put_client_offsets(@client_id, %{@system_id_1 => sys1_last_id})
 
@@ -215,6 +226,7 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
           assert is_integer(event_id)
           assert system_id == @system_id_1
           assert killmail["killmail_id"] == @test_killmail_1["killmail_id"]
+
         other ->
           flunk("Expected {:ok, event_tuple}, got: #{inspect(other)}")
       end
@@ -223,6 +235,7 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
       case KillmailStore.fetch_one_event(@client_id, [@system_id_1]) do
         {:ok, {_, _, killmail}} ->
           assert killmail["killmail_id"] == @test_killmail_2["killmail_id"]
+
         other ->
           flunk("Expected {:ok, event_tuple}, got: #{inspect(other)}")
       end
@@ -239,6 +252,7 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
         {:ok, {_, system_id, killmail}} ->
           assert system_id == @system_id_1
           assert killmail["killmail_id"] == @test_killmail_1["killmail_id"]
+
         other ->
           flunk("Expected {:ok, event_tuple}, got: #{inspect(other)}")
       end
@@ -298,13 +312,17 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
     setup do
       # Disable event streaming for these tests
       Application.put_env(:wanderer_kills, :storage, enable_event_streaming: false)
-      on_exit(fn -> Application.put_env(:wanderer_kills, :storage, enable_event_streaming: true) end)
+
+      on_exit(fn ->
+        Application.put_env(:wanderer_kills, :storage, enable_event_streaming: true)
+      end)
+
       :ok
     end
 
     test "insert_event falls back to regular put when disabled" do
       assert :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
-      
+
       # Should still store the killmail
       assert {:ok, stored} = KillmailStore.get(@test_killmail_1["killmail_id"])
       assert stored == @test_killmail_1
@@ -323,18 +341,26 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
   end
 
   describe "concurrent event operations" do
+    setup do
+      # Clear any existing data to ensure clean state
+      KillmailStore.clear()
+      :ok
+    end
+
     test "handles concurrent inserts safely" do
       # Spawn multiple processes to insert events concurrently
-      tasks = Enum.map(1..10, fn i ->
-        Task.async(fn ->
-          killmail = %{
-            "killmail_id" => 20_000 + i,
-            "solar_system_id" => @system_id_1,
-            "victim" => %{"character_id" => 1000 + i}
-          }
-          KillmailStore.insert_event(@system_id_1, killmail)
+      tasks =
+        Enum.map(1..10, fn i ->
+          Task.async(fn ->
+            killmail = %{
+              "killmail_id" => 20_000 + i,
+              "solar_system_id" => @system_id_1,
+              "victim" => %{"character_id" => 1000 + i}
+            }
+
+            KillmailStore.insert_event(@system_id_1, killmail)
+          end)
         end)
-      end)
 
       # Wait for all to complete
       results = Task.await_many(tasks)
@@ -359,15 +385,16 @@ defmodule WandererKills.Killmails.StoreEventStreamingTest do
 
       # Multiple clients fetching concurrently
       client_ids = Enum.map(1..5, fn i -> "client_#{i}" end)
-      
-      tasks = Enum.map(client_ids, fn client_id ->
-        Task.async(fn ->
-          KillmailStore.fetch_for_client(client_id, [@system_id_1])
+
+      tasks =
+        Enum.map(client_ids, fn client_id ->
+          Task.async(fn ->
+            KillmailStore.fetch_for_client(client_id, [@system_id_1])
+          end)
         end)
-      end)
 
       results = Task.await_many(tasks)
-      
+
       # All clients should get the same events
       Enum.each(results, fn {:ok, events} ->
         assert length(events) == 5

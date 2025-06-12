@@ -475,15 +475,16 @@ defmodule WandererKills.Killmails.Pipeline.Coordinator do
 
     {:ok, parsed}
   rescue
-    error ->
-      Logger.error("Exception during killmail parsing", %{
+    error in [ArgumentError, KeyError, MatchError] ->
+      Logger.error("Parsing exception during killmail processing",
         raw_count: length(raw_killmails),
         error: inspect(error),
+        error_type: error.__struct__,
         operation: :parse_killmails,
         step: :exception
-      })
+      )
 
-      {:error, Error.parsing_error(:exception, "Exception during killmail parsing")}
+      {:error, Error.parsing_error(:exception, "Parsing exception: #{inspect(error)}")}
   end
 
   def parse_killmails(invalid_killmails, _since_hours) do

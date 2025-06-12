@@ -63,7 +63,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
           url: webhook_url,
           reason: reason
         )
-        
+
         :ok
     end
   end
@@ -121,7 +121,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
           url: webhook_url,
           reason: reason
         )
-        
+
         :ok
     end
   end
@@ -158,5 +158,16 @@ defmodule WandererKills.Subscriptions.WebhookNotifier do
 
   defp validate_webhook_url(nil), do: {:error, :missing_url}
   defp validate_webhook_url(""), do: {:error, :empty_url}
-  defp validate_webhook_url(_url), do: :ok
+
+  defp validate_webhook_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and not is_nil(host) ->
+        :ok
+
+      _ ->
+        {:error, :invalid_url}
+    end
+  end
+
+  defp validate_webhook_url(_), do: {:error, :invalid_url}
 end

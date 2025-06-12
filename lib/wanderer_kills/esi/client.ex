@@ -93,7 +93,9 @@ defmodule WandererKills.ESI.Client do
 
   @impl true
   def get_system(system_id) when is_integer(system_id) do
-    fetch_from_api(:system, system_id)
+    Helper.get_or_set(:systems, system_id, fn ->
+      fetch_from_api(:system, system_id)
+    end)
   end
 
   @impl true
@@ -503,10 +505,10 @@ defmodule WandererKills.ESI.Client do
     - `group_ids` - List of group IDs to fetch (optional)
 
   ## Examples
-      iex> WandererKills.ESI.DataFetcher.update()
+      iex> WandererKills.ESI.Client.update()
       :ok
 
-      iex> WandererKills.ESI.DataFetcher.update(group_ids: [23, 16])
+      iex> WandererKills.ESI.Client.update(group_ids: [23, 16])
       :ok
   """
   def update(opts \\ []) do

@@ -10,7 +10,10 @@ defmodule WandererKills.SubscriptionManagerTest do
   setup do
     # The application should have started all necessary processes
     # We don't need to manually manage TaskSupervisor, PubSub, or SubscriptionManager
-    
+
+    # Allow mocks to work in async tasks
+    Mox.set_mox_from_context(self())
+
     # Mock the HTTP client for webhook tests
     WandererKills.Http.Client.Mock
     |> stub(:post, fn _url, _body, _opts ->
@@ -78,7 +81,6 @@ defmodule WandererKills.SubscriptionManagerTest do
   end
 
   describe "list_subscriptions/0" do
-
   end
 
   describe "broadcast_killmail_update_async/2" do
@@ -106,7 +108,11 @@ defmodule WandererKills.SubscriptionManagerTest do
       # This should trigger notifications
       assert :ok = SubscriptionManager.broadcast_killmail_update_async(30_000_142, kills)
 
-      # Give async tasks time to run
+      # Wait for the GenServer to process the cast message
+      # This ensures the async operation has been handled by the GenServer
+      :sys.get_state(SubscriptionManager)
+
+      # Wait a bit for the async task to complete
       Process.sleep(100)
     end
   end
@@ -156,7 +162,6 @@ defmodule WandererKills.SubscriptionManagerTest do
       assert :ok = SubscriptionManager.remove_websocket_subscription("socket_123")
     end
   end
-
 
   describe "error handling" do
     test "handles invalid system IDs gracefully" do

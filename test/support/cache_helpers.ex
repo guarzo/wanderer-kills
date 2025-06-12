@@ -90,7 +90,7 @@ defmodule WandererKills.Test.CacheHelpers do
   defp safe_clear_cache(cache_name) do
     # Get the configured cache adapter
     adapter = Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
-    
+
     case adapter.clear(cache_name) do
       {:ok, _} -> :ok
       # Ignore errors (cache might not exist)
@@ -147,7 +147,7 @@ defmodule WandererKills.Test.CacheHelpers do
   @spec setup_cache_entries(atom(), [{String.t(), term()}]) :: :ok
   def setup_cache_entries(cache_name, entries) when is_list(entries) do
     adapter = Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
-    
+
     Enum.each(entries, fn {key, value} ->
       adapter.put(cache_name, key, value, [])
     end)
@@ -161,7 +161,7 @@ defmodule WandererKills.Test.CacheHelpers do
   @spec get_cache_value(atom(), String.t()) :: {:ok, term()} | {:error, term()}
   def get_cache_value(cache_name, key) do
     adapter = Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
-    
+
     case adapter.get(cache_name, key) do
       {:ok, nil} -> {:error, :not_found}
       {:ok, value} -> {:ok, value}
@@ -175,7 +175,7 @@ defmodule WandererKills.Test.CacheHelpers do
   @spec cache_exists?(atom(), String.t()) :: boolean()
   def cache_exists?(cache_name, key) do
     adapter = Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
-    
+
     case adapter.exists?(cache_name, key) do
       {:ok, exists?} -> exists?
       {:error, _} -> false
@@ -188,7 +188,7 @@ defmodule WandererKills.Test.CacheHelpers do
   @spec cache_size(atom()) :: {:ok, non_neg_integer()} | {:error, term()}
   def cache_size(cache_name) do
     adapter = Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
-    
+
     case adapter.size(cache_name) do
       {:ok, size} -> {:ok, size}
       error -> error

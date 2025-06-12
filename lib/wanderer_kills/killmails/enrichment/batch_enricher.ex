@@ -287,11 +287,12 @@ defmodule WandererKills.Killmails.Enrichment.BatchEnricher do
   end
 
   defp flatten_enriched_data(killmail) do
-    killmail
-    |> Transformations.flatten_enriched_data()
-    |> Transformations.add_attacker_count()
-    |> Transformations.enrich_with_ship_names()
-    |> case do
+    flattened =
+      killmail
+      |> Transformations.flatten_enriched_data()
+      |> Transformations.add_attacker_count()
+
+    case Transformations.enrich_with_ship_names(flattened) do
       {:ok, enriched} -> enriched
     end
   end

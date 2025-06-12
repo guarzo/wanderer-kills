@@ -115,11 +115,11 @@ defmodule WandererKills.Killmails.ZkbClient do
 
     url = "#{base_url()}/systemID/#{system_id}/"
 
-    Logger.debug("[ZKB] Fetching system killmails", %{
+    Logger.debug("[ZKB] Fetching system killmails",
       system_id: system_id,
       data_source: "zkillboard.com/api",
       request_type: "historical_data"
-    })
+    )
 
     request_opts =
       ClientProvider.build_request_opts(

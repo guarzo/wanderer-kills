@@ -329,9 +329,16 @@ defmodule WandererKills.Config do
 
     # Convert keyword list to map if necessary
     case config do
-      config when is_list(config) -> Enum.into(config, %{})
-      config when is_map(config) -> config
-      _ -> %{}
+      config when is_list(config) ->
+        Enum.into(config, %{})
+
+      config when is_map(config) ->
+        config
+
+      _ ->
+        require Logger
+        Logger.debug("Unknown config type for group #{inspect(group)}: #{inspect(config)}")
+        %{}
     end
   end
 
@@ -345,19 +352,50 @@ defmodule WandererKills.Config do
 
   # Convert flat keys to nested keys for backward compatibility
   defp flat_to_nested_key(key) do
-    case Atom.to_string(key) do
-      "cache_" <> rest -> {:cache, [String.to_atom(rest)]}
-      "esi_" <> rest -> {:esi, [String.to_atom(rest)]}
-      "zkb_" <> rest -> {:zkb, [String.to_atom(rest)]}
-      "redisq_" <> rest -> {:redisq, [String.to_atom(rest)]}
-      "parser_" <> rest -> {:parser, [String.to_atom(rest)]}
-      "enricher_" <> rest -> {:enricher, [String.to_atom(rest)]}
-      "retry_http_" <> rest -> {:http, [:retry, String.to_atom(rest)]}
-      "retry_redisq_" <> rest -> {:redisq, [:retry, String.to_atom(rest)]}
-      "telemetry_" <> rest -> {:telemetry, [String.to_atom(rest)]}
-      "websocket_" <> rest -> {:websocket, [String.to_atom(rest)]}
-      "start_" <> rest -> {:services, [String.to_atom("start_" <> rest)]}
-      _ -> nil
+    key_string = Atom.to_string(key)
+
+    cond do
+      String.starts_with?(key_string, "retry_http_") ->
+        rest = String.trim_leading(key_string, "retry_http_")
+        {:http, [:retry, safe_to_existing_atom(rest)]}
+
+      String.starts_with?(key_string, "retry_redisq_") ->
+        rest = String.trim_leading(key_string, "retry_redisq_")
+        {:redisq, [:retry, safe_to_existing_atom(rest)]}
+
+      String.starts_with?(key_string, "start_") ->
+        {:services, [safe_to_existing_atom(key_string)]}
+
+      true ->
+        simple_prefix_mapping(key_string)
+    end
+  end
+
+  defp simple_prefix_mapping(key_string) do
+    prefix_map = %{
+      "cache_" => :cache,
+      "esi_" => :esi,
+      "zkb_" => :zkb,
+      "redisq_" => :redisq,
+      "parser_" => :parser,
+      "enricher_" => :enricher,
+      "telemetry_" => :telemetry,
+      "websocket_" => :websocket
+    }
+
+    Enum.find_value(prefix_map, nil, fn {prefix, group} ->
+      if String.starts_with?(key_string, prefix) do
+        rest = String.trim_leading(key_string, prefix)
+        {group, [safe_to_existing_atom(rest)]}
+      end
+    end)
+  end
+
+  defp safe_to_existing_atom(string) do
+    try do
+      String.to_existing_atom(string)
+    rescue
+      ArgumentError -> string
     end
   end
 end

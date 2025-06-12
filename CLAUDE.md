@@ -117,12 +117,14 @@ docker-compose up        # Start with Redis and all services
 ## Key Design Patterns
 
 ### Behaviours for Testability
+
 All external service clients implement behaviours, allowing easy mocking in tests:
 - `Http.ClientBehaviour` - HTTP client interface
 - `ESI.ClientBehaviour` - ESI API interface  
 - `Observability.HealthCheckBehaviour` - Health check interface
 
 ### Supervised Async Work
+
 All async operations use `Support.SupervisedTask`:
 ```elixir
 SupervisedTask.start_child(
@@ -133,6 +135,7 @@ SupervisedTask.start_child(
 ```
 
 ### Standardized Error Handling
+
 All errors use `Support.Error` for consistency:
 ```elixir
 {:error, Error.http_error(:timeout, "Request timed out", true)}
@@ -140,6 +143,7 @@ All errors use `Support.Error` for consistency:
 ```
 
 ### Event-Driven Architecture
+
 - Phoenix PubSub for internal communication
 - Storage events for data changes
 - Telemetry events for monitoring
@@ -147,24 +151,28 @@ All errors use `Support.Error` for consistency:
 ## Common Development Tasks
 
 ### Adding New API Endpoints
+
 1. Define route in `router.ex`
 2. Create controller action
 3. Implement context function
 4. Add tests for both layers
 
 ### Adding External Service Clients
+
 1. Define behaviour in `client_behaviour.ex`
 2. Implement client using `Http.Client`
 3. Configure mock in test environment
 4. Use dependency injection via config
 
 ### Processing Pipeline Extensions
+
 1. Add new stage in `pipeline/` directory
 2. Implement behaviour callbacks
 3. Update `UnifiedProcessor` to include stage
 4. Add comprehensive tests
 
 ### Health Check Extensions
+
 1. Implement `HealthCheckBehaviour`
 2. Add to health check aggregator
 3. Define metrics and thresholds
@@ -173,12 +181,14 @@ All errors use `Support.Error` for consistency:
 ## Configuration Patterns
 
 ### Environment Configuration
+
 - Base: `config/config.exs`
 - Environment: `config/{dev,test,prod}.exs`
 - Runtime: `config/runtime.exs`
 - Access via: `WandererKills.Config`
 
 ### Feature Flags
+
 - Event streaming: `:storage, :enable_event_streaming`
 - RedisQ start: `:start_redisq`
 - Monitoring intervals: `:monitoring, :status_interval_ms`
@@ -186,6 +196,7 @@ All errors use `Support.Error` for consistency:
 ## Best Practices
 
 ### Naming Conventions
+
 - Use `killmail` consistently (not `kill`)
 - `get_*` for cache/local operations
 - `fetch_*` for external API calls
@@ -193,18 +204,21 @@ All errors use `Support.Error` for consistency:
 - `_async` suffix for async operations
 
 ### Cache Keys
+
 - Killmails: `"killmail:{id}"`
 - Systems: `"system:{id}"`  
 - ESI data: `"esi:{type}:{id}"`
 - Ship types: `"ship_types:{id}"`
 
 ### Testing Strategy
+
 - Mock external services via behaviours
 - Test public APIs, not implementation
 - Use factories for test data
 - Comprehensive error case coverage
 
 ### Performance Considerations
+
 - Batch operations when possible
 - Use ETS for high-frequency reads
 - Implement circuit breakers for external services

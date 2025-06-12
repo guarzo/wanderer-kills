@@ -1,7 +1,7 @@
 defmodule WandererKills.Cache.Behaviour do
   @moduledoc """
   Behavior for cache implementations.
-  
+
   This behavior defines the contract for cache operations that can be
   implemented by different backends (Cachex, ETS, Redis, etc.).
   """

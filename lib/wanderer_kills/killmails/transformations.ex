@@ -267,25 +267,26 @@ defmodule WandererKills.Killmails.Transformations do
   """
   @spec enrich_with_ship_names(map()) :: {:ok, map()}
   def enrich_with_ship_names(killmail) when is_map(killmail) do
-    Logger.debug("Starting ship name enrichment for killmail", %{
+    Logger.debug("Starting ship name enrichment for killmail",
       killmail_id: killmail["killmail_id"]
-    })
+    )
 
     with {:ok, killmail} <- add_victim_ship_name(killmail),
          {:ok, killmail} <- add_attackers_ship_names(killmail) do
-      Logger.debug("Completed ship name enrichment for killmail", %{
+      Logger.debug("Completed ship name enrichment for killmail",
         killmail_id: killmail["killmail_id"]
-      })
+      )
 
       {:ok, killmail}
     else
-      error ->
-        Logger.error("Failed to enrich ship names", %{
-          error: inspect(error),
+      {:error, reason} = error ->
+        Logger.warning("Failed to enrich ship names",
+          reason: reason,
           killmail_id: killmail["killmail_id"]
-        })
+        )
 
-        {:ok, killmail}
+        # Return the error to allow the caller to decide how to handle it
+        error
     end
   end
 
@@ -321,10 +322,10 @@ defmodule WandererKills.Killmails.Transformations do
 
       {:error, _reason} ->
         # Log but don't fail the enrichment for missing ship names
-        Logger.debug("Could not get ship name for victim", %{
+        Logger.debug("Could not get ship name for victim",
           ship_type_id: Map.get(victim, "ship_type_id"),
           killmail_id: Map.get(killmail, "killmail_id")
-        })
+        )
 
         {:ok, killmail}
     end
@@ -341,10 +342,10 @@ defmodule WandererKills.Killmails.Transformations do
             Map.put(attacker, "ship_name", ship_name)
 
           {:error, _reason} ->
-            Logger.debug("Could not get ship name for attacker", %{
+            Logger.debug("Could not get ship name for attacker",
               ship_type_id: Map.get(attacker, "ship_type_id"),
               killmail_id: Map.get(killmail, "killmail_id")
-            })
+            )
 
             attacker
         end
@@ -394,8 +395,9 @@ defmodule WandererKills.Killmails.Transformations do
       {:ok, _} ->
         {:error, Error.ship_types_error(:invalid_ship_data, "ESI data missing name field")}
 
-      {:error, _reason} ->
-        {:error, Error.ship_types_error(:ship_name_not_found, "Ship type not found")}
+      {:error, reason} ->
+        # Preserve the original ESI error for better diagnostics
+        {:error, reason}
     end
   end
 
