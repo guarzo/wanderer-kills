@@ -8,14 +8,33 @@ defmodule WandererKillsWeb.KillmailChannel do
   - Receive real-time killmail updates
   - Manage subscriptions dynamically
 
+  ## Installation
+
+  ```bash
+  npm install phoenix-websocket
+  # or
+  yarn add phoenix-websocket
+  ```
+
   ## Usage
 
   Connect to the WebSocket and join the channel:
   ```javascript
-  const socket = new Socket("/socket", {})
+  import {Socket} from "phoenix-websocket"
+
+  const socket = new Socket("ws://localhost:4000/socket", {
+    params: {client_identifier: "my-app"}
+  })
+  socket.connect()
+
   const channel = socket.channel("killmails:lobby", {
     systems: [30000142, 30002187],
-    characters: [95465499, 90379338]  // Optional character IDs
+    characters: [95465499, 90379338],  // Optional character IDs
+    preload: {
+      enabled: true,
+      since_hours: 24,
+      limit_per_system: 100
+    }
   })
 
   channel.join()
@@ -23,17 +42,21 @@ defmodule WandererKillsWeb.KillmailChannel do
     .receive("error", resp => console.log("Unable to join", resp))
 
   // Listen for killmail updates
-  channel.on("killmail_update", payload => {
-    console.log("New killmails:", payload.killmails)
+  channel.on("new_kill", payload => {
+    console.log("New killmail:", payload)
   })
 
   // Add/remove system subscriptions
   channel.push("subscribe_systems", {systems: [30000144]})
   channel.push("unsubscribe_systems", {systems: [30000142]})
 
-  // Add/remove character subscriptions
+  // Add/remove character subscriptions (supports both formats)
   channel.push("subscribe_characters", {characters: [12345678]})
   channel.push("unsubscribe_characters", {characters: [95465499]})
+
+  // Alternative format also supported for backward compatibility
+  channel.push("subscribe_characters", {character_ids: [12345678]})
+  channel.push("unsubscribe_characters", {character_ids: [95465499]})
 
   // Get current subscription status
   channel.push("get_status", {})
@@ -187,7 +210,13 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
-  # Handle subscribing to characters
+  # Handle subscribing to characters (also supports "character_ids" for backward compatibility)
+  def handle_in("subscribe_characters", %{"character_ids" => characters} = params, socket)
+      when is_list(characters) do
+    # Rewrite to standard format and delegate
+    handle_in("subscribe_characters", Map.put(params, "characters", characters), socket)
+  end
+
   def handle_in("subscribe_characters", %{"characters" => characters}, socket)
       when is_list(characters) do
     case validate_characters(characters) do
@@ -225,7 +254,13 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
-  # Handle unsubscribing from characters
+  # Handle unsubscribing from characters (also supports "character_ids" for backward compatibility)
+  def handle_in("unsubscribe_characters", %{"character_ids" => characters} = params, socket)
+      when is_list(characters) do
+    # Rewrite to standard format and delegate
+    handle_in("unsubscribe_characters", Map.put(params, "characters", characters), socket)
+  end
+
   def handle_in("unsubscribe_characters", %{"characters" => characters}, socket)
       when is_list(characters) do
     case validate_characters(characters) do
@@ -736,26 +771,51 @@ defmodule WandererKillsWeb.KillmailChannel do
     subscription_id = socket.assigns.subscription_id
     limit_per_system = 5
 
-    Logger.debug("📡 Preloading kills for WebSocket client",
+    # Count current subscriptions for info logging
+    current_systems = MapSet.size(socket.assigns.subscribed_systems)
+    current_characters = MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
+
+    Logger.info("📦 Starting preload for WebSocket client",
       user_id: user_id,
       subscription_id: subscription_id,
-      systems_count: length(systems),
+      systems_to_preload: length(systems),
+      total_subscribed_systems: current_systems,
+      total_subscribed_characters: current_characters,
       reason: reason
     )
 
-    total_kills_sent =
-      systems
-      |> Enum.map(fn system_id ->
-        preload_system_kills_for_websocket(socket, system_id, limit_per_system)
-      end)
-      |> Enum.sum()
+    # Use SupervisedTask to track WebSocket preload operations
+    WandererKills.Support.SupervisedTask.start_child(
+      fn ->
+        total_kills_sent =
+          systems
+          |> Enum.map(fn system_id ->
+            preload_system_kills_for_websocket(socket, system_id, limit_per_system)
+          end)
+          |> Enum.sum()
 
-    Logger.debug("📦 Preload completed for WebSocket client",
-      user_id: user_id,
-      subscription_id: subscription_id,
-      total_systems: length(systems),
-      total_kills_sent: total_kills_sent,
-      reason: reason
+        Logger.info("📦 Preload completed for WebSocket client",
+          user_id: user_id,
+          subscription_id: subscription_id,
+          total_systems: length(systems),
+          total_kills_sent: total_kills_sent,
+          reason: reason
+        )
+
+        # Emit telemetry for kills delivered
+        :telemetry.execute(
+          [:wanderer_kills, :preload, :kills_delivered],
+          %{count: total_kills_sent},
+          %{user_id: user_id, subscription_id: subscription_id}
+        )
+      end,
+      task_name: "websocket_preload",
+      metadata: %{
+        user_id: user_id,
+        subscription_id: subscription_id,
+        systems_count: length(systems),
+        reason: reason
+      }
     )
   end
 

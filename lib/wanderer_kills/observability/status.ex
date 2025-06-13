@@ -13,12 +13,29 @@ defmodule WandererKills.Observability.Status do
   """
   @spec get_service_status() :: map()
   def get_service_status do
+    # Get comprehensive metrics from UnifiedStatus
+    metrics = WandererKills.Observability.UnifiedStatus.get_status()
+
     %{
-      cache_stats: get_cache_stats(),
-      active_subscriptions: get_active_subscription_count(),
-      websocket_connected: websocket_connected?(),
-      last_killmail_received: get_last_killmail_time(),
+      metrics: metrics,
+      summary: build_status_summary(metrics),
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+  end
+
+  defp build_status_summary(metrics) do
+    %{
+      api_requests_per_minute:
+        get_in(metrics, [:api, :zkillboard, :requests_per_minute]) +
+          get_in(metrics, [:api, :esi, :requests_per_minute]),
+      active_subscriptions: get_in(metrics, [:websocket, :connections_active]) || 0,
+      killmails_stored: get_in(metrics, [:storage, :killmails_count]) || 0,
+      cache_hit_rate: get_in(metrics, [:cache, :hit_rate]) || 0.0,
+      memory_usage_mb: get_in(metrics, [:system, :memory_mb]) || 0.0,
+      uptime_hours: get_in(metrics, [:system, :uptime_hours]) || 0.0,
+      processing_lag_seconds:
+        get_in(metrics, [:processing, :redisq_last_killmail_ago_seconds]) || 0,
+      active_preload_tasks: get_in(metrics, [:preload, :active_tasks]) || 0
     }
   end
 
@@ -95,45 +112,6 @@ defmodule WandererKills.Observability.Status do
   end
 
   # Private functions
-
-  defp get_cache_stats do
-    case Cachex.stats(:wanderer_cache) do
-      {:ok, stats} ->
-        hit_rate = calculate_hit_rate(stats)
-
-        %{
-          status: determine_cache_status(hit_rate),
-          message: format_cache_message(hit_rate, stats),
-          hit_rate: hit_rate,
-          size: Map.get(stats, :calls, %{}) |> Map.get(:set, 0)
-        }
-
-      {:error, _} ->
-        %{
-          status: "error",
-          message: "Unable to retrieve cache statistics"
-        }
-    end
-  end
-
-  defp calculate_hit_rate(%{calls: %{get: gets, set: _sets}} = stats) when gets > 0 do
-    hits = Map.get(stats, :hits, %{}) |> Map.get(:get, 0)
-    Float.round(hits / gets * 100, 2)
-  end
-
-  defp calculate_hit_rate(_), do: 0.0
-
-  defp determine_cache_status(hit_rate) do
-    cond do
-      hit_rate >= 80 -> "operational"
-      hit_rate >= 50 -> "degraded"
-      true -> "warning"
-    end
-  end
-
-  defp format_cache_message(hit_rate, _stats) do
-    "Cache hit rate: #{hit_rate}%"
-  end
 
   defp websocket_connected? do
     Process.whereis(WandererKillsWeb.Endpoint) != nil

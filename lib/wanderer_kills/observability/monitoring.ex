@@ -476,9 +476,16 @@ defmodule WandererKills.Observability.Monitoring do
   defp build_cache_metrics(cache_name) do
     case Cachex.stats(cache_name) do
       {:ok, stats} ->
+        # Get size separately as it's not included in stats
+        size =
+          case Cachex.size(cache_name) do
+            {:ok, s} -> s
+            _ -> 0
+          end
+
         %{
           name: cache_name,
-          size: Map.get(stats, :size, 0),
+          size: size,
           hit_rate: Map.get(stats, :hit_rate, 0.0),
           miss_rate: Map.get(stats, :miss_rate, 0.0),
           evictions: Map.get(stats, :evictions, 0),
@@ -498,8 +505,18 @@ defmodule WandererKills.Observability.Monitoring do
   @spec get_cache_stats_internal(atom()) :: {:ok, map()} | {:error, term()}
   defp get_cache_stats_internal(cache_name) do
     case Cachex.stats(cache_name) do
-      {:ok, stats} -> {:ok, stats}
-      {:error, reason} -> {:error, reason}
+      {:ok, stats} ->
+        # Add size to stats since Cachex doesn't include it
+        size =
+          case Cachex.size(cache_name) do
+            {:ok, s} -> s
+            _ -> 0
+          end
+
+        {:ok, Map.put(stats, :size, size)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

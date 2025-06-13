@@ -138,6 +138,99 @@ channel.push('unsubscribe_characters', { character_ids: [95465499] })
 - Support for up to 1000 characters per subscription
 - Real-time performance monitoring and optimization
 
+## Subscription Types
+
+WandererKills offers two distinct subscription mechanisms for receiving killmail updates:
+
+### WebSocket Subscriptions
+**Real-time bidirectional communication**
+
+WebSocket subscriptions provide persistent, interactive connections for real-time killmail updates.
+
+```javascript
+// Connect and subscribe via WebSocket
+const socket = new Socket('ws://localhost:4004/socket', {
+  params: { client_identifier: 'my-app' }
+});
+
+const channel = socket.channel('killmails:lobby', {
+  systems: [30000142, 30002187],
+  characters: [95465499, 90379338],
+  preload: { enabled: true, since_hours: 24 }
+});
+
+// Dynamic subscription management
+channel.push('subscribe_systems', { systems: [30000144] });
+channel.push('unsubscribe_characters', { characters: [95465499] });
+```
+
+### Webhook Subscriptions
+**HTTP callback-based notifications**
+
+Webhook subscriptions send killmail updates to your HTTP endpoints via POST requests.
+
+```bash
+# Create webhook subscription
+curl -X POST http://localhost:4004/api/v1/subscriptions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subscriber_id": "my-service",
+    "system_ids": [30000142, 30002187],
+    "character_ids": [95465499, 90379338],
+    "callback_url": "https://myapp.com/killmail-webhook"
+  }'
+
+# List active subscriptions
+curl http://localhost:4004/api/v1/subscriptions
+
+# Delete subscription
+curl -X DELETE http://localhost:4004/api/v1/subscriptions/my-service
+```
+
+### Webhook Payload Format
+
+Webhook notifications are sent as JSON POST requests:
+
+```json
+{
+  "type": "killmail_update",
+  "system_id": 30000142,
+  "timestamp": "2024-01-01T12:00:00Z",
+  "kills": [
+    {
+      "killmail_id": 123456,
+      "solar_system_id": 30000142,
+      "killmail_time": "2024-01-01T12:00:00Z",
+      "victim": { "character_id": 95465499, "ship_type_id": 587 },
+      "attackers": [...]
+    }
+  ]
+}
+```
+
+### Comparison: WebSocket vs Webhook
+
+| Feature | WebSocket | Webhook |
+|---------|-----------|---------|
+| **Connection** | Persistent, stateful | Stateless HTTP requests |
+| **Latency** | Very low (direct push) | Higher (HTTP overhead) |
+| **Reliability** | Best-effort, client handles reconnects | Retryable with HTTP client |
+| **Management** | Dynamic (live subscription changes) | Static (set at creation) |
+| **Filtering** | Interactive updates | Fixed at subscription time |
+| **Preloading** | Full preload support with batching | Basic preload on creation |
+| **Use Case** | Real-time dashboards, live monitoring | Server integrations, webhooks |
+| **Registration** | WebSocket channel join | REST API endpoint |
+
+**Choose WebSocket for:**
+- Real-time dashboards and live monitoring
+- Interactive applications requiring low latency
+- Applications that need dynamic subscription management
+
+**Choose Webhooks for:**
+- Server-to-server integrations
+- Reliable delivery to external systems
+- Applications that can't maintain persistent connections
+
 ### Example API Call
 
 ```bash

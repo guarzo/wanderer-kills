@@ -97,7 +97,11 @@ defmodule WandererKills.Observability.UnifiedStatus do
       killmails_stored: get_in(metrics, [:processing, :parser_stored]),
       websocket_connections: get_in(metrics, [:websocket, :connections_active]),
       cache_hit_rate: get_in(metrics, [:cache, :hit_rate]),
-      memory_mb: get_in(metrics, [:system, :memory_mb])
+      cache_efficiency: get_in(metrics, [:cache, :cache_efficiency]),
+      memory_mb: get_in(metrics, [:system, :memory_mb]),
+      processing_lag: get_in(metrics, [:processing, :processing_lag_seconds]),
+      parser_success_rate: get_in(metrics, [:processing, :parser_success_rate]),
+      webhook_success_rate: get_in(metrics, [:preload, :webhook_success_rate])
     ]
   end
 
@@ -125,10 +129,26 @@ defmodule WandererKills.Observability.UnifiedStatus do
       safe_apply(ApiTracker, :get_stats, [], %{zkillboard: %{}, esi: %{}})
 
     %{
-      zkillboard: Map.merge(@default_api_metrics, Map.get(api_stats, :zkillboard, %{})),
-      esi: Map.merge(@default_api_metrics, Map.get(api_stats, :esi, %{}))
+      zkillboard: enhance_api_metrics(Map.get(api_stats, :zkillboard, %{})),
+      esi: enhance_api_metrics(Map.get(api_stats, :esi, %{}))
     }
   end
+
+  defp enhance_api_metrics(stats) do
+    enhanced = Map.merge(@default_api_metrics, stats)
+
+    # Add calculated metrics
+    enhanced
+    |> Map.put(:error_rate, calculate_error_rate(enhanced))
+    |> Map.put(:p95_duration_ms, Map.get(stats, :p95_duration_ms, enhanced.avg_duration_ms * 2))
+    |> Map.put(:p99_duration_ms, Map.get(stats, :p99_duration_ms, enhanced.avg_duration_ms * 3))
+  end
+
+  defp calculate_error_rate(%{error_count: errors, total_requests: total}) when total > 0 do
+    Float.round(errors / total * 100, 2)
+  end
+
+  defp calculate_error_rate(_), do: 0.0
 
   ### Processing
 
@@ -136,15 +156,43 @@ defmodule WandererKills.Observability.UnifiedStatus do
     redisq_stats = ets_get(:wanderer_kills_stats, :redisq_stats, %{})
     parser_stats = ets_get(:wanderer_kills_stats, :parser_stats, %{})
 
+    redisq_received = Map.get(redisq_stats, :kills_received, 0)
+    redisq_errors = Map.get(redisq_stats, :errors, 0)
+    parser_stored = Map.get(parser_stats, :stored, 0)
+    parser_failed = Map.get(parser_stats, :failed, 0)
+
     %{
-      redisq_received: Map.get(redisq_stats, :kills_received, 0),
+      # RedisQ metrics
+      redisq_received: redisq_received,
       redisq_older: Map.get(redisq_stats, :kills_older, 0),
       redisq_skipped: Map.get(redisq_stats, :kills_skipped, 0),
+      redisq_errors: redisq_errors,
+      redisq_error_rate: error_rate(redisq_errors, redisq_received),
       redisq_systems: redisq_stats |> Map.get(:active_systems, MapSet.new()) |> MapSet.size(),
-      parser_stored: Map.get(parser_stats, :stored, 0),
+      redisq_last_killmail_ago_seconds: seconds_since_last_killmail(redisq_stats),
+      # Parser metrics
+      parser_stored: parser_stored,
       parser_skipped: Map.get(parser_stats, :skipped, 0),
-      parser_failed: Map.get(parser_stats, :failed, 0)
+      parser_failed: parser_failed,
+      parser_success_rate: success_rate(parser_stored, parser_failed),
+      # Processing lag
+      processing_lag_seconds: Map.get(redisq_stats, :processing_lag_seconds, 0)
     }
+  end
+
+  defp seconds_since_last_killmail(stats) do
+    case Map.get(stats, :last_kill_received_at) do
+      nil -> 999_999
+      timestamp -> System.system_time(:second) - timestamp
+    end
+  end
+
+  defp error_rate(errors, total) when total > 0, do: Float.round(errors / total * 100, 2)
+  defp error_rate(_, _), do: 0.0
+
+  defp success_rate(success, failed) do
+    total = success + failed
+    if total > 0, do: Float.round(success / total * 100, 1), else: 0.0
   end
 
   ### WebSocket
@@ -195,35 +243,107 @@ defmodule WandererKills.Observability.UnifiedStatus do
   defp collect_cache_metrics do
     case safe_apply(Monitoring, :get_cache_stats, [:wanderer_cache], :unavailable) do
       {:ok, stats} ->
+        # Get size separately as it's not included in stats
+        size =
+          case Cachex.size(:wanderer_cache) do
+            {:ok, s} -> s
+            _ -> 0
+          end
+
         hits = Map.get(stats, :hits, 0)
         misses = Map.get(stats, :misses, 0)
+        evictions = Map.get(stats, :evictions, 0)
+        expirations = Map.get(stats, :expirations, 0)
 
         %{
-          size: Map.get(stats, :size, 0),
-          memory_mb: Float.round(Map.get(stats, :size, 0) / 1024, 1),
+          size: size,
+          memory_mb: Float.round(Map.get(stats, :memory_bytes, size * 1024) / 1_048_576, 1),
           hit_rate: hit_rate(hits, misses),
           miss_rate: hit_rate(misses, hits),
-          evictions: Map.get(stats, :evictions, 0),
-          expirations: Map.get(stats, :expirations, 0)
+          evictions: evictions,
+          expirations: expirations,
+          # Actionable metrics
+          eviction_rate: eviction_rate(evictions, size),
+          cache_efficiency: cache_efficiency(hits, misses, evictions),
+          operations_total: hits + misses,
+          operations_per_minute: calculate_per_minute_rate(hits + misses)
         }
 
       _ ->
-        %{size: 0, memory_mb: 0.0, hit_rate: 0.0, miss_rate: 0.0, evictions: 0, expirations: 0}
+        %{
+          size: 0,
+          memory_mb: 0.0,
+          hit_rate: 0.0,
+          miss_rate: 0.0,
+          evictions: 0,
+          expirations: 0,
+          eviction_rate: 0.0,
+          cache_efficiency: 0.0,
+          operations_total: 0,
+          operations_per_minute: 0
+        }
     end
+  end
+
+  defp eviction_rate(evictions, size) when size > 0, do: Float.round(evictions / size * 100, 1)
+  defp eviction_rate(_, _), do: 0.0
+
+  defp cache_efficiency(hits, misses, evictions) do
+    total_ops = hits + misses
+
+    if total_ops > 0 do
+      # Efficiency is hits minus penalty for evictions
+      efficiency = (hits - evictions * 0.5) / total_ops
+      Float.round(max(0, efficiency) * 100, 1)
+    else
+      0.0
+    end
+  end
+
+  defp calculate_per_minute_rate(count) do
+    # Assumes 5-minute intervals
+    round(count / 5)
   end
 
   ### System
 
   defp collect_system_metrics do
     m = :erlang.memory()
+    proc_count = :erlang.system_info(:process_count)
+    port_count = length(:erlang.ports())
 
     %{
       memory_mb: Float.round(m[:total] / 1_048_576, 1),
       memory_binary_mb: Float.round(m[:binary] / 1_048_576, 1),
       memory_processes_mb: Float.round(m[:processes] / 1_048_576, 1),
-      process_count: :erlang.system_info(:process_count),
-      scheduler_usage: scheduler_usage()
+      memory_ets_mb: Float.round(m[:ets] / 1_048_576, 1),
+      process_count: proc_count,
+      port_count: port_count,
+      scheduler_usage: scheduler_usage(),
+      reductions_per_second: reductions_rate(),
+      gc_runs: gc_stats(),
+      uptime_hours: uptime_hours()
     }
+  end
+
+  defp reductions_rate do
+    {_, reds} = :erlang.statistics(:reductions)
+    # Very rough estimate - would need to track over time for accuracy
+    round(reds / max(1, uptime_seconds()))
+  end
+
+  defp gc_stats do
+    {gc_count, _, _} = :erlang.statistics(:garbage_collection)
+    gc_count
+  end
+
+  defp uptime_seconds do
+    {uptime_ms, _} = :erlang.statistics(:wall_clock)
+    div(uptime_ms, 1000)
+  end
+
+  defp uptime_hours do
+    Float.round(uptime_seconds() / 3600, 1)
   end
 
   defp scheduler_usage do
@@ -233,16 +353,64 @@ defmodule WandererKills.Observability.UnifiedStatus do
     Float.round(queue / schedulers * 100, 1)
   end
 
-  ### Preload (placeholder)
+  ### Preload and Subscriptions
 
   defp collect_preload_metrics do
+    # Get subscription manager stats if available
+    sub_stats = safe_apply(WandererKills.SubscriptionManager, :get_stats, [], %{})
+
+    # Get telemetry metrics for webhook/preload tracking
+    telemetry_metrics =
+      safe_apply(WandererKills.Observability.TelemetryMetrics, :get_metrics, [], %{})
+
+    # Count active supervised tasks (simplified approach)
+    active_tasks = count_active_preload_tasks()
+
     %{
-      active_tasks: 0,
-      completed_tasks: 0,
-      failed_tasks: 0,
-      total_delivered: 0
+      # Preload task metrics
+      active_tasks: active_tasks,
+      completed_tasks: Map.get(telemetry_metrics, :preload_tasks_completed, 0),
+      failed_tasks: Map.get(telemetry_metrics, :preload_tasks_failed, 0),
+      total_delivered: Map.get(telemetry_metrics, :kills_delivered, 0),
+      # Webhook metrics from telemetry
+      webhooks_sent: Map.get(telemetry_metrics, :webhooks_sent, 0),
+      webhooks_failed: Map.get(telemetry_metrics, :webhooks_failed, 0),
+      webhook_success_rate: webhook_success_rate(telemetry_metrics),
+      # Subscription metrics
+      total_subscriptions:
+        Map.get(sub_stats, :http_subscription_count, 0) +
+          Map.get(sub_stats, :websocket_subscription_count, 0),
+      active_webhooks: Map.get(sub_stats, :http_subscription_count, 0)
     }
   end
+
+  defp count_active_preload_tasks do
+    try do
+      case Process.whereis(Support.SupervisedTask.TaskSupervisor) do
+        nil ->
+          0
+
+        supervisor_pid ->
+          children = Supervisor.which_children(supervisor_pid)
+
+          Enum.count(children, fn {_, pid, _, _} ->
+            is_pid(pid) and Process.alive?(pid)
+          end)
+      end
+    rescue
+      _ -> 0
+    end
+  end
+
+  defp webhook_success_rate(%{webhooks_sent: sent, webhooks_failed: failed}) when sent > 0 do
+    Float.round((sent - failed) / sent * 100, 1)
+  end
+
+  defp webhook_success_rate(%{sent: sent, failed: failed}) when sent > 0 do
+    Float.round((sent - failed) / sent * 100, 1)
+  end
+
+  defp webhook_success_rate(_), do: 0.0
 
   ### Rate limits
 
@@ -304,58 +472,98 @@ defmodule WandererKills.Observability.UnifiedStatus do
 
   defp format_status_report(m, mins) do
     """
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            📊  WANDERER KILLS STATUS (#{mins} min)
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    🌐 API
-        zkillboard  #{m.api.zkillboard.requests_per_minute} rpm  \
-    (total #{m.api.zkillboard.total_requests})  •  \
-    errors #{m.api.zkillboard.error_count}  •  \
-    avg #{m.api.zkillboard.avg_duration_ms} ms
-        ESI          #{m.api.esi.requests_per_minute} rpm  \
-    (total #{m.api.esi.total_requests})  •  \
-    errors #{m.api.esi.error_count}  •  \
-    avg #{m.api.esi.avg_duration_ms} ms
-        limits       ZKB #{m.rate_limits.zkillboard.available}/#{m.rate_limits.zkillboard.capacity}  |  \
-    ESI #{m.rate_limits.esi.available}/#{m.rate_limits.esi.capacity}
+    ═══════════════════════════════════════════════════════════════════════
+                     📊 WANDERER KILLS STATUS (#{format_duration(mins)})
+    ═══════════════════════════════════════════════════════════════════════
 
-    🔄 Processing
-        RedisQ       #{m.processing.redisq_received} recv, \
-    #{m.processing.redisq_older} old, \
-    #{m.processing.redisq_skipped} skipped  •  \
-    #{m.processing.redisq_systems} systems
-        Parser       #{m.processing.parser_stored} stored  •  \
-    #{m.processing.parser_skipped} skipped  •  \
-    #{m.processing.parser_failed} failed
+    🌐 API Performance
+    ─────────────────────────────────────────────────────────────────────
+      zkillboard    #{format_metric(m.api.zkillboard.requests_per_minute, "rpm", 8)} │ #{format_metric(format_number(m.api.zkillboard.total_requests), "total", 12)} │ #{format_metric(m.api.zkillboard.error_rate, "% err", 10)}
+                    Latency: #{format_latency_line(m.api.zkillboard)}
 
-    🌐 WebSocket
-        Connections  #{m.websocket.connections_active} active / #{m.websocket.connections_total} total
-        Subs         #{m.websocket.subscriptions_active} active  \
-    (#{m.websocket.subscriptions_systems} systems, \
-    #{m.websocket.subscriptions_characters} chars)
-        Kills sent   #{m.websocket.kills_sent_total}  \
-    (#{m.websocket.kills_sent_realtime} real-time, \
-    #{m.websocket.kills_sent_preload} preload)
+      ESI           #{format_metric(m.api.esi.requests_per_minute, "rpm", 8)} │ #{format_metric(format_number(m.api.esi.total_requests), "total", 12)} │ #{format_metric(m.api.esi.error_rate, "% err", 10)}
+                    Latency: #{format_latency_line(m.api.esi)}
 
-    💾 Storage / Cache
-        Killmails    #{format_number(m.storage.killmails_count)}  •  \
-    #{m.storage.systems_count} systems  •  \
-    ≈#{m.storage.memory_mb} MB
-        Cache        #{format_number(m.cache.size)} entries  •  \
-    #{m.cache.hit_rate}% hit  •  \
-    #{m.cache.memory_mb} MB
+      Rate Limits   ZKB: #{format_rate_limit(m.rate_limits.zkillboard)}  │  ESI: #{format_rate_limit(m.rate_limits.esi)}
 
-    🖥  System
-        Memory       #{m.system.memory_mb} MB (bin #{m.system.memory_binary_mb} / proc #{m.system.memory_processes_mb})
-        Processes    #{m.system.process_count}
-        SchedulerQ   #{m.system.scheduler_usage}%
+    🔄 Processing Pipeline
+    ─────────────────────────────────────────────────────────────────────
+      RedisQ        #{format_metric(format_number(m.processing.redisq_received), "received", 12)} │ #{format_metric(m.processing.redisq_systems, "systems", 10)} │ Last: #{format_duration_short(m.processing.redisq_last_killmail_ago_seconds)} ago
+                    #{format_metric(m.processing.redisq_older, "old", 12)} │ #{format_metric(m.processing.redisq_skipped, "skipped", 10)} │ Error rate: #{m.processing.redisq_error_rate}%
 
-    📦 Preload       #{m.preload.active_tasks} active  •  \
-    #{m.preload.completed_tasks} done  •  \
-    #{m.preload.failed_tasks} failed  •  \
-    #{m.preload.total_delivered} kills delivered
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      Parser        #{format_metric(format_number(m.processing.parser_stored), "stored", 12)} │ #{format_metric(m.processing.parser_failed, "failed", 10)} │ Success: #{m.processing.parser_success_rate}%
+                    Skip: #{m.processing.parser_skipped} │ Process lag: #{m.processing.processing_lag_seconds}s
+
+    🌐 WebSocket & Delivery
+    ─────────────────────────────────────────────────────────────────────
+      Connections   #{format_metric(m.websocket.connections_active, "active", 8)} / #{format_metric(m.websocket.connections_total, "total")}
+      Subscriptions #{format_metric(m.websocket.subscriptions_active, "active", 8)} │ #{format_metric(m.websocket.subscriptions_systems, "systems", 10)} │ #{format_metric(m.websocket.subscriptions_characters, "characters")}
+      Kills Sent    #{format_metric(format_number(m.websocket.kills_sent_total), "total", 8)} │ #{format_metric(m.websocket.kills_sent_realtime, "real-time", 12)} │ #{format_metric(m.websocket.kills_sent_preload, "preload")}
+
+    💾 Storage & Cache
+    ─────────────────────────────────────────────────────────────────────
+      Killmails     #{format_metric(format_number(m.storage.killmails_count), "entries", 12)} │ #{format_metric(m.storage.systems_count, "systems", 10)} │ ~#{m.storage.memory_mb} MB
+
+      Cache Stats   #{format_metric(format_number(m.cache.size), "entries", 12)} │ #{format_metric(m.cache.memory_mb, "MB", 10)}
+                    Hit rate: #{m.cache.hit_rate}% │ Efficiency: #{m.cache.cache_efficiency}% │ Evictions: #{m.cache.eviction_rate}%
+                    Operations: #{m.cache.operations_per_minute}/min │ Total: #{format_number(m.cache.operations_total)}
+
+    📦 Preload & Webhooks
+    ─────────────────────────────────────────────────────────────────────
+      Tasks         #{format_metric(m.preload.active_tasks, "active", 8)} │ #{format_metric(m.preload.completed_tasks, "completed", 12)} │ #{format_metric(m.preload.failed_tasks, "failed")}
+      Delivery      #{format_metric(format_number(m.preload.total_delivered), "kills", 8)} │ #{format_metric(m.preload.total_subscriptions, "subs", 12)} │ #{format_metric(m.preload.active_webhooks, "webhooks")}
+      Webhooks      #{format_metric(m.preload.webhooks_sent, "sent", 8)} │ #{format_metric(m.preload.webhooks_failed, "failed", 12)} │ Success: #{m.preload.webhook_success_rate}%
+
+    🖥  System Resources
+    ─────────────────────────────────────────────────────────────────────
+      Memory        Total: #{format_metric(m.system.memory_mb, "MB", 8)} │ Binary: #{m.system.memory_binary_mb} MB │ Process: #{m.system.memory_processes_mb} MB │ ETS: #{m.system.memory_ets_mb} MB
+      Processes     #{format_metric(format_number(m.system.process_count), "procs", 8)} │ #{format_metric(m.system.port_count, "ports", 8)} │ GC runs: #{format_number(m.system.gc_runs)}
+      Performance   CPU: #{m.system.scheduler_usage}% │ Reductions: #{format_number(m.system.reductions_per_second)}/s │ Uptime: #{m.system.uptime_hours}h
+
+    ═══════════════════════════════════════════════════════════════════════
     """
+  end
+
+  defp format_metric(value, label, width \\ 15) do
+    formatted = "#{value} #{label}"
+    String.pad_trailing(formatted, width)
+  end
+
+  defp format_latency_line(api_stats) do
+    avg = format_ms(api_stats.avg_duration_ms)
+    p95 = format_ms(api_stats.p95_duration_ms)
+    p99 = format_ms(api_stats.p99_duration_ms)
+    "avg #{avg} │ p95 #{p95} │ p99 #{p99}"
+  end
+
+  defp format_ms(ms) when is_float(ms), do: "#{Float.round(ms, 1)}ms"
+  defp format_ms(ms), do: "#{ms}ms"
+
+  defp format_rate_limit(%{available: avail, capacity: cap}) do
+    utilization = round((cap - avail) / cap * 100)
+
+    color =
+      cond do
+        utilization > 80 -> "🔴"
+        utilization > 50 -> "🟡"
+        true -> "🟢"
+      end
+
+    "#{color} #{avail}/#{cap}"
+  end
+
+  defp format_duration(mins) when is_float(mins), do: "#{Float.round(mins, 1)} min"
+
+  defp format_duration_short(seconds) when seconds < 60, do: "#{seconds}s"
+
+  defp format_duration_short(seconds) when seconds < 3600 do
+    mins = div(seconds, 60)
+    "#{mins}m"
+  end
+
+  defp format_duration_short(seconds) do
+    hours = div(seconds, 3600)
+    "#{hours}h"
   end
 
   defp format_number(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)} M"

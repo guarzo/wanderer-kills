@@ -47,6 +47,7 @@ defmodule WandererKills.App.Application do
            WandererKills.Observability.ApiTracker,
            WandererKills.Observability.Metrics,
            WandererKills.Observability.Monitoring,
+           WandererKills.Observability.TelemetryMetrics,
            WandererKills.Observability.WebSocketStats,
            WandererKills.Observability.UnifiedStatus,
            WandererKillsWeb.Endpoint,

@@ -44,13 +44,37 @@ defmodule WandererKills.Preloader do
   """
   @spec preload_kills_for_system(system_id(), limit(), hours()) :: [killmail()]
   def preload_kills_for_system(system_id, limit, since_hours \\ 24) do
-    case Helper.list_system_killmails(system_id) do
-      {:ok, killmail_ids} when is_list(killmail_ids) and killmail_ids != [] ->
-        get_enriched_killmails(killmail_ids, limit)
+    Logger.info("📦 Preloading kills for system",
+      system_id: system_id,
+      limit: limit,
+      since_hours: since_hours
+    )
 
-      _ ->
-        fetch_and_cache_fresh_kills(system_id, limit, since_hours)
-    end
+    result =
+      case Helper.list_system_killmails(system_id) do
+        {:ok, killmail_ids} when is_list(killmail_ids) and killmail_ids != [] ->
+          Logger.info("📦 Found cached killmails, using cache",
+            system_id: system_id,
+            cached_count: length(killmail_ids)
+          )
+
+          get_enriched_killmails(killmail_ids, limit)
+
+        _ ->
+          Logger.info("📦 No cached killmails found, fetching fresh data",
+            system_id: system_id
+          )
+
+          fetch_and_cache_fresh_kills(system_id, limit, since_hours)
+      end
+
+    Logger.info("📦 Preload completed",
+      system_id: system_id,
+      returned_count: length(result),
+      requested_limit: limit
+    )
+
+    result
   end
 
   @doc """
@@ -254,7 +278,7 @@ defmodule WandererKills.Preloader do
   # Private functions
 
   defp fetch_and_cache_fresh_kills(system_id, limit, since_hours) do
-    Logger.debug("📦 No cached kills found, fetching fresh kills",
+    Logger.info("📦 Fetching fresh kills from ZKillboard",
       system_id: system_id,
       limit: limit,
       since_hours: since_hours
@@ -265,13 +289,18 @@ defmodule WandererKills.Preloader do
         # Only process the number of kills we need for preload
         kills_to_cache = Enum.take(fresh_kills, limit)
 
+        Logger.info("📦 Processing fresh kills through pipeline",
+          system_id: system_id,
+          fetched_count: length(fresh_kills),
+          processing_count: length(kills_to_cache)
+        )
+
         # Cache the kills through the pipeline
         KillmailManager.process_system_killmails(system_id, kills_to_cache)
 
-        Logger.debug("📦 Fetched and cached fresh kills",
+        Logger.info("📦 Fresh kills cached successfully",
           system_id: system_id,
-          fresh_kills_fetched: length(fresh_kills),
-          kills_to_process: length(kills_to_cache)
+          cached_count: length(kills_to_cache)
         )
 
         # Now get the enriched killmails from cache
@@ -312,7 +341,7 @@ defmodule WandererKills.Preloader do
         end
 
       {:error, reason} ->
-        Logger.debug("📦 Failed to fetch fresh kills for preload",
+        Logger.warning("📦 Failed to fetch fresh kills for preload",
           system_id: system_id,
           error: reason
         )
