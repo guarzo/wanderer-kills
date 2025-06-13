@@ -58,5 +58,4 @@ defmodule WandererKills.Subscriptions.SystemIndex do
   use WandererKills.Subscriptions.BaseIndex,
     entity_type: :system,
     table_name: :system_subscription_index
-
 end

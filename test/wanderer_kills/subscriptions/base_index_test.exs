@@ -9,22 +9,51 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
   end
 
   setup do
-    # Start the test index if not already started
-    case GenServer.whereis(TestEntityIndex) do
-      nil -> 
-        {:ok, _pid} = TestEntityIndex.start_link([])
-      _pid -> 
-        :ok
-    end
-    
+    # Ensure the test index is always available
+    ensure_test_index_running()
+
     # Clear the index before each test
-    TestEntityIndex.clear()
+    safe_clear()
 
     on_exit(fn ->
-      TestEntityIndex.clear()
+      # Clean up after test
+      safe_clear()
     end)
 
     :ok
+  end
+
+  defp ensure_test_index_running do
+    case GenServer.whereis(TestEntityIndex) do
+      nil ->
+        {:ok, _pid} = TestEntityIndex.start_link([])
+
+      pid ->
+        # Check if process is actually alive
+        if Process.alive?(pid) do
+          :ok
+        else
+          # Process is dead but still registered, restart it
+          {:ok, _pid} = TestEntityIndex.start_link([])
+        end
+    end
+  end
+
+  defp safe_clear do
+    try do
+      if GenServer.whereis(TestEntityIndex) do
+        TestEntityIndex.clear()
+      end
+    rescue
+      _ ->
+        # If clear fails, just ensure it's running for next test
+        # Don't try to clear again to avoid infinite loop
+        ensure_test_index_running()
+    catch
+      :exit, _ ->
+        # Handle GenServer call timeouts/exits
+        ensure_test_index_running()
+    end
   end
 
   describe "BaseIndex behaviour compliance" do
@@ -75,10 +104,10 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
 
     test "logs warning for large entity lists" do
       large_entity_list = Enum.to_list(1..25)
-      
+
       # This should trigger the large list warning (>20 entities)
       TestEntityIndex.add_subscription("sub_large", large_entity_list)
-      
+
       # Verify all entities are indexed
       Enum.each(large_entity_list, fn entity_id ->
         assert TestEntityIndex.find_subscriptions_for_entity(entity_id) == ["sub_large"]
@@ -129,7 +158,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
     test "updates non-existent subscription" do
       # Should create the subscription
       TestEntityIndex.update_subscription("sub_new", [999])
-      
+
       assert TestEntityIndex.find_subscriptions_for_entity(999) == ["sub_new"]
     end
   end
@@ -316,7 +345,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
   describe "ETS configuration" do
     test "creates ETS table with correct options" do
       info = :ets.info(:test_entity_subscription_index)
-      
+
       assert info[:type] == :set
       assert info[:protection] == :public
       assert info[:named_table] == true
@@ -330,10 +359,10 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
       # Add and then remove a subscription to potentially create empty entries
       TestEntityIndex.add_subscription("temp_sub", [123, 456])
       TestEntityIndex.remove_subscription("temp_sub")
-      
+
       # Force cleanup
       WandererKills.Subscriptions.BaseIndex.cleanup_empty_entries(:test_entity_subscription_index)
-      
+
       # Verify no entries remain
       stats = TestEntityIndex.get_stats()
       assert stats.total_test_entity_entries == 0

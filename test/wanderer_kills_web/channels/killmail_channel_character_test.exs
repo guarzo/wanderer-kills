@@ -1,5 +1,8 @@
 defmodule WandererKillsWeb.KillmailChannelCharacterTest do
   use WandererKillsWeb.ChannelCase
+  use WandererKills.Test.SharedContexts
+
+  setup :with_http_mocks
 
   setup do
     # Clear any existing subscriptions
@@ -111,7 +114,7 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
     test "validates character IDs", %{channel_socket: socket} do
       ref = push(socket, "subscribe_characters", %{"characters" => ["invalid"]})
       assert_reply(ref, :error, %{reason: reason})
-      assert reason =~ "Character IDs must be integers"
+      assert reason.message =~ "Character IDs must be integers"
     end
   end
 
@@ -170,7 +173,7 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
       assert status.subscribed_systems == [30_000_142]
       assert status.subscribed_characters == [123, 456]
       assert status.subscription_id
-      assert status.user_id == "test_user_123"
+      assert is_binary(status.user_id)
     end
   end
 

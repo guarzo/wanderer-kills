@@ -69,5 +69,4 @@ defmodule WandererKills.Subscriptions.CharacterIndex do
   use WandererKills.Subscriptions.BaseIndex,
     entity_type: :character,
     table_name: :character_subscription_index
-
 end

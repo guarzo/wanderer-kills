@@ -26,6 +26,38 @@ defmodule WandererKills.Test.SharedContexts do
   defmacro __using__(_opts) do
     quote do
       import WandererKills.Test.SharedContexts
+      import Cachex.Spec
+    end
+  end
+
+  @doc """
+  Ensures the :wanderer_cache is available for tests.
+
+  This function checks if the cache exists and starts it if needed.
+  """
+  def ensure_cache_available do
+    import Cachex.Spec
+    # Check if cache process is running by looking for it in the registry
+    case Process.whereis(:wanderer_cache) do
+      nil ->
+        # Start the cache manually for tests
+        opts = [
+          default_ttl: :timer.minutes(5),
+          expiration:
+            expiration(
+              interval: :timer.seconds(60),
+              default: :timer.minutes(5),
+              lazy: true
+            )
+        ]
+
+        case Cachex.start_link(:wanderer_cache, opts) do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+        end
+
+      _pid ->
+        :ok
     end
   end
 
@@ -57,6 +89,7 @@ defmodule WandererKills.Test.SharedContexts do
   This is the most commonly used setup function.
   """
   def with_clean_environment(_context \\ %{}) do
+    ensure_cache_available()
     WandererKills.TestHelpers.clear_all_caches()
     %{}
   end

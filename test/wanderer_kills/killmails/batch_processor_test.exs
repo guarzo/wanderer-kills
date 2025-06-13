@@ -252,8 +252,8 @@ defmodule WandererKills.Killmails.BatchProcessorTest do
       ]
 
       subscriptions = %{
-        "sub_1" => %{"id" => "sub_1"},
-        "sub_2" => %{"id" => "sub_2"}
+        "sub_1" => %{"id" => "sub_1", "system_ids" => [], "character_ids" => [123, 456]},
+        "sub_2" => %{"id" => "sub_2", "system_ids" => [], "character_ids" => [456, 789]}
       }
 
       result = BatchProcessor.group_killmails_by_subscription(killmails, subscriptions)
@@ -282,8 +282,8 @@ defmodule WandererKills.Killmails.BatchProcessorTest do
 
       # Only include sub_1 and sub_2 in subscriptions map
       subscriptions = %{
-        "sub_1" => %{"id" => "sub_1"},
-        "sub_2" => %{"id" => "sub_2"}
+        "sub_1" => %{"id" => "sub_1", "system_ids" => [], "character_ids" => [123, 456]},
+        "sub_2" => %{"id" => "sub_2", "system_ids" => [], "character_ids" => [456, 789]}
       }
 
       result = BatchProcessor.group_killmails_by_subscription(killmails, subscriptions)
@@ -316,7 +316,11 @@ defmodule WandererKills.Killmails.BatchProcessorTest do
           }
         end
 
-      subscriptions = Map.new(1..100, fn i -> {"sub_#{i}", %{"id" => "sub_#{i}"}} end)
+      subscriptions =
+        Map.new(1..100, fn i ->
+          characters = Enum.to_list((i * 10)..(i * 10 + 9))
+          {"sub_#{i}", %{"id" => "sub_#{i}", "system_ids" => [], "character_ids" => characters}}
+        end)
 
       {time, result} =
         :timer.tc(fn ->
