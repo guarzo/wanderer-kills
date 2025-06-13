@@ -508,10 +508,10 @@ defmodule WandererKills.SubscriptionManager do
   defp validate_system_ids([]), do: :ok
 
   defp validate_system_ids(system_ids) do
-    if Enum.all?(system_ids, &is_integer/1) do
+    if Enum.all?(system_ids, fn id -> is_integer(id) and id > 0 end) do
       :ok
     else
-      {:error, "All system IDs must be integers"}
+      {:error, "All system IDs must be positive integers"}
     end
   end
 
@@ -519,10 +519,10 @@ defmodule WandererKills.SubscriptionManager do
   defp validate_character_ids([]), do: :ok
 
   defp validate_character_ids(character_ids) do
-    if Enum.all?(character_ids, &is_integer/1) do
+    if Enum.all?(character_ids, fn id -> is_integer(id) and id > 0 end) do
       :ok
     else
-      {:error, "All character IDs must be integers"}
+      {:error, "All character IDs must be positive integers"}
     end
   end
 
@@ -530,9 +530,9 @@ defmodule WandererKills.SubscriptionManager do
     "sub_" <> Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
   end
 
-  # Public version for use in client API
+  # Public version for use in client API (reuses generate_subscription_id/0)
   defp generate_subscription_id_sync do
-    "sub_" <> Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
+    generate_subscription_id()
   end
 
   defp send_webhook_notifications(subscriptions, system_id, kills) do

@@ -306,10 +306,11 @@ defmodule WandererKills.Observability.Telemetry do
       [:wanderer_kills, :character, :match],
       %{
         duration: duration_native,
-        match_found: if(match_found, do: 1, else: 0),
         character_count: character_count
       },
-      %{}
+      %{
+        match_found: match_found
+      }
     )
   end
 
@@ -733,7 +734,7 @@ defmodule WandererKills.Observability.Telemetry do
     case event do
       :match ->
         duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-        match_status = if measurements.match_found == 1, do: "match", else: "no match"
+        match_status = if metadata.match_found, do: "match", else: "no match"
 
         Logger.debug(
           "[Character] Matching completed in #{duration_ms}ms (#{match_status}) for #{measurements.character_count} characters"

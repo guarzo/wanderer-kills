@@ -33,7 +33,7 @@ defmodule WandererKills.RedisQ do
   Gets the base URL for RedisQ API calls.
   """
   def base_url do
-    Config.services().redisq_base_url || "https://zkillredisq.stream/listen.php"
+    Config.get([:redisq, :base_url])
   end
 
   @doc """

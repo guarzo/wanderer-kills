@@ -1,5 +1,5 @@
 defmodule WandererKillsWeb.KillmailChannelCharacterTest do
-  use WandererKillsWeb.ChannelCase
+  use WandererKillsWeb.ChannelCase, async: false
   use WandererKills.Test.SharedContexts
 
   setup :with_http_mocks

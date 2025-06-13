@@ -48,12 +48,15 @@ defmodule WandererKillsWeb.SubscriptionController do
             _ -> inspect(reason)
           end
 
+        # Ensure details field is JSON-serializable
+        details = serialize_error_details(reason)
+
         conn
         |> put_status(:bad_request)
         |> json(%{
           error: %{
             message: message,
-            details: reason
+            details: details
           }
         })
     end
@@ -114,12 +117,15 @@ defmodule WandererKillsWeb.SubscriptionController do
             _ -> inspect(reason)
           end
 
+        # Ensure details field is JSON-serializable
+        details = serialize_error_details(reason)
+
         conn
         |> put_status(:bad_request)
         |> json(%{
           error: %{
             message: message,
-            details: reason
+            details: details
           }
         })
     end
@@ -209,6 +215,29 @@ defmodule WandererKillsWeb.SubscriptionController do
 
       _ ->
         false
+    end
+  end
+
+  # Converts error reasons to JSON-serializable format
+  defp serialize_error_details(reason) do
+    case reason do
+      %Error{} = error ->
+        # Include structured error information for Error structs
+        %{
+          domain: error.domain,
+          type: error.type,
+          message: Error.to_string(error),
+          retryable: error.retryable
+        }
+
+      binary when is_binary(binary) ->
+        binary
+
+      atom when is_atom(atom) ->
+        Atom.to_string(atom)
+
+      _ ->
+        inspect(reason)
     end
   end
 end

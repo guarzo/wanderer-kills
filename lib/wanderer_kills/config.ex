@@ -100,7 +100,9 @@ defmodule WandererKills.Config do
     },
     monitoring: %{
       status_interval_ms: 300_000,
-      health_check_interval_ms: 60_000
+      health_check_interval_ms: 60_000,
+      health_check_timeout_ms: 10_000,
+      health_check_cache_timeout_ms: 5_000
     },
     telemetry: %{
       enabled_metrics: [:cache, :api, :circuit, :event],
@@ -294,8 +296,8 @@ defmodule WandererKills.Config do
       zkb_request_ms: get([:zkb, :request_timeout_ms]),
       http_request_ms: get([:http, :request_timeout_ms]),
       default_request_ms: get([:http, :default_timeout_ms]),
-      health_check_ms: get(:health_check_timeout_ms, 10_000),
-      health_check_cache_ms: get(:health_check_cache_timeout_ms, 5_000),
+      health_check_ms: get([:monitoring, :health_check_timeout_ms]),
+      health_check_cache_ms: get([:monitoring, :health_check_cache_timeout_ms]),
       gen_server_call_ms: gen_server_call_timeout()
     }
   end
@@ -396,7 +398,9 @@ defmodule WandererKills.Config do
       "parser_" => :parser,
       "enricher_" => :enricher,
       "telemetry_" => :telemetry,
-      "websocket_" => :websocket
+      "websocket_" => :websocket,
+      "monitoring_" => :monitoring,
+      "health_check_" => :monitoring
     }
 
     case find_prefix_match(key_string, prefix_map) do

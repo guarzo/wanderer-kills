@@ -73,20 +73,25 @@ defmodule WandererKills.Observability.HealthChecks do
     handle_health_check_request(components, timeout)
   end
 
-  defp handle_health_check_request([:application], timeout) do
-    check_single_component_health(:application, timeout, &check_application_health/1)
-  end
+  # Map of component atoms to their health check functions
+  @health_check_functions %{
+    application: &__MODULE__.check_application_health/1,
+    cache: &__MODULE__.check_cache_health/1,
+    character_subscriptions: &__MODULE__.check_character_subscription_health/1
+  }
 
-  defp handle_health_check_request([:cache], timeout) do
-    check_single_component_health(:cache, timeout, &check_cache_health/1)
-  end
+  # Map of component atoms to their metrics functions
+  @metrics_functions %{
+    application: &__MODULE__.get_application_metrics/1,
+    cache: &__MODULE__.get_cache_metrics/1,
+    character_subscriptions: &__MODULE__.get_character_subscription_metrics/1
+  }
 
-  defp handle_health_check_request([:character_subscriptions], timeout) do
-    check_single_component_health(
-      :character_subscriptions,
-      timeout,
-      &check_character_subscription_health/1
-    )
+  defp handle_health_check_request([component], timeout) when is_atom(component) do
+    case Map.get(@health_check_functions, component) do
+      nil -> {:error, "Unknown component: #{component}"}
+      check_fn -> check_single_component_health(component, timeout, check_fn)
+    end
   end
 
   defp handle_health_check_request(components, timeout) when is_list(components) do
@@ -107,11 +112,17 @@ defmodule WandererKills.Observability.HealthChecks do
       {:ok, health} ->
         health
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        require Logger
+        Logger.warning("Health check failed for component #{component}: #{inspect(reason)}")
+
         %{
           healthy: false,
           status: "error",
-          details: %{component: Atom.to_string(component)},
+          details: %{
+            component: Atom.to_string(component),
+            error_reason: inspect(reason)
+          },
           timestamp: WandererKills.Support.Clock.now_iso8601()
         }
     end
@@ -145,20 +156,11 @@ defmodule WandererKills.Observability.HealthChecks do
     handle_metrics_request(components, timeout)
   end
 
-  defp handle_metrics_request([:application], timeout) do
-    get_single_component_metrics(:application, timeout, &get_application_metrics/1)
-  end
-
-  defp handle_metrics_request([:cache], timeout) do
-    get_single_component_metrics(:cache, timeout, &get_cache_metrics/1)
-  end
-
-  defp handle_metrics_request([:character_subscriptions], timeout) do
-    get_single_component_metrics(
-      :character_subscriptions,
-      timeout,
-      &get_character_subscription_metrics/1
-    )
+  defp handle_metrics_request([component], timeout) when is_atom(component) do
+    case Map.get(@metrics_functions, component) do
+      nil -> {:error, "Unknown component: #{component}"}
+      metrics_fn -> get_single_component_metrics(component, timeout, metrics_fn)
+    end
   end
 
   defp handle_metrics_request(components, timeout) when is_list(components) do
@@ -178,11 +180,17 @@ defmodule WandererKills.Observability.HealthChecks do
       {:ok, metrics} ->
         metrics
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        require Logger
+        Logger.warning("Metrics collection failed for component #{component}: #{inspect(reason)}")
+
         %{
           component: Atom.to_string(component),
           timestamp: WandererKills.Support.Clock.now_iso8601(),
-          metrics: %{error: "Failed to collect metrics"}
+          metrics: %{
+            error: "Failed to collect metrics",
+            error_reason: inspect(reason)
+          }
         }
     end
   end

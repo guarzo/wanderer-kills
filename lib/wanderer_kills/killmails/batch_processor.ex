@@ -102,11 +102,12 @@ defmodule WandererKills.Killmails.BatchProcessor do
       end)
 
     duration = System.monotonic_time() - start_time
+    duration_ms = System.convert_time_unit(duration, :native, :millisecond)
 
     :telemetry.execute(
       [:wanderer_kills, :batch_processor, :extract_characters],
       %{
-        duration: duration,
+        duration: duration_ms,
         killmail_count: killmail_count,
         character_count: MapSet.size(result)
       },
@@ -171,12 +172,13 @@ defmodule WandererKills.Killmails.BatchProcessor do
       end)
 
     duration = System.monotonic_time() - start_time
+    duration_ms = System.convert_time_unit(duration, :native, :millisecond)
     total_matches = result |> Map.values() |> Enum.map(&length/1) |> Enum.sum()
 
     :telemetry.execute(
       [:wanderer_kills, :batch_processor, :match_killmails],
       %{
-        duration: duration,
+        duration: duration_ms,
         killmail_count: killmail_count,
         subscription_count: subscription_count,
         match_count: total_matches,
@@ -230,12 +232,13 @@ defmodule WandererKills.Killmails.BatchProcessor do
       end)
 
     duration = System.monotonic_time() - start_time
+    duration_ms = System.convert_time_unit(duration, :native, :millisecond)
     total_subscriptions = result |> Map.values() |> Enum.map(&length/1) |> Enum.sum()
 
     :telemetry.execute(
       [:wanderer_kills, :batch_processor, :find_subscriptions],
       %{
-        duration: duration,
+        duration: duration_ms,
         killmail_count: killmail_count,
         matched_killmail_count: map_size(result),
         total_subscription_matches: total_subscriptions
@@ -291,12 +294,13 @@ defmodule WandererKills.Killmails.BatchProcessor do
       end)
 
     duration = System.monotonic_time() - start_time
+    duration_ms = System.convert_time_unit(duration, :native, :millisecond)
     total_grouped_killmails = result |> Map.values() |> Enum.map(&length/1) |> Enum.sum()
 
     :telemetry.execute(
       [:wanderer_kills, :batch_processor, :group_killmails],
       %{
-        duration: duration,
+        duration: duration_ms,
         killmail_count: killmail_count,
         subscription_count: subscription_count,
         grouped_subscription_count: map_size(result),
@@ -342,7 +346,27 @@ defmodule WandererKills.Killmails.BatchProcessor do
   end
 
   defp find_matching_killmails(killmails, killmail_characters, character_set) do
-    killmails
+    {valid_killmails, invalid_killmails} =
+      killmails
+      |> Enum.split_with(fn killmail ->
+        killmail_id = killmail["killmail_id"]
+        killmail_id != nil and Map.has_key?(killmail_characters, killmail_id)
+      end)
+
+    # Log warning if we found killmails without valid IDs
+    invalid_count = length(invalid_killmails)
+
+    if invalid_count > 0 do
+      require Logger
+
+      Logger.warning("⚠️ Skipping killmails without valid killmail_id in batch processing",
+        invalid_count: invalid_count,
+        total_count: length(killmails)
+      )
+    end
+
+    # Filter valid killmails by character matching
+    valid_killmails
     |> Enum.filter(fn killmail ->
       killmail_chars = Map.get(killmail_characters, killmail["killmail_id"], MapSet.new())
       not MapSet.disjoint?(killmail_chars, character_set)

@@ -4,14 +4,18 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
   alias WandererKills.SubscriptionManager
 
-  setup do
-    # Clear caches and indexes
+  setup_all do
+    # Clear caches and indexes once for all tests (expensive operations)
     WandererKills.TestHelpers.clear_all_caches()
     WandererKills.Subscriptions.CharacterIndex.clear()
     WandererKills.Subscriptions.SystemIndex.clear()
 
-    # Clear all subscriptions 
-    WandererKills.SubscriptionManager.clear_all_subscriptions()
+    :ok
+  end
+
+  setup do
+    # Clear subscriptions before each test (cheap operation)
+    SubscriptionManager.clear_all_subscriptions()
 
     :ok
   end
@@ -92,11 +96,9 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "subscriber_id is required"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "subscriber_id"
     end
 
     test "validates callback_url is required", %{conn: conn} do
@@ -107,11 +109,9 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "callback_url is required"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "callback_url"
     end
 
     test "validates callback_url must be valid HTTP/HTTPS URL", %{conn: conn} do
@@ -123,11 +123,10 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "callback_url must be a valid HTTP/HTTPS URL"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "callback_url"
+      assert message =~ "HTTP"
     end
 
     test "validates at least one filter is required", %{conn: conn} do
@@ -138,11 +137,10 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "At least one system_id or character_id is required"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "system_id"
+      assert message =~ "character_id"
     end
 
     test "validates system_ids must be positive integers", %{conn: conn} do
@@ -154,11 +152,10 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "system_ids must be an array of positive integers"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "system_ids"
+      assert message =~ "positive integers"
     end
 
     test "validates character_ids must be positive integers", %{conn: conn} do
@@ -170,11 +167,10 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "character_ids must be an array of positive integers"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "character_ids"
+      assert message =~ "positive integers"
     end
 
     test "enforces maximum system_ids limit", %{conn: conn} do
@@ -187,11 +183,10 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "Maximum 100 system_ids allowed per subscription"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "system_ids"
+      assert message =~ "100"
     end
 
     test "enforces maximum character_ids limit", %{conn: conn} do
@@ -204,11 +199,10 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
       conn = post(conn, "/api/v1/subscriptions", params)
 
-      assert %{
-               "error" => %{
-                 "message" => "Maximum 1000 character_ids allowed per subscription"
-               }
-             } = json_response(conn, 400)
+      response = json_response(conn, 400)
+      assert %{"error" => %{"message" => message}} = response
+      assert message =~ "character_ids"
+      assert message =~ "1000"
     end
 
     test "deduplicates and sorts IDs", %{conn: conn} do

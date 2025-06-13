@@ -322,9 +322,24 @@ defmodule WandererKills.Subscriptions.BaseIndex do
     end
 
     # Update the forward index (entity_id -> subscription_ids)
-    Enum.each(entity_ids, fn entity_id ->
-      update_entity_index(table_name, entity_id, subscription_id, :add)
-    end)
+    # For large entity lists (>100 entities), use parallel processing to reduce blocking time
+    if entity_count > 100 do
+      # Use parallel processing for large entity lists to reduce GenServer blocking time
+      Task.async_stream(
+        entity_ids,
+        fn entity_id ->
+          update_entity_index(table_name, entity_id, subscription_id, :add)
+        end,
+        max_concurrency: System.schedulers_online(),
+        timeout: 30_000
+      )
+      |> Stream.run()
+    else
+      # For smaller lists, use simple Enum.each as it's more efficient
+      Enum.each(entity_ids, fn entity_id ->
+        update_entity_index(table_name, entity_id, subscription_id, :add)
+      end)
+    end
 
     # Update the reverse index
     new_reverse_index = Map.put(state.reverse_index, subscription_id, entity_ids)
@@ -360,14 +375,42 @@ defmodule WandererKills.Subscriptions.BaseIndex do
     to_add = MapSet.difference(MapSet.new(new_entity_ids), MapSet.new(old_entity_ids))
 
     # Remove subscription from old entities
-    Enum.each(to_remove, fn entity_id ->
-      update_entity_index(table_name, entity_id, subscription_id, :remove)
-    end)
+    to_remove_list = MapSet.to_list(to_remove)
+    to_add_list = MapSet.to_list(to_add)
 
-    # Add subscription to new entities
-    Enum.each(to_add, fn entity_id ->
-      update_entity_index(table_name, entity_id, subscription_id, :add)
-    end)
+    # Process removals with parallel processing for large lists
+    if length(to_remove_list) > 100 do
+      Task.async_stream(
+        to_remove_list,
+        fn entity_id ->
+          update_entity_index(table_name, entity_id, subscription_id, :remove)
+        end,
+        max_concurrency: System.schedulers_online(),
+        timeout: 30_000
+      )
+      |> Stream.run()
+    else
+      Enum.each(to_remove_list, fn entity_id ->
+        update_entity_index(table_name, entity_id, subscription_id, :remove)
+      end)
+    end
+
+    # Process additions with parallel processing for large lists
+    if length(to_add_list) > 100 do
+      Task.async_stream(
+        to_add_list,
+        fn entity_id ->
+          update_entity_index(table_name, entity_id, subscription_id, :add)
+        end,
+        max_concurrency: System.schedulers_online(),
+        timeout: 30_000
+      )
+      |> Stream.run()
+    else
+      Enum.each(to_add_list, fn entity_id ->
+        update_entity_index(table_name, entity_id, subscription_id, :add)
+      end)
+    end
 
     # Update the reverse index
     new_reverse_index =
@@ -404,9 +447,25 @@ defmodule WandererKills.Subscriptions.BaseIndex do
     entity_ids = Map.get(state.reverse_index, subscription_id, [])
 
     # Remove the subscription from all entity entries
-    Enum.each(entity_ids, fn entity_id ->
-      update_entity_index(table_name, entity_id, subscription_id, :remove)
-    end)
+    entity_count = length(entity_ids)
+
+    if entity_count > 100 do
+      # Use parallel processing for large entity lists to reduce GenServer blocking time
+      Task.async_stream(
+        entity_ids,
+        fn entity_id ->
+          update_entity_index(table_name, entity_id, subscription_id, :remove)
+        end,
+        max_concurrency: System.schedulers_online(),
+        timeout: 30_000
+      )
+      |> Stream.run()
+    else
+      # For smaller lists, use simple Enum.each as it's more efficient
+      Enum.each(entity_ids, fn entity_id ->
+        update_entity_index(table_name, entity_id, subscription_id, :remove)
+      end)
+    end
 
     # Remove from reverse index
     new_reverse_index = Map.delete(state.reverse_index, subscription_id)

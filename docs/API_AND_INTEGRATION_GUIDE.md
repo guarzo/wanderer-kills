@@ -238,6 +238,7 @@ channel.push('unsubscribe_characters', { character_ids: [95465499] })
 | `character_ids` | integer[] | EVE Online character IDs to track | Yes |
 
 **Example Character IDs:**
+
 - `95465499` - Example character ID
 - `90379338` - Another character ID
 

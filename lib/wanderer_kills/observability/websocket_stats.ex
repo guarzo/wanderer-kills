@@ -533,15 +533,18 @@ defmodule WandererKills.Observability.WebSocketStats do
   end
 
   defp extract_cache_metrics(stats) do
+    # The stats structure is flat, not nested under :value
+    calls = Map.get(stats, :calls, %{})
+
     %{
-      hits: get_in(stats, [:hits, :value]) || 0,
-      misses: get_in(stats, [:misses, :value]) || 0,
-      evictions: get_in(stats, [:evictions, :value]) || 0,
-      expirations: get_in(stats, [:expirations, :value]) || 0,
-      updates: get_in(stats, [:updates, :value]) || 0,
-      gets: get_in(stats, [:gets, :value]) || 0,
-      puts: get_in(stats, [:puts, :value]) || 0,
-      deletes: get_in(stats, [:deletes, :value]) || 0
+      hits: Map.get(stats, :hits, 0),
+      misses: Map.get(stats, :misses, 0),
+      evictions: Map.get(stats, :evictions, 0),
+      expirations: Map.get(stats, :expirations, 0),
+      updates: Map.get(stats, :updates, 0),
+      gets: Map.get(calls, :get, 0),
+      puts: Map.get(calls, :put, 0),
+      deletes: Map.get(calls, :del, 0)
     }
   end
 
@@ -594,9 +597,9 @@ defmodule WandererKills.Observability.WebSocketStats do
 
   # Helper function to calculate hit rate from Cachex stats
   defp calculate_hit_rate(stats) when is_map(stats) and map_size(stats) > 0 do
-    # Cachex stats returns a nested structure with counters
-    hits = get_in(stats, [:hits, :value]) || 0
-    misses = get_in(stats, [:misses, :value]) || 0
+    # Cachex stats has flat structure
+    hits = Map.get(stats, :hits, 0)
+    misses = Map.get(stats, :misses, 0)
     total_ops = hits + misses
 
     if total_ops > 0 do

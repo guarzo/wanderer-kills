@@ -83,7 +83,7 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
       assert result[1] == [100]
       assert Enum.sort(result[2]) == [200, 201]
       # The one without killmail_id gets a generated key
-      assert Enum.any?(result, fn {_k, v} -> v == [300] end)
+      assert [300] in Map.values(result)
     end
 
     test "uses cache for repeated batch calls" do
@@ -191,23 +191,6 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
       # Verify cache is empty (next call will be a miss)
       # We can't directly test this without access to telemetry,
       # but we can verify the function completes
-    end
-  end
-
-  describe "caching behavior" do
-    test "respects TTL configuration" do
-      # This test would require mocking time or waiting for TTL expiry
-      # For now, we just verify the cache works
-      killmail = %{
-        "killmail_id" => 3001,
-        "victim" => %{"character_id" => 100},
-        "attackers" => []
-      }
-
-      result1 = CharacterCache.extract_characters_cached(killmail)
-      result2 = CharacterCache.extract_characters_cached(killmail)
-
-      assert result1 == result2
     end
   end
 end

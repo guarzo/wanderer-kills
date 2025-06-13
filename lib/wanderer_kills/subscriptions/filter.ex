@@ -76,10 +76,18 @@ defmodule WandererKills.Subscriptions.Filter do
   """
   @spec matches_subscription?(map(), map()) :: boolean()
   def matches_subscription?(killmail, subscription) do
-    system_match = check_system_match(killmail, subscription)
-    character_match = check_character_match(killmail, subscription)
+    system_ids = subscription["system_ids"] || []
+    character_ids = subscription["character_ids"] || []
 
-    system_match or character_match
+    # If both lists are empty, this is a wildcard subscription (match everything)
+    if Enum.empty?(system_ids) and Enum.empty?(character_ids) do
+      true
+    else
+      system_match = check_system_match(killmail, subscription)
+      character_match = check_character_match(killmail, subscription)
+
+      system_match or character_match
+    end
   end
 
   @doc """

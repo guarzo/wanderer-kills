@@ -14,6 +14,25 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
   alias WandererKills.Killmails.{CharacterCache, BatchProcessor}
   alias WandererKills.Storage.KillmailStore
 
+  # Helper function to poll for eventual consistency
+  defp assert_eventually(check_fn, timeout \\ 1000) do
+    end_time = System.monotonic_time(:millisecond) + timeout
+    assert_eventually_loop(check_fn, end_time)
+  end
+
+  defp assert_eventually_loop(check_fn, end_time) do
+    if check_fn.() do
+      :ok
+    else
+      if System.monotonic_time(:millisecond) < end_time do
+        Process.sleep(10)
+        assert_eventually_loop(check_fn, end_time)
+      else
+        flunk("Expected condition was not met within timeout")
+      end
+    end
+  end
+
   setup do
     # Clear all state without restarting the application
     WandererKills.TestHelpers.clear_all_caches()
@@ -110,12 +129,11 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
         "character_ids" => [95_465_499, 90_379_338, 12_345_678]
       })
 
-      # Give a moment for async update to complete
-      Process.sleep(10)
-
-      # Verify character index is updated
-      char_subs_3 = CharacterIndex.find_subscriptions_for_entity(12_345_678)
-      assert subscription_id in char_subs_3
+      # Poll until character index is updated (replace fixed sleep)
+      assert_eventually(fn ->
+        char_subs_3 = CharacterIndex.find_subscriptions_for_entity(12_345_678)
+        subscription_id in char_subs_3
+      end)
 
       # Test updated filtering
       new_char_killmail = %{
@@ -140,13 +158,12 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
       # Remove subscription
       SubscriptionManager.remove_websocket_subscription(subscription_id)
 
-      # Give a moment for async removal to complete
-      Process.sleep(10)
-
-      # Verify character index is cleaned up
-      assert CharacterIndex.find_subscriptions_for_entity(95_465_499) == []
-      assert CharacterIndex.find_subscriptions_for_entity(90_379_338) == []
-      assert CharacterIndex.find_subscriptions_for_entity(12_345_678) == []
+      # Poll until character index is cleaned up (replace fixed sleep)
+      assert_eventually(fn ->
+        CharacterIndex.find_subscriptions_for_entity(95_465_499) == [] and
+          CharacterIndex.find_subscriptions_for_entity(90_379_338) == [] and
+          CharacterIndex.find_subscriptions_for_entity(12_345_678) == []
+      end)
 
       # Verify stats are updated
       final_stats = SubscriptionManager.get_stats()

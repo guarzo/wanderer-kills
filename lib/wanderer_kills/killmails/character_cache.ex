@@ -215,7 +215,7 @@ defmodule WandererKills.Killmails.CharacterCache do
           misses: misses,
           total_requests: total,
           hit_rate: Float.round(hit_rate, 2),
-          ttl_minutes: div(@default_ttl, 60_000)
+          ttl_minutes: div(Config.get([:character_cache, :ttl_ms], @default_ttl), 60_000)
         }
 
       {:error, _} ->
@@ -228,12 +228,43 @@ defmodule WandererKills.Killmails.CharacterCache do
 
   @doc """
   Clears all character extraction cache entries.
+
+  This function only clears entries within the character extraction namespace,
+  preserving other cached data like ESI data, system data, and ship types.
   """
   @spec clear_cache() :: :ok
   def clear_cache do
-    # Clear cache using the configured adapter
-    case cache_adapter().clear(@cache_name) do
+    adapter = cache_adapter()
+
+    case adapter do
+      Cachex -> clear_cachex_namespace()
+      _ -> clear_generic_cache(adapter)
+    end
+  end
+
+  # Clear only character extraction namespace from Cachex
+  defp clear_cachex_namespace do
+    case Cachex.keys(@cache_name) do
+      {:ok, all_keys} ->
+        namespace_keys = Enum.filter(all_keys, &String.starts_with?(&1, @namespace <> ":"))
+
+        # Delete only the character extraction keys
+        Enum.each(namespace_keys, &Cachex.del(@cache_name, &1))
+
+        Logger.debug("Cleared #{length(namespace_keys)} character cache entries")
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to get cache keys for clearing: #{inspect(reason)}")
+        :ok
+    end
+  end
+
+  # Clear entire cache for non-Cachex adapters (primarily for testing)
+  defp clear_generic_cache(adapter) do
+    case adapter.clear(@cache_name) do
       {:ok, _count} ->
+        Logger.debug("Cleared entire cache (using non-Cachex adapter)")
         :ok
 
       {:error, _} ->
@@ -249,10 +280,24 @@ defmodule WandererKills.Killmails.CharacterCache do
   end
 
   defp get_from_cache(key) do
-    case cache_adapter().get(@cache_name, key) do
+    adapter = cache_adapter()
+
+    result =
+      case adapter do
+        Cachex ->
+          # Cachex supports get/3 with options
+          Cachex.get(@cache_name, key, [])
+
+        _ ->
+          # Other adapters use get/2 from the behavior
+          adapter.get(@cache_name, key)
+      end
+
+    case result do
       {:ok, nil} -> {:error, :not_found}
       {:ok, value} -> {:ok, value}
-      error -> error
+      # Propagate genuine errors properly
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -278,32 +323,34 @@ defmodule WandererKills.Killmails.CharacterCache do
         {km["killmail_id"], build_cache_key(km["killmail_id"]), km}
       end)
 
-    # Batch check cache
-    {cached, uncached} =
-      Enum.split_with(cache_checks, fn {_id, key, _km} ->
-        cached?(key)
-      end)
-
-    # Get cached results
-    cached_results =
-      cached
+    # Optimized: Single cache operation per key instead of exists? + get
+    {cached_results, uncached} =
+      cache_checks
       |> Task.async_stream(
-        fn {id, key, _km} ->
+        fn {id, key, km} ->
           case get_from_cache(key) do
-            {:ok, chars} -> {id, chars}
-            _ -> nil
+            {:ok, chars} -> {:cached, {id, chars}}
+            {:error, :not_found} -> {:uncached, {id, key, km}}
+            # Treat other errors as cache miss
+            _ -> {:uncached, {id, key, km}}
           end
         end,
         max_concurrency: System.schedulers_online(),
         ordered: false
       )
-      |> Enum.reduce(%{}, fn
-        {:ok, {id, chars}}, acc when not is_nil(chars) ->
-          Map.put(acc, id, chars)
+      |> Enum.reduce({[], []}, fn
+        {:ok, {:cached, result}}, {cached_acc, uncached_acc} ->
+          {[result | cached_acc], uncached_acc}
 
-        _, acc ->
-          acc
+        {:ok, {:uncached, item}}, {cached_acc, uncached_acc} ->
+          {cached_acc, [item | uncached_acc]}
+
+        _, {cached_acc, uncached_acc} ->
+          {cached_acc, uncached_acc}
       end)
+
+    # Convert cached results to map
+    cached_results_map = Map.new(cached_results)
 
     # Process uncached killmails
     uncached_results =
@@ -323,7 +370,7 @@ defmodule WandererKills.Killmails.CharacterCache do
       end)
 
     # Report telemetry
-    hit_count = map_size(cached_results)
+    hit_count = map_size(cached_results_map)
     miss_count = map_size(uncached_results)
     total = length(killmails)
 
@@ -349,6 +396,6 @@ defmodule WandererKills.Killmails.CharacterCache do
       )
     end
 
-    Map.merge(cached_results, uncached_results)
+    Map.merge(cached_results_map, uncached_results)
   end
 end

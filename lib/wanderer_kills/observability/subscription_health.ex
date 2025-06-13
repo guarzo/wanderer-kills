@@ -170,8 +170,8 @@ defmodule WandererKills.Observability.SubscriptionHealth do
 
   defp check_index_performance(index_module, entity_type_string) do
     try do
-      # Use entity-appropriate test ID
-      test_entity_id = get_test_entity_id(entity_type_string)
+      # Use real entity ID from index stats for more realistic performance measurement
+      test_entity_id = get_realistic_test_entity_id(index_module, entity_type_string)
 
       {time_microseconds, _result} =
         :timer.tc(fn ->
@@ -394,7 +394,24 @@ defmodule WandererKills.Observability.SubscriptionHealth do
     Float.round(time_microseconds / 1000, 2)
   end
 
-  defp get_test_entity_id(entity_type_string) do
+  defp get_realistic_test_entity_id(index_module, entity_type_string) do
+    try do
+      # Try to get real entity ID from index stats for more realistic performance
+      case index_module.get_stats() do
+        %{most_frequent_entity_id: entity_id} when not is_nil(entity_id) ->
+          entity_id
+
+        _ ->
+          # Fallback to synthetic ID if stats unavailable
+          get_fallback_test_entity_id(entity_type_string)
+      end
+    rescue
+      # If get_stats fails, fallback to synthetic ID
+      _ -> get_fallback_test_entity_id(entity_type_string)
+    end
+  end
+
+  defp get_fallback_test_entity_id(entity_type_string) do
     case entity_type_string do
       # Typical character ID
       "character" -> 123_456

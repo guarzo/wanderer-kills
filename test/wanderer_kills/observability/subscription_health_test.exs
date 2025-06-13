@@ -195,8 +195,8 @@ defmodule WandererKills.Observability.SubscriptionHealthTest do
       assert m.total_subscriptions == 3
       # Only 2 unique characters despite 3 subscriptions
       assert m.total_entity_entries == 2
-      # 2 entries / 3 subscriptions
-      assert m.index_efficiency == 0.67
+      # 2 entries / 3 subscriptions (2/3 ≈ 0.67)
+      assert_in_delta m.index_efficiency, 0.67, 0.01
     end
   end
 

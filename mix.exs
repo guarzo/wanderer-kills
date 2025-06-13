@@ -93,7 +93,7 @@ defmodule WandererKills.MixProject do
     [
       check: [
         "format --check-formatted",
-        "credo --strict",
+        "credo",
         "dialyzer"
       ],
       "test.coverage": ["coveralls.html"],

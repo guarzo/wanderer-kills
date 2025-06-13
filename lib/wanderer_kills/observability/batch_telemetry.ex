@@ -22,7 +22,7 @@ defmodule WandererKills.Observability.BatchTelemetry do
     :telemetry.attach_many(
       "wanderer-kills-batch-telemetry",
       @events,
-      &handle_event/4,
+      &__MODULE__.handle_event/4,
       nil
     )
   end

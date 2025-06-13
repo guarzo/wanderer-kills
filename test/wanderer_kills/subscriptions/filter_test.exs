@@ -121,7 +121,7 @@ defmodule WandererKills.Subscriptions.FilterTest do
       assert Filter.matches_subscription?(killmail, subscription)
     end
 
-    test "does not match when both filters are empty" do
+    test "matches everything when both filters are empty (wildcard subscription)" do
       subscription = %{
         "system_ids" => [],
         "character_ids" => []
@@ -132,7 +132,8 @@ defmodule WandererKills.Subscriptions.FilterTest do
         "victim" => %{"character_id" => 123}
       }
 
-      refute Filter.matches_subscription?(killmail, subscription)
+      # Empty lists should mean "match everything" - wildcard subscription
+      assert Filter.matches_subscription?(killmail, subscription)
     end
   end
 
@@ -151,7 +152,14 @@ defmodule WandererKills.Subscriptions.FilterTest do
 
       filtered = Filter.filter_killmails(killmails, subscription)
       assert length(filtered) == 2
-      assert Enum.all?(filtered, &(&1["solar_system_id"] == 30_000_142))
+
+      # Sort results to ensure order-independent comparison
+      solar_system_ids =
+        filtered
+        |> Enum.map(& &1["solar_system_id"])
+        |> Enum.sort()
+
+      assert solar_system_ids == [30_000_142, 30_000_142]
     end
 
     test "filters killmails by character" do
