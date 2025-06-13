@@ -47,6 +47,12 @@ defmodule WandererKillsWeb.Router do
     get("/killmail/:killmail_id", KillsController, :show)
     get("/kills/count/:system_id", KillsController, :count)
 
+    # Subscription management
+    post("/subscriptions", SubscriptionController, :create)
+    get("/subscriptions", SubscriptionController, :index)
+    get("/subscriptions/stats", SubscriptionController, :stats)
+    delete("/subscriptions/:subscriber_id", SubscriptionController, :delete)
+
     # Catch-all for undefined API routes
     get("/*path", KillsController, :not_found)
     post("/*path", KillsController, :not_found)

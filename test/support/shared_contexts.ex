@@ -23,10 +23,68 @@ defmodule WandererKills.Test.SharedContexts do
   ```
   """
 
+  import Cachex.Spec
+
   defmacro __using__(_opts) do
     quote do
       import WandererKills.Test.SharedContexts
+      import Cachex.Spec
     end
+  end
+
+  @doc """
+  Ensures the :wanderer_cache is available for tests.
+
+  This function checks if the cache exists and starts it if needed.
+  """
+  def ensure_cache_available do
+    # Check if cache process is running by looking for it in the registry
+    case Process.whereis(:wanderer_cache) do
+      nil ->
+        # Start the cache manually for tests
+        opts = [
+          default_ttl: :timer.minutes(5),
+          expiration:
+            expiration(
+              interval: :timer.seconds(60),
+              default: :timer.minutes(5),
+              lazy: true
+            ),
+          hooks: [
+            hook(module: Cachex.Stats)
+          ]
+        ]
+
+        start_cache_and_setup_teardown(opts)
+
+      _pid ->
+        :ok
+    end
+  end
+
+  defp start_cache_and_setup_teardown(opts) do
+    case Cachex.start_link(:wanderer_cache, opts) do
+      {:ok, pid} ->
+        setup_new_cache(pid)
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+
+      :ignore ->
+        :ok
+    end
+  end
+
+  defp setup_new_cache(pid) do
+    # Give cache time to fully initialize
+    Process.sleep(50)
+
+    # Add teardown callback to stop cache after tests
+    ExUnit.Callbacks.on_exit(fn ->
+      if Process.alive?(pid), do: GenServer.stop(pid)
+    end)
+
+    :ok
   end
 
   import ExUnit.Callbacks
@@ -57,6 +115,7 @@ defmodule WandererKills.Test.SharedContexts do
   This is the most commonly used setup function.
   """
   def with_clean_environment(_context \\ %{}) do
+    ensure_cache_available()
     WandererKills.TestHelpers.clear_all_caches()
     %{}
   end

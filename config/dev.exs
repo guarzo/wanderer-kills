@@ -7,4 +7,4 @@ import Config
 config :wanderer_kills, WandererKillsWeb.Endpoint, http: [port: 4004, ip: {0, 0, 0, 0}]
 
 # Enable detailed logging for development
-config :logger, level: :debug
+config :logger, level: :info

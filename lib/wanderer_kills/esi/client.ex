@@ -468,7 +468,7 @@ defmodule WandererKills.ESI.Client do
     |> Map.put("killmail_hash", killmail_hash)
   end
 
-  defp esi_base_url, do: Config.services().esi_base_url
+  defp esi_base_url, do: Config.get([:esi, :base_url])
   defp http_client, do: Config.app().http_client
 
   defp default_headers do

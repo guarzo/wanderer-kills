@@ -37,6 +37,16 @@ defmodule WandererKills.Observability.Telemetry do
   - `[:wanderer_kills, :websocket, :connection]` - When WebSocket connections change
   - `[:wanderer_kills, :websocket, :subscription]` - When WebSocket subscriptions change
 
+  Character subscription events:
+  - `[:wanderer_kills, :character, :match]` - When character matching is performed
+  - `[:wanderer_kills, :character, :filter]` - When character filtering is performed
+  - `[:wanderer_kills, :character, :index]` - When character index operations occur
+  - `[:wanderer_kills, :character, :cache]` - When character cache operations occur
+
+  System subscription events:
+  - `[:wanderer_kills, :system, :filter]` - When system filtering is performed
+  - `[:wanderer_kills, :system, :index]` - When system index operations occur
+
   ZKB events:
   - `[:wanderer_kills, :zkb, :format]` - When ZKB format is detected
 
@@ -287,6 +297,94 @@ defmodule WandererKills.Observability.Telemetry do
     )
   end
 
+  @doc """
+  Executes character matching telemetry.
+  """
+  @spec character_match(integer(), boolean(), integer()) :: :ok
+  def character_match(duration_native, match_found, character_count) do
+    :telemetry.execute(
+      [:wanderer_kills, :character, :match],
+      %{
+        duration: duration_native,
+        character_count: character_count
+      },
+      %{
+        match_found: match_found
+      }
+    )
+  end
+
+  @doc """
+  Executes character filter telemetry.
+  """
+  @spec character_filter(integer(), integer(), integer()) :: :ok
+  def character_filter(duration_native, killmail_count, match_count) do
+    :telemetry.execute(
+      [:wanderer_kills, :character, :filter],
+      %{
+        duration: duration_native,
+        killmail_count: killmail_count,
+        match_count: match_count
+      },
+      %{}
+    )
+  end
+
+  @doc """
+  Executes character index telemetry.
+  """
+  @spec character_index(atom(), integer(), map()) :: :ok
+  def character_index(operation, duration_native, metadata \\ %{})
+      when operation in [:add, :remove, :lookup, :batch_lookup, :update] do
+    :telemetry.execute(
+      [:wanderer_kills, :character, :index],
+      %{duration: duration_native},
+      Map.put(metadata, :operation, operation)
+    )
+  end
+
+  @doc """
+  Executes character cache telemetry.
+  """
+  @spec character_cache(atom(), String.t(), map()) :: :ok
+  def character_cache(event, cache_key, metadata \\ %{})
+      when event in [:hit, :miss, :put, :evict] do
+    :telemetry.execute(
+      [:wanderer_kills, :character, :cache],
+      %{count: 1},
+      Map.merge(metadata, %{event: event, cache_key: cache_key})
+    )
+  end
+
+  @doc """
+  Executes system filter telemetry.
+  """
+  @spec system_filter(integer(), integer(), integer()) :: :ok
+  def system_filter(duration_native, killmail_count, match_count) do
+    :telemetry.execute(
+      [:wanderer_kills, :system, :filter],
+      %{
+        duration: duration_native,
+        killmail_count: killmail_count,
+        match_count: match_count
+      },
+      %{}
+    )
+  end
+
+  @doc """
+  Executes system index telemetry.
+  """
+  @spec system_index(atom(), integer(), map()) :: :ok
+  def system_index(operation, duration_native, metadata \\ %{})
+      when operation in [:add, :remove, :lookup, :batch_lookup, :update] do
+    :telemetry.execute(
+      [:wanderer_kills, :system, :index],
+      %{duration: duration_native},
+      Map.put(metadata, :operation, operation)
+    )
+  end
+
   # -------------------------------------------------
   # Handler attachment/detachment functions
   # -------------------------------------------------
@@ -373,17 +471,6 @@ defmodule WandererKills.Observability.Telemetry do
       nil
     )
 
-    # System metrics handlers
-    :telemetry.attach_many(
-      "wanderer-kills-system-handler",
-      [
-        [:wanderer_kills, :system, :memory],
-        [:wanderer_kills, :system, :cpu]
-      ],
-      &WandererKills.Observability.Telemetry.handle_system_event/4,
-      nil
-    )
-
     # Supervised task handlers
     :telemetry.attach_many(
       "wanderer-kills-task-handler",
@@ -395,6 +482,35 @@ defmodule WandererKills.Observability.Telemetry do
       &WandererKills.Observability.Telemetry.handle_task_event/4,
       nil
     )
+
+    # Character subscription handlers
+    :telemetry.attach_many(
+      "wanderer-kills-character-handler",
+      [
+        [:wanderer_kills, :character, :match],
+        [:wanderer_kills, :character, :filter],
+        [:wanderer_kills, :character, :index],
+        [:wanderer_kills, :character, :cache]
+      ],
+      &WandererKills.Observability.Telemetry.handle_character_event/4,
+      nil
+    )
+
+    # System handlers (includes system metrics and subscription telemetry)
+    :telemetry.attach_many(
+      "wanderer-kills-system-handler",
+      [
+        [:wanderer_kills, :system, :memory],
+        [:wanderer_kills, :system, :cpu],
+        [:wanderer_kills, :system, :filter],
+        [:wanderer_kills, :system, :index]
+      ],
+      &WandererKills.Observability.Telemetry.handle_system_event/4,
+      nil
+    )
+
+    # Attach batch processing telemetry handlers
+    WandererKills.Observability.BatchTelemetry.attach_handlers()
 
     :ok
   end
@@ -413,8 +529,13 @@ defmodule WandererKills.Observability.Telemetry do
     :telemetry.detach("wanderer-kills-parser-handler")
     :telemetry.detach("wanderer-kills-websocket-handler")
     :telemetry.detach("wanderer-kills-zkb-handler")
-    :telemetry.detach("wanderer-kills-system-handler")
     :telemetry.detach("wanderer-kills-task-handler")
+    :telemetry.detach("wanderer-kills-character-handler")
+    :telemetry.detach("wanderer-kills-system-handler")
+
+    # Detach batch processing telemetry handlers
+    WandererKills.Observability.BatchTelemetry.detach_handlers()
+
     :ok
   end
 
@@ -563,33 +684,6 @@ defmodule WandererKills.Observability.Telemetry do
   end
 
   @doc """
-  Handles system resource telemetry events.
-  """
-  def handle_system_event([:wanderer_kills, :system, event], measurements, _metadata, _config) do
-    case event do
-      :memory ->
-        Logger.debug(
-          "[System] Memory usage - Total: #{measurements.total_memory}MB, Process: #{measurements.process_memory}MB"
-        )
-
-      :cpu ->
-        # Safely handle the case where total_cpu might not be present
-        case Map.get(measurements, :total_cpu) do
-          nil ->
-            # If total_cpu is not available, log the available metrics
-            Logger.debug(
-              "[System] System metrics - Processes: #{measurements.process_count}, Ports: #{measurements.port_count}, Schedulers: #{measurements.schedulers}, Run Queue: #{measurements.run_queue}"
-            )
-
-          total_cpu ->
-            # Log with total_cpu and process_cpu if available
-            process_cpu = Map.get(measurements, :process_cpu, "N/A")
-            Logger.debug("[System] CPU usage - Total: #{total_cpu}%, Process: #{process_cpu}%")
-        end
-    end
-  end
-
-  @doc """
   Handles supervised task telemetry events.
   """
   def handle_task_event([:wanderer_kills, :task, event], measurements, metadata, _config) do
@@ -627,4 +721,97 @@ defmodule WandererKills.Observability.Telemetry do
   end
 
   def handle_task_event(_, _, _, _), do: :ok
+
+  @doc """
+  Handles character subscription telemetry events.
+  """
+  def handle_character_event(
+        [:wanderer_kills, :character, event],
+        measurements,
+        metadata,
+        _config
+      ) do
+    case event do
+      :match ->
+        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+        match_status = if metadata.match_found, do: "match", else: "no match"
+
+        Logger.debug(
+          "[Character] Matching completed in #{duration_ms}ms (#{match_status}) for #{measurements.character_count} characters"
+        )
+
+      :filter ->
+        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+
+        Logger.debug(
+          "[Character] Filtered #{measurements.killmail_count} killmails in #{duration_ms}ms, found #{measurements.match_count} matches"
+        )
+
+      :index ->
+        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+
+        operation_details =
+          case metadata do
+            %{character_count: count} -> " (#{count} characters)"
+            %{subscription_id: sub_id} -> " (#{sub_id})"
+            _ -> ""
+          end
+
+        Logger.debug(
+          "[Character] Index #{metadata.operation} completed in #{duration_ms}ms#{operation_details}"
+        )
+
+      :cache ->
+        Logger.debug("[Character] Cache #{metadata.event} for key: #{metadata.cache_key}")
+    end
+  end
+
+  def handle_system_event([:wanderer_kills, :system, event], measurements, metadata, _config) do
+    case event do
+      :memory -> handle_memory_event(measurements)
+      :cpu -> handle_cpu_event(measurements)
+      :filter -> handle_filter_event(measurements)
+      :index -> handle_index_event(measurements, metadata)
+    end
+  end
+
+  defp handle_memory_event(measurements) do
+    Logger.debug(
+      "[System] Memory usage - Total: #{measurements.total_memory}MB, Process: #{measurements.process_memory}MB"
+    )
+  end
+
+  defp handle_cpu_event(measurements) do
+    case Map.get(measurements, :total_cpu) do
+      nil ->
+        Logger.debug(
+          "[System] System metrics - Processes: #{measurements.process_count}, Ports: #{measurements.port_count}, Schedulers: #{measurements.schedulers}, Run Queue: #{measurements.run_queue}"
+        )
+
+      total_cpu ->
+        process_cpu = Map.get(measurements, :process_cpu, "N/A")
+        Logger.debug("[System] CPU usage - Total: #{total_cpu}%, Process: #{process_cpu}%")
+    end
+  end
+
+  defp handle_filter_event(measurements) do
+    duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+
+    Logger.debug(
+      "[System] Filtered #{measurements.killmail_count} killmails in #{duration_ms}ms, found #{measurements.match_count} matches"
+    )
+  end
+
+  defp handle_index_event(measurements, metadata) do
+    duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+    operation_details = format_operation_details(metadata)
+
+    Logger.debug(
+      "[System] Index #{metadata.operation} completed in #{duration_ms}ms#{operation_details}"
+    )
+  end
+
+  defp format_operation_details(%{system_count: count}), do: " (#{count} systems)"
+  defp format_operation_details(%{subscription_id: sub_id}), do: " (#{sub_id})"
+  defp format_operation_details(_), do: ""
 end

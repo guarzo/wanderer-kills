@@ -12,10 +12,13 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Elixir
+        id: beam
         uses: erlef/setup-beam@v1
         with:
           elixir-version: "1.18.4"
@@ -27,41 +30,47 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-27.0-1.18.4-${{ hashFiles('**/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-27.0-1.18.4-
-            ${{ runner.os }}-mix-27.0-
-            ${{ runner.os }}-mix-
+            ~/.hex
+            ~/.mix
+            ~/.cache/rebar3
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
 
       - name: Restore PLT cache
         uses: actions/cache@v4
         id: plt_cache
         with:
-          path: priv/plts
-          key: ${{ runner.os }}-plt-27.0-1.18.4-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-plt
           restore-keys: |
-            ${{ runner.os }}-plt-27.0-1.18.4-
-            ${{ runner.os }}-plt-27.0-
-            ${{ runner.os }}-plt-
+            ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-plt
+          path: |
+            priv/plts
 
       - name: Install dependencies
-        run: mix deps.get
+        run: mix deps.get --include-children
 
-      - name: Compile dependencies
-        run: MIX_ENV=test mix deps.compile
+      - name: Compile (with special handling for Mox warnings)
+        run: |
+          mix compile 2>&1 | (grep -v "redefining module" || true)
+          [ ${PIPESTATUS[0]} -eq 0 ] || exit 1
 
       - name: Check formatting
         run: mix format --check-formatted
 
       - name: Run Credo
         run: mix credo
+        continue-on-error: false
 
-      - name: Create PLTs directory
+      - name: Compile for dev (for Dialyzer)
+        run: MIX_ENV=dev mix compile
+
+      - name: Create PLTs
         if: steps.plt_cache.outputs.cache-hit != 'true'
-        run: mkdir -p priv/plts
+        run: MIX_ENV=dev mix dialyzer --plt
 
       - name: Run Dialyzer
-        run: mix dialyzer
+        run: MIX_ENV=dev mix dialyzer --format github
+        continue-on-error: false
 
       - name: Run tests with coverage
         run: mix test --max-failures=1
@@ -77,10 +86,12 @@ jobs:
 
   docker:
     name: Build and Push Docker Image
-    needs: test
+    needs: [test, auto-tag]
     runs-on: ubuntu-latest
-    # Run on push to main or on version tags
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    # Run on push to main (after auto-tag) or on version tags
+    if: |
+      (github.ref == 'refs/heads/main' && needs.auto-tag.outputs.new_tag_created == 'true') ||
+      startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - uses: actions/checkout@v4
@@ -92,6 +103,10 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -107,6 +122,25 @@ jobs:
           echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_OUTPUT
           echo "Current tag: $CURRENT_TAG"
 
+      - name: Get version information
+        id: get_version_info
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # We're running on a tag push
+            VERSION_TAG="${GITHUB_REF#refs/tags/}"
+            echo "Running on tag: $VERSION_TAG"
+          else
+            # We're running after auto-tag created new tags
+            VERSION_TAG="${{ steps.get_tag.outputs.CURRENT_TAG }}"
+            echo "Using auto-created tag: $VERSION_TAG"
+
+            # Fetch the newly created tags
+            git fetch --tags
+          fi
+
+          echo "VERSION_TAG=$VERSION_TAG" >> $GITHUB_OUTPUT
+          echo "Final version tag: $VERSION_TAG"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -115,13 +149,45 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ steps.get_version_info.outputs.VERSION_TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.get_version_info.outputs.VERSION_TAG }}
+            type=semver,pattern={{major}},value=${{ steps.get_version_info.outputs.VERSION_TAG }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
-            type=raw,value=${{ steps.get_tag.outputs.CURRENT_TAG }},enable=${{ steps.get_tag.outputs.CURRENT_TAG != '' }}
+            type=raw,value=${{ steps.get_version_info.outputs.VERSION_TAG }},enable=${{ steps.get_version_info.outputs.VERSION_TAG != '' }}
 
-      - name: Build and push
+      - name: Build Docker image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: guarzo/wanderer-kills:test
+          cache-from: type=gha
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VERSION=${{ steps.get_version_info.outputs.VERSION_TAG }}
+
+      - name: Test Docker image
+        run: |
+          # Basic container test - start and check health
+          docker run -d --name test_container -p 4004:4004 guarzo/wanderer-kills:test
+          sleep 10
+          # Check if container is still running
+          if ! docker ps | grep test_container; then
+            echo "Container failed to start or exited"
+            docker logs test_container
+            exit 1
+          fi
+          # Clean up
+          docker stop test_container
+          docker rm test_container
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Build and push to registry
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -129,15 +195,25 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=guarzo/wanderer-kills:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=guarzo/wanderer-kills:buildcache,mode=max
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VERSION=${{ steps.get_version_info.outputs.VERSION_TAG }}
 
   release:
     name: Create Release
-    needs: docker
+    needs: [docker, auto-tag]
     runs-on: ubuntu-latest
-    # Run when a tag is pushed directly OR when docker job runs on main with a tag
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    # Run when auto-tag creates a new tag OR when a version tag is pushed manually
+    if: |
+      (github.ref == 'refs/heads/main' && needs.auto-tag.outputs.new_tag_created == 'true') ||
+      (startsWith(github.ref, 'refs/tags/v'))
 
     permissions:
       contents: write
@@ -147,43 +223,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for version tag
-        id: check_tag
-        run: |
-          # Get the current tag on this commit
-          CURRENT_TAG=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
-          if [[ "$CURRENT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "VERSION=$CURRENT_TAG" >> $GITHUB_OUTPUT
-            echo "HAS_VERSION_TAG=true" >> $GITHUB_OUTPUT
-            echo "Found version tag: $CURRENT_TAG"
-          else
-            echo "HAS_VERSION_TAG=false" >> $GITHUB_OUTPUT
-            echo "No version tag found on current commit"
-          fi
-
-      # Skip remaining steps if no version tag
-      - name: Exit if no version tag
-        if: steps.check_tag.outputs.HAS_VERSION_TAG != 'true'
-        run: |
-          echo "No version tag found, skipping release creation"
-          exit 0
-
       - name: Get version from tag
         id: get_version
-        if: steps.check_tag.outputs.HAS_VERSION_TAG == 'true'
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # We're running on a tag
+            VERSION="${GITHUB_REF#refs/tags/}"
           else
-            echo "VERSION=${{ steps.check_tag.outputs.VERSION }}" >> $GITHUB_OUTPUT
+            # We're running because auto-tag created a new tag
+            VERSION="${{ needs.auto-tag.outputs.tag }}"
           fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Creating release for version: $VERSION"
+
 
       - name: Generate release notes
         id: release_notes
-        if: steps.check_tag.outputs.HAS_VERSION_TAG == 'true'
         run: |
           # Get the previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          echo "Current tag: ${GITHUB_REF#refs/tags/}"
+          echo "Previous tag: ${PREV_TAG:-none}"
 
           # Generate changelog between tags
           if [ -z "$PREV_TAG" ]; then
@@ -196,7 +257,6 @@ jobs:
           fi
 
       - name: Create Release
-        if: steps.check_tag.outputs.HAS_VERSION_TAG == 'true'
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
@@ -216,43 +276,69 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Auto-tag on merge to main (optional)
   auto-tag:
-    name: Auto Tag on Merge
+    name: Auto Tag Version
+    needs: test
     runs-on: ubuntu-latest
-    # Only run on direct push to main (not PRs)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip-tag]')
-
+    # Only run on main branch pushes (not tags)
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
-
+    outputs:
+      new_tag_created: ${{ steps.check_tag.outputs.NEW_TAG_CREATED }}
+      tag: ${{ steps.check_tag.outputs.TAG }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get next version
-        id: version
+      - name: Extract version from mix.exs
+        id: extract_version
         run: |
-          # Get the latest tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          VERSION=$(grep -E '^\s+version:' mix.exs | head -1 | grep -o '"[^"]*"' | tr -d '"')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Found version: $VERSION"
 
-          # Extract version numbers
-          VERSION=${LATEST_TAG#v}
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          MINOR=$(echo $VERSION | cut -d. -f2)
-          PATCH=$(echo $VERSION | cut -d. -f3)
-
-          # Increment patch version
-          PATCH=$((PATCH + 1))
-
-          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "Next version will be: $NEW_VERSION"
-
-      - name: Create and push tag
+      - name: Check if tag exists and create tags
+        id: check_tag
         run: |
-          git config user.name github-actions[bot]
-          git config user.email github-actions[bot]@users.noreply.github.com
-          git tag -a ${{ steps.version.outputs.NEW_VERSION }} -m "Release ${{ steps.version.outputs.NEW_VERSION }}"
-          git push origin ${{ steps.version.outputs.NEW_VERSION }}
+          VERSION="${{ steps.extract_version.outputs.VERSION }}"
+          TAG="v$VERSION"
+
+          # Parse semantic version (e.g., "2.0.1" -> major=2, minor=0, patch=1)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          MAJOR_TAG="v$MAJOR"
+          MINOR_TAG="v$MAJOR.$MINOR"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            echo "NEW_TAG_CREATED=false" >> $GITHUB_OUTPUT
+          else
+            echo "Tag $TAG does not exist, creating it"
+            echo "NEW_TAG_CREATED=true" >> $GITHUB_OUTPUT
+
+            git config user.name "GitHub Actions"
+            git config user.email "actions@github.com"
+
+            # Create the main version tag
+            git tag -a "$TAG" -m "Release $TAG - Auto-tagged from mix.exs version"
+
+            # Force update major tag (delete if exists, then create)
+            if git rev-parse "$MAJOR_TAG" >/dev/null 2>&1; then
+              git tag -d "$MAJOR_TAG"
+              git push origin ":refs/tags/$MAJOR_TAG" || true
+            fi
+            git tag -a "$MAJOR_TAG" -m "Release $MAJOR_TAG (latest $TAG)"
+
+            # Force update minor tag (delete if exists, then create)
+            if git rev-parse "$MINOR_TAG" >/dev/null 2>&1; then
+              git tag -d "$MINOR_TAG"
+              git push origin ":refs/tags/$MINOR_TAG" || true
+            fi
+            git tag -a "$MINOR_TAG" -m "Release $MINOR_TAG (latest $TAG)"
+
+            # Push all tags
+            git push origin "$TAG" "$MAJOR_TAG" "$MINOR_TAG"
+          fi
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT

@@ -36,6 +36,8 @@ defmodule WandererKills.App.Application do
          WandererKills.App.EtsManager,
          {Task.Supervisor, name: WandererKills.TaskSupervisor},
          {Phoenix.PubSub, name: WandererKills.PubSub},
+         WandererKills.Subscriptions.CharacterIndex,
+         WandererKills.Subscriptions.SystemIndex,
          {WandererKills.SubscriptionManager, [pubsub_name: WandererKills.PubSub]}
        ] ++
          cache_children() ++
