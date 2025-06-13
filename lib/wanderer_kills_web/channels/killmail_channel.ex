@@ -4,6 +4,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   Allows WebSocket clients to:
   - Subscribe to specific EVE Online systems
+  - Subscribe to specific character IDs (as victim or attacker)
   - Receive real-time killmail updates
   - Manage subscriptions dynamically
 
@@ -12,7 +13,10 @@ defmodule WandererKillsWeb.KillmailChannel do
   Connect to the WebSocket and join the channel:
   ```javascript
   const socket = new Socket("/socket", {})
-  const channel = socket.channel("killmails:lobby", {systems: [30000142, 30002187]})
+  const channel = socket.channel("killmails:lobby", {
+    systems: [30000142, 30002187],
+    characters: [95465499, 90379338]  // Optional character IDs
+  })
 
   channel.join()
     .receive("ok", resp => console.log("Joined successfully", resp))
@@ -26,6 +30,14 @@ defmodule WandererKillsWeb.KillmailChannel do
   // Add/remove system subscriptions
   channel.push("subscribe_systems", {systems: [30000144]})
   channel.push("unsubscribe_systems", {systems: [30000142]})
+
+  // Add/remove character subscriptions
+  channel.push("subscribe_characters", {characters: [12345678]})
+  channel.push("unsubscribe_characters", {characters: [95465499]})
+
+  // Get current subscription status
+  channel.push("get_status", {})
+    .receive("ok", resp => console.log("Current status:", resp))
   ```
   """
 
@@ -38,20 +50,29 @@ defmodule WandererKillsWeb.KillmailChannel do
   alias WandererKills.Config
   alias WandererKills.Observability.WebSocketStats
   alias WandererKills.Support.Error
+  alias WandererKills.Subscriptions.Filter
 
   @impl true
-  def join("killmails:lobby", %{"systems" => systems} = _params, socket) when is_list(systems) do
-    join_with_systems(socket, systems)
+  def join("killmails:lobby", %{"systems" => systems} = params, socket) when is_list(systems) do
+    characters = Map.get(params, "characters", [])
+    join_with_filters(socket, systems, characters)
+  end
+
+  def join("killmails:lobby", %{"characters" => characters} = params, socket)
+      when is_list(characters) do
+    systems = Map.get(params, "systems", [])
+    join_with_filters(socket, systems, characters)
   end
 
   def join("killmails:lobby", _params, socket) do
-    # Join without initial systems - they can subscribe later
-    subscription_id = create_subscription(socket, [])
+    # Join without initial systems or characters - they can subscribe later
+    subscription_id = create_subscription(socket, [], [])
 
     socket =
       socket
       |> assign(:subscription_id, subscription_id)
       |> assign(:subscribed_systems, MapSet.new())
+      |> assign(:subscribed_characters, MapSet.new())
 
     # Track connection
     WebSocketStats.track_connection(:connected, %{
@@ -72,6 +93,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     response = %{
       subscription_id: subscription_id,
       subscribed_systems: [],
+      subscribed_characters: [],
       status: "connected"
     }
 
@@ -92,7 +114,13 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           # Update subscription
           all_systems = MapSet.union(current_systems, new_systems)
-          update_subscription(socket.assigns.subscription_id, MapSet.to_list(all_systems))
+
+          updates = %{
+            systems: MapSet.to_list(all_systems),
+            characters: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+          }
+
+          update_subscription(socket.assigns.subscription_id, updates)
 
           socket = assign(socket, :subscribed_systems, all_systems)
 
@@ -129,7 +157,13 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           # Update subscription
           remaining_systems = MapSet.difference(current_systems, systems_to_remove)
-          update_subscription(socket.assigns.subscription_id, MapSet.to_list(remaining_systems))
+
+          updates = %{
+            systems: MapSet.to_list(remaining_systems),
+            characters: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+          }
+
+          update_subscription(socket.assigns.subscription_id, updates)
 
           socket = assign(socket, :subscribed_systems, remaining_systems)
 
@@ -150,11 +184,91 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
+  # Handle subscribing to characters
+  def handle_in("subscribe_characters", %{"characters" => characters}, socket)
+      when is_list(characters) do
+    case validate_characters(characters) do
+      {:ok, valid_characters} ->
+        current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
+        new_characters = MapSet.difference(MapSet.new(valid_characters), current_characters)
+
+        if MapSet.size(new_characters) > 0 do
+          # Update subscription
+          all_characters = MapSet.union(current_characters, new_characters)
+
+          updates = %{
+            systems: MapSet.to_list(socket.assigns.subscribed_systems),
+            characters: MapSet.to_list(all_characters)
+          }
+
+          update_subscription(socket.assigns.subscription_id, updates)
+
+          socket = assign(socket, :subscribed_characters, all_characters)
+
+          Logger.debug("📡 Client subscribed to characters",
+            user_id: socket.assigns.user_id,
+            subscription_id: socket.assigns.subscription_id,
+            new_characters_count: MapSet.size(new_characters),
+            total_characters_count: MapSet.size(all_characters)
+          )
+
+          {:reply, {:ok, %{subscribed_characters: MapSet.to_list(all_characters)}}, socket}
+        else
+          {:reply, {:ok, %{message: "Already subscribed to all requested characters"}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: reason}}, socket}
+    end
+  end
+
+  # Handle unsubscribing from characters
+  def handle_in("unsubscribe_characters", %{"characters" => characters}, socket)
+      when is_list(characters) do
+    case validate_characters(characters) do
+      {:ok, valid_characters} ->
+        current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
+
+        characters_to_remove =
+          MapSet.intersection(current_characters, MapSet.new(valid_characters))
+
+        if MapSet.size(characters_to_remove) > 0 do
+          # Update subscription
+          remaining_characters = MapSet.difference(current_characters, characters_to_remove)
+
+          updates = %{
+            systems: MapSet.to_list(socket.assigns.subscribed_systems),
+            characters: MapSet.to_list(remaining_characters)
+          }
+
+          update_subscription(socket.assigns.subscription_id, updates)
+
+          socket = assign(socket, :subscribed_characters, remaining_characters)
+
+          Logger.debug("📡 Client unsubscribed from characters",
+            user_id: socket.assigns.user_id,
+            subscription_id: socket.assigns.subscription_id,
+            removed_characters_count: MapSet.size(characters_to_remove),
+            remaining_characters_count: MapSet.size(remaining_characters)
+          )
+
+          {:reply, {:ok, %{subscribed_characters: MapSet.to_list(remaining_characters)}}, socket}
+        else
+          {:reply, {:ok, %{message: "Not subscribed to any of the requested characters"}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: reason}}, socket}
+    end
+  end
+
   # Handle getting current subscription status
   def handle_in("get_status", _params, socket) do
     response = %{
       subscription_id: socket.assigns.subscription_id,
       subscribed_systems: MapSet.to_list(socket.assigns.subscribed_systems),
+      subscribed_characters:
+        MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new()),
       connected_at: socket.assigns.connected_at,
       user_id: socket.assigns.user_id
     }
@@ -185,24 +299,33 @@ defmodule WandererKillsWeb.KillmailChannel do
         },
         socket
       ) do
-    # Only send if we're subscribed to this system
-    if MapSet.member?(socket.assigns.subscribed_systems, system_id) do
+    # Build a subscription-like structure for filtering
+    subscription = %{
+      "system_ids" => MapSet.to_list(socket.assigns.subscribed_systems),
+      "character_ids" => MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+    }
+
+    # Filter killmails based on both system and character subscriptions
+    filtered_killmails = Filter.filter_killmails(killmails, subscription)
+
+    if length(filtered_killmails) > 0 do
       Logger.debug("🔥 Forwarding real-time kills to WebSocket client",
         user_id: socket.assigns.user_id,
         system_id: system_id,
-        killmail_count: length(killmails),
+        original_count: length(killmails),
+        filtered_count: length(filtered_killmails),
         timestamp: timestamp
       )
 
       push(socket, "killmail_update", %{
         system_id: system_id,
-        killmails: killmails,
+        killmails: filtered_killmails,
         timestamp: DateTime.to_iso8601(timestamp),
         preload: false
       })
 
       # Track kills sent to websocket
-      WebSocketStats.increment_kills_sent(:realtime, length(killmails))
+      WebSocketStats.increment_kills_sent(:realtime, length(filtered_killmails))
     end
 
     {:noreply, socket}
@@ -298,62 +421,68 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   # Private helper functions
 
-  # Helper function to handle join with systems
-  defp join_with_systems(socket, systems) do
-    case validate_systems(systems) do
-      {:ok, valid_systems} ->
-        # Register this WebSocket connection as a subscriber
-        subscription_id = create_subscription(socket, valid_systems)
+  # Helper function to handle join with filters
+  defp join_with_filters(socket, systems, characters) do
+    with {:ok, valid_systems} <- validate_systems(systems),
+         {:ok, valid_characters} <- validate_characters(characters) do
+      # Register this WebSocket connection as a subscriber
+      subscription_id = create_subscription(socket, valid_systems, valid_characters)
 
-        # Track subscription creation
-        WebSocketStats.track_subscription(:added, length(valid_systems), %{
-          user_id: socket.assigns.user_id,
-          subscription_id: subscription_id
-        })
+      # Track subscription creation
+      WebSocketStats.track_subscription(:added, length(valid_systems), %{
+        user_id: socket.assigns.user_id,
+        subscription_id: subscription_id,
+        character_count: length(valid_characters)
+      })
 
-        # Track connection with initial systems
-        WebSocketStats.track_connection(:connected, %{
-          user_id: socket.assigns.user_id,
-          subscription_id: subscription_id,
-          initial_systems_count: length(valid_systems)
-        })
+      # Track connection with initial systems
+      WebSocketStats.track_connection(:connected, %{
+        user_id: socket.assigns.user_id,
+        subscription_id: subscription_id,
+        initial_systems_count: length(valid_systems),
+        initial_characters_count: length(valid_characters)
+      })
 
-        socket =
-          socket
-          |> assign(:subscription_id, subscription_id)
-          |> assign(:subscribed_systems, MapSet.new(valid_systems))
+      socket =
+        socket
+        |> assign(:subscription_id, subscription_id)
+        |> assign(:subscribed_systems, MapSet.new(valid_systems))
+        |> assign(:subscribed_characters, MapSet.new(valid_characters))
 
-        Logger.debug("🔌 Client connected and joined killmail channel",
-          user_id: socket.assigns.user_id,
-          client_identifier: socket.assigns[:client_identifier],
-          subscription_id: subscription_id,
-          peer_data: socket.assigns.peer_data,
-          user_agent: socket.assigns.user_agent,
-          initial_systems_count: length(valid_systems)
-        )
+      Logger.debug("🔌 Client connected and joined killmail channel",
+        user_id: socket.assigns.user_id,
+        client_identifier: socket.assigns[:client_identifier],
+        subscription_id: subscription_id,
+        peer_data: socket.assigns.peer_data,
+        user_agent: socket.assigns.user_agent,
+        initial_systems_count: length(valid_systems),
+        initial_characters_count: length(valid_characters)
+      )
 
-        # Subscribe to Phoenix PubSub topics for these systems
-        subscribe_to_systems(valid_systems)
+      # Subscribe to Phoenix PubSub topics for these systems
+      subscribe_to_systems(valid_systems)
 
-        # Schedule preload after join completes (can't push during join)
-        if length(valid_systems) > 0 do
-          send(self(), {:after_join, valid_systems})
-        end
+      # Schedule preload after join completes (can't push during join)
+      if length(valid_systems) > 0 do
+        send(self(), {:after_join, valid_systems})
+      end
 
-        response = %{
-          subscription_id: subscription_id,
-          subscribed_systems: valid_systems,
-          status: "connected"
-        }
+      response = %{
+        subscription_id: subscription_id,
+        subscribed_systems: valid_systems,
+        subscribed_characters: valid_characters,
+        status: "connected"
+      }
 
-        {:ok, response, socket}
-
+      {:ok, response, socket}
+    else
       {:error, reason} ->
         Logger.warning("❌ Failed to join killmail channel",
           user_id: socket.assigns.user_id,
           reason: reason,
           peer_data: socket.assigns.peer_data,
-          systems: systems
+          systems: systems,
+          characters: characters
         )
 
         {:error, %{reason: Error.to_string(reason)}}
@@ -390,23 +519,71 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
-  defp create_subscription(socket, systems) do
+  defp validate_characters(characters) do
+    # Default to 1000 max characters per subscription
+    max_characters = 1000
+
+    cond do
+      length(characters) > max_characters ->
+        {:error,
+         Error.validation_error(
+           :too_many_characters,
+           "Too many characters (max: #{max_characters})",
+           %{
+             max: max_characters,
+             provided: length(characters)
+           }
+         )}
+
+      Enum.all?(characters, &is_integer/1) ->
+        # Character IDs should be positive integers
+        valid_characters = Enum.filter(characters, &(&1 > 0))
+
+        if length(valid_characters) == length(characters) do
+          {:ok, Enum.uniq(valid_characters)}
+        else
+          {:error,
+           Error.validation_error(:invalid_character_ids, "Invalid character IDs", %{
+             characters: characters
+           })}
+        end
+
+      true ->
+        {:error,
+         Error.validation_error(:non_integer_character_ids, "Character IDs must be integers", %{
+           characters: characters
+         })}
+    end
+  end
+
+  defp create_subscription(socket, systems, characters) do
     subscription_id = generate_random_id()
 
-    # Register with SubscriptionManager (we'll update this to handle WebSockets)
+    # Register with SubscriptionManager with character support
     SubscriptionManager.add_websocket_subscription(%{
-      id: subscription_id,
-      user_id: socket.assigns.user_id,
-      systems: systems,
-      socket_pid: self(),
-      connected_at: DateTime.utc_now()
+      "id" => subscription_id,
+      "user_id" => socket.assigns.user_id,
+      "system_ids" => systems,
+      "character_ids" => characters,
+      "socket_pid" => self(),
+      "connected_at" => DateTime.utc_now()
     })
 
     subscription_id
   end
 
-  defp update_subscription(subscription_id, systems) do
-    SubscriptionManager.update_websocket_subscription(subscription_id, %{systems: systems})
+  defp update_subscription(subscription_id, updates) do
+    # Convert atom keys to string keys for consistency
+    string_updates =
+      updates
+      |> Enum.map(fn
+        {:systems, value} -> {"system_ids", value}
+        {:characters, value} -> {"character_ids", value}
+        {key, value} -> {to_string(key), value}
+      end)
+      |> Enum.into(%{})
+
+    SubscriptionManager.update_websocket_subscription(subscription_id, string_updates)
   end
 
   defp remove_subscription(subscription_id) do

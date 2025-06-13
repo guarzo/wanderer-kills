@@ -199,6 +199,61 @@ channel.push('subscribe', { systems: [30000142, 30000144] })
   .receive('error', resp => console.log('Failed to subscribe', resp));
 ```
 
+### Character-Based Subscriptions
+
+WandererKills supports character-based subscriptions, allowing you to track specific players as victims or attackers across all systems.
+
+#### Character Subscription Methods
+
+```javascript
+// Subscribe to specific characters
+channel.push('subscribe_characters', { character_ids: [95465499, 90379338] })
+  .receive('ok', resp => console.log('Subscribed to characters', resp))
+  .receive('error', resp => console.log('Failed to subscribe to characters', resp));
+
+// Mixed subscription (systems OR characters)
+channel.push('subscribe', { 
+  systems: [30000142], 
+  character_ids: [95465499, 90379338] 
+})
+  .receive('ok', resp => console.log('Mixed subscription active', resp));
+
+// Unsubscribe from specific characters
+channel.push('unsubscribe_characters', { character_ids: [95465499] })
+  .receive('ok', resp => console.log('Unsubscribed from characters', resp));
+```
+
+#### Character Subscription Features
+
+- **OR Logic**: Killmails are delivered if they match **either** system IDs **or** character IDs
+- **Victim & Attacker Matching**: Characters are matched whether they appear as victims or attackers  
+- **Performance Optimized**: Efficient character indexing for fast lookups with large character lists
+- **Scale Support**: Up to 1000 character IDs per subscription
+- **Real-time Processing**: Sub-millisecond character matching performance
+
+#### Character Subscription Parameters
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `character_ids` | integer[] | EVE Online character IDs to track | Yes |
+
+**Example Character IDs:**
+- `95465499` - Example character ID
+- `90379338` - Another character ID
+
+#### Filtering Logic
+
+```javascript
+// This subscription will receive killmails where:
+// - The killmail occurred in system 30000142 (Jita), OR
+// - Character 95465499 appears as victim or attacker, OR  
+// - Character 90379338 appears as victim or attacker
+channel.push('subscribe', { 
+  systems: [30000142], 
+  character_ids: [95465499, 90379338] 
+});
+```
+
 ### Channel Events
 
 #### new_kill

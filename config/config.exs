@@ -164,7 +164,11 @@ config :wanderer_kills,
 config :wanderer_kills, WandererKillsWeb.Endpoint,
   http: [port: 4004, ip: {0, 0, 0, 0}],
   server: true,
-  pubsub_server: WandererKills.PubSub
+  pubsub_server: WandererKills.PubSub,
+  render_errors: [
+    formats: [json: WandererKillsWeb.ErrorJSON],
+    layout: false
+  ]
 
 # Phoenix PubSub configuration
 config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG

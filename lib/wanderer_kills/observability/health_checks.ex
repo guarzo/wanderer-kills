@@ -27,10 +27,16 @@ defmodule WandererKills.Observability.HealthChecks do
   """
 
   require Logger
-  alias WandererKills.Observability.{ApplicationHealth, CacheHealth, HealthAggregator}
+
+  alias WandererKills.Observability.{
+    ApplicationHealth,
+    CacheHealth,
+    CharacterSubscriptionHealth,
+    HealthAggregator
+  }
 
   @type health_opts :: keyword()
-  @type health_component :: :application | :cache
+  @type health_component :: :application | :cache | :character_subscriptions
 
   # ============================================================================
   # Public API
@@ -89,6 +95,20 @@ defmodule WandererKills.Observability.HealthChecks do
               healthy: false,
               status: "error",
               details: %{component: "cache"},
+              timestamp: WandererKills.Support.Clock.now_iso8601()
+            }
+        end
+
+      [:character_subscriptions] ->
+        case check_character_subscription_health(timeout: timeout) do
+          {:ok, health} ->
+            health
+
+          {:error, _reason} ->
+            %{
+              healthy: false,
+              status: "error",
+              details: %{component: "character_subscriptions"},
               timestamp: WandererKills.Support.Clock.now_iso8601()
             }
         end
@@ -153,6 +173,19 @@ defmodule WandererKills.Observability.HealthChecks do
           {:error, _reason} ->
             %{
               component: "cache",
+              timestamp: WandererKills.Support.Clock.now_iso8601(),
+              metrics: %{error: "Failed to collect metrics"}
+            }
+        end
+
+      [:character_subscriptions] ->
+        case get_character_subscription_metrics(timeout: timeout) do
+          {:ok, metrics} ->
+            metrics
+
+          {:error, _reason} ->
+            %{
+              component: "character_subscriptions",
               timestamp: WandererKills.Support.Clock.now_iso8601(),
               metrics: %{error: "Failed to collect metrics"}
             }
@@ -253,6 +286,46 @@ defmodule WandererKills.Observability.HealthChecks do
   rescue
     error ->
       Logger.error("Cache metrics collection failed: #{inspect(error)}")
+      {:error, error}
+  end
+
+  @doc """
+  Checks character subscription system health.
+
+  ## Options
+  - `:timeout` - Timeout for health checks (default: 5_000)
+
+  ## Returns
+  - `{:ok, health_status}` - Character subscription system health status
+  - `{:error, reason}` - If health check fails
+  """
+  @spec check_character_subscription_health(health_opts()) :: {:ok, map()} | {:error, term()}
+  def check_character_subscription_health(opts \\ []) do
+    health_status = CharacterSubscriptionHealth.check_health(opts)
+    {:ok, health_status}
+  rescue
+    error ->
+      Logger.error("Character subscription health check failed: #{inspect(error)}")
+      {:error, error}
+  end
+
+  @doc """
+  Gets character subscription system metrics.
+
+  ## Options
+  - `:timeout` - Timeout for metrics collection (default: 5_000)
+
+  ## Returns
+  - `{:ok, metrics}` - Character subscription system metrics
+  - `{:error, reason}` - If metrics collection fails
+  """
+  @spec get_character_subscription_metrics(health_opts()) :: {:ok, map()} | {:error, term()}
+  def get_character_subscription_metrics(opts \\ []) do
+    metrics = CharacterSubscriptionHealth.get_metrics(opts)
+    {:ok, metrics}
+  rescue
+    error ->
+      Logger.error("Character subscription metrics collection failed: #{inspect(error)}")
       {:error, error}
   end
 end

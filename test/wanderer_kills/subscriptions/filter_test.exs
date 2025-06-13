@@ -1,0 +1,263 @@
+defmodule WandererKills.Subscriptions.FilterTest do
+  use ExUnit.Case, async: true
+
+  alias WandererKills.Subscriptions.Filter
+
+  describe "matches_subscription?/2" do
+    test "matches when system_id matches" do
+      subscription = %{
+        "system_ids" => [30_000_142, 30_000_143],
+        "character_ids" => []
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_142,
+        "victim" => %{"character_id" => 999}
+      }
+
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "matches when character_id matches as victim" do
+      subscription = %{
+        "system_ids" => [],
+        "character_ids" => [123, 456]
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_999,
+        "victim" => %{"character_id" => 123},
+        "attackers" => []
+      }
+
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "matches when character_id matches as attacker" do
+      subscription = %{
+        "system_ids" => [],
+        "character_ids" => [123, 456]
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_999,
+        "victim" => %{"character_id" => 999},
+        "attackers" => [
+          %{"character_id" => 456}
+        ]
+      }
+
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "matches when both system and character match" do
+      subscription = %{
+        "system_ids" => [30_000_142],
+        "character_ids" => [123]
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_142,
+        "victim" => %{"character_id" => 123}
+      }
+
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "does not match when neither system nor character match" do
+      subscription = %{
+        "system_ids" => [30_000_142],
+        "character_ids" => [123]
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_999,
+        "victim" => %{"character_id" => 999},
+        "attackers" => []
+      }
+
+      refute Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "handles system_id key instead of solar_system_id" do
+      subscription = %{
+        "system_ids" => [30_000_142],
+        "character_ids" => []
+      }
+
+      killmail = %{
+        "system_id" => 30_000_142,
+        "victim" => %{"character_id" => 999}
+      }
+
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "handles nil system_ids in subscription" do
+      subscription = %{
+        "system_ids" => nil,
+        "character_ids" => [123]
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_142,
+        "victim" => %{"character_id" => 123}
+      }
+
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "handles nil character_ids in subscription" do
+      subscription = %{
+        "system_ids" => [30_000_142],
+        "character_ids" => nil
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_142,
+        "victim" => %{"character_id" => 123}
+      }
+
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
+    test "does not match when both filters are empty" do
+      subscription = %{
+        "system_ids" => [],
+        "character_ids" => []
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_142,
+        "victim" => %{"character_id" => 123}
+      }
+
+      refute Filter.matches_subscription?(killmail, subscription)
+    end
+  end
+
+  describe "filter_killmails/2" do
+    test "filters killmails by system" do
+      subscription = %{
+        "system_ids" => [30_000_142],
+        "character_ids" => []
+      }
+
+      killmails = [
+        %{"solar_system_id" => 30_000_142, "killmail_id" => 1},
+        %{"solar_system_id" => 30_000_143, "killmail_id" => 2},
+        %{"solar_system_id" => 30_000_142, "killmail_id" => 3}
+      ]
+
+      filtered = Filter.filter_killmails(killmails, subscription)
+      assert length(filtered) == 2
+      assert Enum.all?(filtered, &(&1["solar_system_id"] == 30_000_142))
+    end
+
+    test "filters killmails by character" do
+      subscription = %{
+        "system_ids" => [],
+        "character_ids" => [123]
+      }
+
+      killmails = [
+        %{
+          "solar_system_id" => 30_000_142,
+          "victim" => %{"character_id" => 123},
+          "killmail_id" => 1
+        },
+        %{
+          "solar_system_id" => 30_000_143,
+          "victim" => %{"character_id" => 456},
+          "killmail_id" => 2
+        },
+        %{
+          "solar_system_id" => 30_000_144,
+          "victim" => %{"character_id" => 789},
+          "attackers" => [%{"character_id" => 123}],
+          "killmail_id" => 3
+        }
+      ]
+
+      filtered = Filter.filter_killmails(killmails, subscription)
+      assert length(filtered) == 2
+      assert Enum.map(filtered, & &1["killmail_id"]) == [1, 3]
+    end
+
+    test "returns empty list when no matches" do
+      subscription = %{
+        "system_ids" => [30_000_999],
+        "character_ids" => []
+      }
+
+      killmails = [
+        %{"solar_system_id" => 30_000_142, "killmail_id" => 1},
+        %{"solar_system_id" => 30_000_143, "killmail_id" => 2}
+      ]
+
+      filtered = Filter.filter_killmails(killmails, subscription)
+      assert filtered == []
+    end
+  end
+
+  describe "has_filters?/1" do
+    test "returns true when has system filters" do
+      subscription = %{"system_ids" => [30_000_142], "character_ids" => []}
+      assert Filter.has_filters?(subscription)
+    end
+
+    test "returns true when has character filters" do
+      subscription = %{"system_ids" => [], "character_ids" => [123]}
+      assert Filter.has_filters?(subscription)
+    end
+
+    test "returns true when has both filters" do
+      subscription = %{"system_ids" => [30_000_142], "character_ids" => [123]}
+      assert Filter.has_filters?(subscription)
+    end
+
+    test "returns false when both filters are empty" do
+      subscription = %{"system_ids" => [], "character_ids" => []}
+      refute Filter.has_filters?(subscription)
+    end
+
+    test "returns false when both filters are nil" do
+      subscription = %{"system_ids" => nil, "character_ids" => nil}
+      refute Filter.has_filters?(subscription)
+    end
+  end
+
+  describe "has_system_filter?/1" do
+    test "returns true when system_ids is non-empty" do
+      subscription = %{"system_ids" => [30_000_142]}
+      assert Filter.has_system_filter?(subscription)
+    end
+
+    test "returns false when system_ids is empty" do
+      subscription = %{"system_ids" => []}
+      refute Filter.has_system_filter?(subscription)
+    end
+
+    test "returns false when system_ids is nil" do
+      subscription = %{"system_ids" => nil}
+      refute Filter.has_system_filter?(subscription)
+    end
+  end
+
+  describe "has_character_filter?/1" do
+    test "returns true when character_ids is non-empty" do
+      subscription = %{"character_ids" => [123]}
+      assert Filter.has_character_filter?(subscription)
+    end
+
+    test "returns false when character_ids is empty" do
+      subscription = %{"character_ids" => []}
+      refute Filter.has_character_filter?(subscription)
+    end
+
+    test "returns false when character_ids is nil" do
+      subscription = %{"character_ids" => nil}
+      refute Filter.has_character_filter?(subscription)
+    end
+  end
+end

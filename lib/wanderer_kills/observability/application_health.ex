@@ -8,7 +8,13 @@ defmodule WandererKills.Observability.ApplicationHealth do
 
   require Logger
   alias WandererKills.Support.Clock
-  alias WandererKills.Observability.{HealthCheckBehaviour, CacheHealth}
+
+  alias WandererKills.Observability.{
+    HealthCheckBehaviour,
+    CacheHealth,
+    CharacterSubscriptionHealth,
+    SystemSubscriptionHealth
+  }
 
   @behaviour HealthCheckBehaviour
 
@@ -59,7 +65,9 @@ defmodule WandererKills.Observability.ApplicationHealth do
   def default_config do
     [
       health_modules: [
-        CacheHealth
+        CacheHealth,
+        CharacterSubscriptionHealth,
+        SystemSubscriptionHealth
       ],
       timeout_ms: 10_000
     ]

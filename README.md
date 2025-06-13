@@ -6,9 +6,12 @@ A high-performance, real-time EVE Online killmail data service built with Elixir
 
 - **Real-time Data** - Continuous killmail stream from zKillboard RedisQ
 - **Multiple Integration Methods** - REST API, WebSocket channels, and Phoenix PubSub
+- **Character-Based Subscriptions** - Subscribe to killmails by character IDs (victims or attackers)
+- **System-Based Subscriptions** - Traditional solar system ID filtering
+- **Flexible Filtering** - Combined system and character filtering with OR logic
 - **Efficient Caching** - Multi-tiered caching with custom ETS-based cache for optimal performance
 - **ESI Enrichment** - Automatic enrichment with character, corporation, and ship names
-- **Batch Processing** - Efficient bulk operations for multiple systems
+- **Batch Processing** - Efficient bulk operations for multiple systems and characters
 - **Event Streaming** - Optional event-driven architecture with offset tracking
 - **Comprehensive Monitoring** - 5-minute status reports with system-wide metrics
 
@@ -106,6 +109,34 @@ const systems = [30000142, 30000144];
 channel.push('subscribe', { systems: systems })
   .receive('ok', resp => { console.log('Subscribed to systems', resp) });
 ```
+
+### Character-Based Subscriptions
+
+WandererKills supports character-based subscriptions, allowing you to receive killmails where specific characters appear as either victims or attackers.
+
+```javascript
+// Subscribe to characters (will receive killmails where these characters are involved)
+const characters = [95465499, 90379338];  // Character IDs
+channel.push('subscribe_characters', { character_ids: characters })
+  .receive('ok', resp => { console.log('Subscribed to characters', resp) });
+
+// Mixed subscription (systems OR characters)
+channel.push('subscribe', { 
+  systems: [30000142], 
+  character_ids: [95465499, 90379338] 
+})
+  .receive('ok', resp => { console.log('Mixed subscription active', resp) });
+
+// Unsubscribe from specific characters
+channel.push('unsubscribe_characters', { character_ids: [95465499] })
+  .receive('ok', resp => { console.log('Unsubscribed from character', resp) });
+```
+
+**Character Subscription Features:**
+- Track specific players as victims or attackers
+- Combine with system subscriptions using OR logic
+- Support for up to 1000 characters per subscription
+- Real-time performance monitoring and optimization
 
 ### Example API Call
 
