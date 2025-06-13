@@ -459,8 +459,18 @@ defmodule WandererKillsWeb.KillmailChannel do
         initial_characters_count: length(valid_characters)
       )
 
-      # Subscribe to Phoenix PubSub topics for these systems
-      subscribe_to_systems(valid_systems)
+      # Subscribe to Phoenix PubSub topics
+      if length(valid_systems) > 0 do
+        subscribe_to_systems(valid_systems)
+      else
+        # If only character subscriptions, subscribe to all_systems topic
+        if length(valid_characters) > 0 do
+          Phoenix.PubSub.subscribe(
+            WandererKills.PubSub,
+            WandererKills.Support.PubSubTopics.all_systems_topic()
+          )
+        end
+      end
 
       # Schedule preload after join completes (can't push during join)
       if length(valid_systems) > 0 do

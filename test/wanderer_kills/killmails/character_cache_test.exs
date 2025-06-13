@@ -33,6 +33,10 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
       # Second call should use cache
       result2 = CharacterCache.extract_characters_cached(killmail)
       assert result2 == result1
+
+      # Verify the value is actually in cache
+      stats = CharacterCache.get_cache_stats()
+      assert stats.entries > 0
     end
 
     test "handles killmail without killmail_id" do
@@ -188,9 +192,9 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
       # Clear cache
       assert CharacterCache.clear_cache() == :ok
 
-      # Verify cache is empty (next call will be a miss)
-      # We can't directly test this without access to telemetry,
-      # but we can verify the function completes
+      # Verify cache is empty
+      stats = CharacterCache.get_cache_stats()
+      assert stats.entries == 0
     end
   end
 end

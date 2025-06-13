@@ -1,5 +1,5 @@
 defmodule WandererKillsWeb.SubscriptionControllerTest do
-  use WandererKillsWeb.ConnCase
+  use WandererKillsWeb.ConnCase, async: false
   use WandererKills.Test.SharedContexts
 
   alias WandererKills.SubscriptionManager

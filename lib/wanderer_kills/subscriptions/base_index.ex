@@ -322,24 +322,10 @@ defmodule WandererKills.Subscriptions.BaseIndex do
     end
 
     # Update the forward index (entity_id -> subscription_ids)
-    # For large entity lists (>100 entities), use parallel processing to reduce blocking time
-    if entity_count > 100 do
-      # Use parallel processing for large entity lists to reduce GenServer blocking time
-      Task.async_stream(
-        entity_ids,
-        fn entity_id ->
-          update_entity_index(table_name, entity_id, subscription_id, :add)
-        end,
-        max_concurrency: System.schedulers_online(),
-        timeout: 30_000
-      )
-      |> Stream.run()
-    else
-      # For smaller lists, use simple Enum.each as it's more efficient
-      Enum.each(entity_ids, fn entity_id ->
-        update_entity_index(table_name, entity_id, subscription_id, :add)
-      end)
-    end
+    # Use sequential processing to avoid race conditions with ETS operations
+    Enum.each(entity_ids, fn entity_id ->
+      update_entity_index(table_name, entity_id, subscription_id, :add)
+    end)
 
     # Update the reverse index
     new_reverse_index = Map.put(state.reverse_index, subscription_id, entity_ids)
@@ -447,25 +433,10 @@ defmodule WandererKills.Subscriptions.BaseIndex do
     entity_ids = Map.get(state.reverse_index, subscription_id, [])
 
     # Remove the subscription from all entity entries
-    entity_count = length(entity_ids)
-
-    if entity_count > 100 do
-      # Use parallel processing for large entity lists to reduce GenServer blocking time
-      Task.async_stream(
-        entity_ids,
-        fn entity_id ->
-          update_entity_index(table_name, entity_id, subscription_id, :remove)
-        end,
-        max_concurrency: System.schedulers_online(),
-        timeout: 30_000
-      )
-      |> Stream.run()
-    else
-      # For smaller lists, use simple Enum.each as it's more efficient
-      Enum.each(entity_ids, fn entity_id ->
-        update_entity_index(table_name, entity_id, subscription_id, :remove)
-      end)
-    end
+    # Use sequential processing to avoid race conditions with ETS operations
+    Enum.each(entity_ids, fn entity_id ->
+      update_entity_index(table_name, entity_id, subscription_id, :remove)
+    end)
 
     # Remove from reverse index
     new_reverse_index = Map.delete(state.reverse_index, subscription_id)

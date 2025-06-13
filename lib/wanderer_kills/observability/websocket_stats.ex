@@ -543,8 +543,8 @@ defmodule WandererKills.Observability.WebSocketStats do
       expirations: Map.get(stats, :expirations, 0),
       updates: Map.get(stats, :updates, 0),
       gets: Map.get(calls, :get, 0),
-      puts: Map.get(calls, :put, 0),
-      deletes: Map.get(calls, :del, 0)
+      puts: Map.get(calls, :put, 0) + Map.get(calls, :set, 0),
+      deletes: Map.get(calls, :del, 0) + Map.get(calls, :delete, 0)
     }
   end
 

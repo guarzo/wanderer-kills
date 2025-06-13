@@ -5,7 +5,7 @@ defmodule WandererKills.Killmails.CharacterMatcherTest do
 
   # Helper function to build killmail maps with victim and attackers
   defp build_killmail(victim_id, attacker_ids) do
-    victim = if victim_id, do: %{"character_id" => victim_id}, else: %{}
+    victim = if victim_id, do: %{"character_id" => victim_id}, else: nil
     attackers = Enum.map(attacker_ids, fn id -> %{"character_id" => id} end)
 
     %{

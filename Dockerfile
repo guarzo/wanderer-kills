@@ -44,15 +44,9 @@ FROM deps AS build
 WORKDIR /app
 
 # Copy source code
-COPY lib lib
-COPY config config
-COPY priv priv
+COPY lib config priv ./
 
-# Ensure Hex and Rebar are available in build stage
-RUN --mount=type=cache,target=/root/.hex \
-    --mount=type=cache,target=/root/.mix \
-    mix local.hex --force \
- && mix local.rebar --force
+# Hex and Rebar are already installed in deps stage
 
 # Compile and release with cache mount for build artifacts
 RUN --mount=type=cache,target=/app/_build,sharing=locked \
@@ -81,10 +75,10 @@ RUN apt-get update \
       procps \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd -r app \
- && useradd -r -g app app
+ && useradd -r -d /app -s /usr/sbin/nologin -g app app
 
 # Copy release from build stage
-COPY --from=build --chown=app:app /app/release ./
+COPY --from=build --chown=app:app /app/release/* ./
 
 # Runtime configuration
 ENV REPLACE_OS_VARS=true \
@@ -110,4 +104,4 @@ CMD ["start"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:4004/health || exit 1 
+  CMD ["sh", "-c", "wget --no-verbose --tries=1 --spider http://localhost:4004/health || exit 1"] 

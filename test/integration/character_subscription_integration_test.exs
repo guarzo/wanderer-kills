@@ -14,19 +14,22 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
   alias WandererKills.Killmails.{CharacterCache, BatchProcessor}
   alias WandererKills.Storage.KillmailStore
 
-  # Helper function to poll for eventual consistency
+  # Helper function to poll for eventual consistency with exponential backoff
   defp assert_eventually(check_fn, timeout \\ 1000) do
-    end_time = System.monotonic_time(:millisecond) + timeout
-    assert_eventually_loop(check_fn, end_time)
+    deadline = System.monotonic_time(:millisecond) + timeout
+    assert_eventually_loop(check_fn, deadline, 1)
   end
 
-  defp assert_eventually_loop(check_fn, end_time) do
+  defp assert_eventually_loop(check_fn, deadline, delay) do
     if check_fn.() do
       :ok
     else
-      if System.monotonic_time(:millisecond) < end_time do
-        Process.sleep(10)
-        assert_eventually_loop(check_fn, end_time)
+      now = System.monotonic_time(:millisecond)
+
+      if now < deadline do
+        # Use exponential backoff with max delay of 50ms
+        Process.sleep(min(delay, 50))
+        assert_eventually_loop(check_fn, deadline, delay * 2)
       else
         flunk("Expected condition was not met within timeout")
       end

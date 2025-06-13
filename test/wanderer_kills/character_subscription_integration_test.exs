@@ -89,11 +89,6 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
         "zkb" => %{"totalValue" => 30_000_000}
       }
 
-      # Store killmails
-      :ok = KillmailStore.store_killmail(killmail_with_victim_match)
-      :ok = KillmailStore.store_killmail(killmail_with_attacker_match)
-      :ok = KillmailStore.store_killmail(killmail_no_match)
-
       # Verify subscription matching
       subscriptions = SubscriptionManager.list_subscriptions()
       assert length(subscriptions) == 1

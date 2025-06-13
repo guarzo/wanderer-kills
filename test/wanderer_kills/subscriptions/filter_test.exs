@@ -79,6 +79,22 @@ defmodule WandererKills.Subscriptions.FilterTest do
       refute Filter.matches_subscription?(killmail, subscription)
     end
 
+    test "matches when system matches but character does not (OR logic)" do
+      subscription = %{
+        "system_ids" => [30_000_142],
+        "character_ids" => [123, 456]
+      }
+
+      killmail = %{
+        "solar_system_id" => 30_000_142,
+        "victim" => %{"character_id" => 999},
+        "attackers" => [%{"character_id" => 888}]
+      }
+
+      # Should match because system matches, even though character doesn't
+      assert Filter.matches_subscription?(killmail, subscription)
+    end
+
     test "handles system_id key instead of solar_system_id" do
       subscription = %{
         "system_ids" => [30_000_142],

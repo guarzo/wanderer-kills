@@ -89,7 +89,7 @@ defmodule WandererKills.Observability.HealthChecks do
 
   defp handle_health_check_request([component], timeout) when is_atom(component) do
     case Map.get(@health_check_functions, component) do
-      nil -> {:error, "Unknown component: #{component}"}
+      nil -> {:error, %{healthy: false, error: "Unknown component: #{component}"}}
       check_fn -> check_single_component_health(component, timeout, check_fn)
     end
   end

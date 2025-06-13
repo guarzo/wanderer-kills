@@ -115,7 +115,7 @@ defmodule WandererKills.SubscriptionManager do
   @spec add_websocket_subscription(String.t(), [system_id()], [character_id()], pid()) :: :ok
   def add_websocket_subscription(user_id, system_ids, character_ids, socket_pid) do
     subscription = %{
-      "id" => generate_subscription_id_sync(),
+      "id" => generate_subscription_id(),
       "user_id" => user_id,
       "system_ids" => system_ids,
       "character_ids" => character_ids,
@@ -528,11 +528,6 @@ defmodule WandererKills.SubscriptionManager do
 
   defp generate_subscription_id do
     "sub_" <> Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
-  end
-
-  # Public version for use in client API (reuses generate_subscription_id/0)
-  defp generate_subscription_id_sync do
-    generate_subscription_id()
   end
 
   defp send_webhook_notifications(subscriptions, system_id, kills) do

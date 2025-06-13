@@ -69,6 +69,9 @@ defmodule WandererKills.Test.SharedContexts do
 
       {:error, {:already_started, _pid}} ->
         :ok
+
+      :ignore ->
+        :ok
     end
   end
 

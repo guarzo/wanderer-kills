@@ -209,13 +209,21 @@ defmodule WandererKills.Killmails.CharacterCache do
 
         hit_rate = if total > 0, do: hits / total * 100, else: 0.0
 
+        # Get the size (number of entries) in the cache
+        size =
+          case Cachex.size(@cache_name) do
+            {:ok, count} -> count
+            _ -> 0
+          end
+
         %{
           namespace: @namespace,
           hits: hits,
           misses: misses,
           total_requests: total,
           hit_rate: Float.round(hit_rate, 2),
-          ttl_minutes: div(Config.get([:character_cache, :ttl_ms], @default_ttl), 60_000)
+          ttl_minutes: div(Config.get([:character_cache, :ttl_ms], @default_ttl), 60_000),
+          entries: size
         }
 
       {:error, _} ->

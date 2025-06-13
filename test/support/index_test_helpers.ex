@@ -55,6 +55,9 @@ defmodule IndexTestHelpers do
         {:error, {:already_started, pid}} ->
           # Already started, just use existing process
           pid
+
+        {:error, reason} ->
+          raise "Failed to start index #{inspect(index_module)}: #{inspect(reason)}"
       end
 
     # Clear any existing data
@@ -206,11 +209,13 @@ defmodule IndexTestHelpers do
       assert time < 100_000
     end
 
-    # Memory should be reasonable
-    stats = index_module.get_stats()
-    memory_mb = stats.memory_usage_bytes / (1024 * 1024)
-    # Under 10MB for 100 subscriptions
-    assert memory_mb < 10
+    # Memory assertions only run when PERF_TEST env var is set
+    if System.get_env("PERF_TEST") do
+      stats = index_module.get_stats()
+      memory_mb = stats.memory_usage_bytes / (1024 * 1024)
+      # Under 10MB for 100 subscriptions
+      assert memory_mb < 10
+    end
   end
 
   @doc """

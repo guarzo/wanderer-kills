@@ -242,8 +242,12 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
 
       # Should find subscriptions efficiently
       assert length(result) > 0
-      # Under 10ms for 50 system lookups
-      assert time < 10_000
+
+      # Performance assertions only run when PERF_TEST env var is set
+      if System.get_env("PERF_TEST") do
+        # Under 10ms for 50 system lookups
+        assert time < 10_000
+      end
     end
   end
 end

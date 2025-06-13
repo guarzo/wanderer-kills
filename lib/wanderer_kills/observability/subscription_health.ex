@@ -143,13 +143,19 @@ defmodule WandererKills.Observability.SubscriptionHealth do
 
   defp check_index_availability(index_module) do
     try do
-      stats = index_module.get_stats()
+      # Measure response time while getting stats to avoid duplicate calls
+      {time_microseconds, stats} =
+        :timer.tc(fn ->
+          index_module.get_stats()
+        end)
+
+      response_time_ms = Float.round(time_microseconds / 1000, 2)
 
       if is_map(stats) and Map.has_key?(stats, :total_subscriptions) do
         %{
           status: :healthy,
           message: "#{inspect(index_module)} responding normally",
-          response_time_ms: measure_response_time(index_module)
+          response_time_ms: response_time_ms
         }
       else
         %{
@@ -382,16 +388,6 @@ defmodule WandererKills.Observability.SubscriptionHealth do
     else
       0.0
     end
-  end
-
-  defp measure_response_time(index_module) do
-    {time_microseconds, _result} =
-      :timer.tc(fn ->
-        index_module.get_stats()
-      end)
-
-    # Convert to milliseconds
-    Float.round(time_microseconds / 1000, 2)
   end
 
   defp get_realistic_test_entity_id(index_module, entity_type_string) do

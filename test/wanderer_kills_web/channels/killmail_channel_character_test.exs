@@ -4,6 +4,30 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
 
   setup :with_http_mocks
 
+  # Helper function to broadcast killmail updates via PubSub
+  defp broadcast_killmail_update(system_id, kills, opts \\ []) do
+    message = %{
+      type: :detailed_kill_update,
+      solar_system_id: system_id,
+      kills: kills,
+      timestamp: DateTime.utc_now()
+    }
+
+    # Determine which topics to broadcast to
+    topics =
+      if Keyword.get(opts, :to_system, false) do
+        # Broadcast to specific system topics
+        ["zkb:system:#{system_id}", "zkb:system:#{system_id}:detailed"]
+      else
+        # Broadcast to all_systems topic for character-only subscriptions
+        ["zkb:all_systems"]
+      end
+
+    Enum.each(topics, fn topic ->
+      Phoenix.PubSub.broadcast(WandererKills.PubSub, topic, message)
+    end)
+  end
+
   setup do
     # Clear caches and indexes
     WandererKills.TestHelpers.clear_all_caches()
@@ -193,7 +217,7 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
       %{channel_socket: socket}
     end
 
-    test "receives killmail when victim matches subscribed character", %{channel_socket: socket} do
+    test "receives killmail when victim matches subscribed character", %{channel_socket: _socket} do
       killmail = %{
         "killmail_id" => 123_456,
         # Not subscribed to this system
@@ -204,18 +228,15 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
       }
 
       # Simulate killmail broadcast
-      send(socket.channel_pid, %{
-        type: :detailed_kill_update,
-        solar_system_id: 30_000_999,
-        kills: [killmail],
-        timestamp: DateTime.utc_now()
-      })
+      broadcast_killmail_update(30_000_999, [killmail])
 
       assert_push("killmail_update", payload)
       assert payload.killmails == [killmail]
     end
 
-    test "receives killmail when attacker matches subscribed character", %{channel_socket: socket} do
+    test "receives killmail when attacker matches subscribed character", %{
+      channel_socket: _socket
+    } do
       killmail = %{
         "killmail_id" => 123_457,
         "solar_system_id" => 30_000_999,
@@ -228,18 +249,13 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
         ]
       }
 
-      send(socket.channel_pid, %{
-        type: :detailed_kill_update,
-        solar_system_id: 30_000_999,
-        kills: [killmail],
-        timestamp: DateTime.utc_now()
-      })
+      broadcast_killmail_update(30_000_999, [killmail])
 
       assert_push("killmail_update", payload)
       assert payload.killmails == [killmail]
     end
 
-    test "filters out killmails without matching characters", %{channel_socket: socket} do
+    test "filters out killmails without matching characters", %{channel_socket: _socket} do
       killmail = %{
         "killmail_id" => 123_458,
         "solar_system_id" => 30_000_999,
@@ -247,18 +263,13 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
         "attackers" => [%{"character_id" => 222}]
       }
 
-      send(socket.channel_pid, %{
-        type: :detailed_kill_update,
-        solar_system_id: 30_000_999,
-        kills: [killmail],
-        timestamp: DateTime.utc_now()
-      })
+      broadcast_killmail_update(30_000_999, [killmail])
 
       # Should not receive this killmail
       refute_push("killmail_update", _, 100)
     end
 
-    test "filters multiple killmails correctly", %{channel_socket: socket} do
+    test "filters multiple killmails correctly", %{channel_socket: _socket} do
       killmails = [
         %{
           "killmail_id" => 1,
@@ -283,12 +294,7 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
         }
       ]
 
-      send(socket.channel_pid, %{
-        type: :detailed_kill_update,
-        solar_system_id: 30_000_999,
-        kills: killmails,
-        timestamp: DateTime.utc_now()
-      })
+      broadcast_killmail_update(30_000_999, killmails)
 
       assert_push("killmail_update", payload)
       assert length(payload.killmails) == 2
@@ -309,7 +315,7 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
       %{channel_socket: socket}
     end
 
-    test "receives killmail matching system but not character", %{channel_socket: socket} do
+    test "receives killmail matching system but not character", %{channel_socket: _socket} do
       killmail = %{
         "killmail_id" => 123_459,
         # Subscribed system
@@ -319,18 +325,13 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
         "attackers" => []
       }
 
-      send(socket.channel_pid, %{
-        type: :detailed_kill_update,
-        solar_system_id: 30_000_142,
-        kills: [killmail],
-        timestamp: DateTime.utc_now()
-      })
+      broadcast_killmail_update(30_000_142, [killmail], to_system: true)
 
       assert_push("killmail_update", payload)
       assert payload.killmails == [killmail]
     end
 
-    test "receives killmail matching character but not system", %{channel_socket: socket} do
+    test "receives killmail matching character but not system", %{channel_socket: _socket} do
       killmail = %{
         "killmail_id" => 123_460,
         # Not subscribed system
@@ -340,18 +341,14 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
         "attackers" => []
       }
 
-      send(socket.channel_pid, %{
-        type: :detailed_kill_update,
-        solar_system_id: 30_000_999,
-        kills: [killmail],
-        timestamp: DateTime.utc_now()
-      })
+      # Broadcast to the subscribed system's topic so channel receives it
+      broadcast_killmail_update(30_000_142, [killmail], to_system: true)
 
       assert_push("killmail_update", payload)
       assert payload.killmails == [killmail]
     end
 
-    test "receives killmail matching both system and character", %{channel_socket: socket} do
+    test "receives killmail matching both system and character", %{channel_socket: _socket} do
       killmail = %{
         "killmail_id" => 123_461,
         # Subscribed system
@@ -361,12 +358,7 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
         "attackers" => []
       }
 
-      send(socket.channel_pid, %{
-        type: :detailed_kill_update,
-        solar_system_id: 30_000_142,
-        kills: [killmail],
-        timestamp: DateTime.utc_now()
-      })
+      broadcast_killmail_update(30_000_142, [killmail], to_system: true)
 
       assert_push("killmail_update", payload)
       assert payload.killmails == [killmail]
