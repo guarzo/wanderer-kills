@@ -44,7 +44,9 @@ FROM deps AS build
 WORKDIR /app
 
 # Copy source code
-COPY lib config priv ./
+COPY lib lib/
+COPY config config/
+COPY priv priv/
 
 # Hex and Rebar are already installed in deps stage
 
@@ -73,6 +75,9 @@ RUN apt-get update \
       libgcc-s1 \
       wget \
       procps \
+      locales \
+ && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+ && locale-gen \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd -r app \
  && useradd -r -d /app -s /usr/sbin/nologin -g app app
@@ -82,7 +87,10 @@ COPY --from=build --chown=app:app /app/release/ ./
 
 # Runtime configuration
 ENV REPLACE_OS_VARS=true \
-    HOME=/app
+    HOME=/app \
+    LANG=C.UTF-8 \
+    LANGUAGE=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
 # Metadata
 ARG BUILD_DATE
