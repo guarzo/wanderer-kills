@@ -264,12 +264,13 @@ defmodule WandererKills.Observability.SubscriptionHealth do
       subscription_count = Map.get(stats, :total_subscriptions, 0)
 
       # Get entity-specific entry count
-      entity_entries_key = 
+      entity_entries_key =
         case entity_type_string do
           "character" -> :total_character_entries
           "system" -> :total_system_entries
           _ -> :total_entity_entries
         end
+
       entity_entry_count = Map.get(stats, entity_entries_key, 0)
 
       cond do
@@ -314,7 +315,7 @@ defmodule WandererKills.Observability.SubscriptionHealth do
       stats = index_module.get_stats()
 
       # Get entity-specific keys based on entity type
-      {entity_entries_key, entity_subscriptions_key} = 
+      {entity_entries_key, entity_subscriptions_key} =
         case entity_type_string do
           "character" -> {:total_character_entries, :total_character_subscriptions}
           "system" -> {:total_system_entries, :total_system_subscriptions}

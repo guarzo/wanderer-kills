@@ -7,11 +7,11 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
   setup do
     # Ensure cache is available
     ensure_cache_available()
-    
+
     # Clear any existing subscriptions
     :ok = Application.stop(:wanderer_kills)
     :ok = Application.start(:wanderer_kills)
-    
+
     # Ensure cache is available after restart
     ensure_cache_available()
 

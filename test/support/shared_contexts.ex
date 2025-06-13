@@ -48,11 +48,17 @@ defmodule WandererKills.Test.SharedContexts do
               interval: :timer.seconds(60),
               default: :timer.minutes(5),
               lazy: true
-            )
+            ),
+          hooks: [
+            hook(module: Cachex.Stats)
+          ]
         ]
 
         case Cachex.start_link(:wanderer_cache, opts) do
-          {:ok, _pid} -> :ok
+          {:ok, _pid} -> 
+            # Give cache time to fully initialize
+            Process.sleep(50)
+            :ok
           {:error, {:already_started, _pid}} -> :ok
         end
 

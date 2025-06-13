@@ -12,15 +12,16 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
   alias WandererKills.Subscriptions.CharacterIndex
   alias WandererKills.Killmails.{CharacterCache, BatchProcessor}
   alias WandererKills.Storage.KillmailStore
-  
+
   import Cachex.Spec
 
   setup do
     # Ensure cache is available
     ensure_cache_available()
-    
+
     # Clear all state
     CharacterIndex.clear()
+
     try do
       CharacterCache.clear_cache()
     rescue
@@ -28,17 +29,19 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
         # Cache doesn't exist yet, that's ok
         :ok
     end
+
     KillmailStore.clear_all()
 
     # Restart the subscription manager to clear its state
     :ok = Application.stop(:wanderer_kills)
     :ok = Application.start(:wanderer_kills)
-    
+
     # Ensure cache is available after restart
     ensure_cache_available()
 
     on_exit(fn ->
       CharacterIndex.clear()
+
       try do
         CharacterCache.clear_cache()
       rescue
@@ -46,6 +49,7 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
           # Cache doesn't exist anymore, that's ok
           :ok
       end
+
       KillmailStore.clear_all()
     end)
 
@@ -529,11 +533,13 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
         ]
 
         case Cachex.start_link(:wanderer_cache, opts) do
-          {:ok, _pid} -> 
+          {:ok, _pid} ->
             # Give cache time to fully initialize
             Process.sleep(10)
             :ok
-          {:error, {:already_started, _pid}} -> :ok
+
+          {:error, {:already_started, _pid}} ->
+            :ok
         end
 
       _pid ->

@@ -192,18 +192,26 @@ defmodule WandererKills.Killmails.CharacterCache do
   """
   @spec clear_cache() :: :ok
   def clear_cache do
-    # Get all keys and filter by our namespace
-    case Cachex.keys(@cache_name) do
-      {:ok, keys} ->
-        keys
-        |> Enum.filter(&String.starts_with?(&1, @namespace <> ":"))
-        |> Enum.each(&Cachex.del(@cache_name, &1))
+    # Check if cache exists first
+    case Process.whereis(@cache_name) do
+      nil ->
+        # Cache doesn't exist yet, nothing to clear
+        :ok
 
-      {:error, _} ->
-        Logger.warning("Failed to clear character cache")
+      _pid ->
+        # Get all keys and filter by our namespace
+        case Cachex.keys(@cache_name) do
+          {:ok, keys} ->
+            keys
+            |> Enum.filter(&String.starts_with?(&1, @namespace <> ":"))
+            |> Enum.each(&Cachex.del(@cache_name, &1))
+
+          {:error, _} ->
+            Logger.warning("Failed to clear character cache")
+        end
+
+        :ok
     end
-
-    :ok
   end
 
   # Private functions

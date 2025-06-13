@@ -47,7 +47,7 @@ defmodule WandererKills.Subscriptions.BaseIndex do
   # Combines multiple quoted expressions into a single block
   defp combine_quoted_expressions(expressions) do
     quote do
-      unquote_splicing(expressions)
+      (unquote_splicing(expressions))
     end
   end
 
@@ -71,7 +71,6 @@ defmodule WandererKills.Subscriptions.BaseIndex do
 
   defp generate_client_api(entity_type) do
     quote do
-
       # ============================================================================
       # Client API
       # ============================================================================
@@ -448,13 +447,13 @@ defmodule WandererKills.Subscriptions.BaseIndex do
           total_character_entries: total_entity_entries,
           total_character_subscriptions: total_entity_subscriptions
         })
-      
+
       "system" ->
         Map.merge(base_stats, %{
           total_system_entries: total_entity_entries,
           total_system_subscriptions: total_entity_subscriptions
         })
-      
+
       _ ->
         # For other entity types, use generic keys
         Map.merge(base_stats, %{
