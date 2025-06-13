@@ -55,18 +55,21 @@ defmodule WandererKillsWeb.KillmailChannel do
   @impl true
   def join("killmails:lobby", %{"systems" => systems} = params, socket) when is_list(systems) do
     characters = Map.get(params, "characters", [])
-    join_with_filters(socket, systems, characters)
+    preload_config = Map.get(params, "preload", %{})
+    join_with_filters(socket, systems, characters, preload_config)
   end
 
   def join("killmails:lobby", %{"characters" => characters} = params, socket)
       when is_list(characters) do
     systems = Map.get(params, "systems", [])
-    join_with_filters(socket, systems, characters)
+    preload_config = Map.get(params, "preload", %{})
+    join_with_filters(socket, systems, characters, preload_config)
   end
 
-  def join("killmails:lobby", _params, socket) do
+  def join("killmails:lobby", params, socket) do
     # Join without initial systems or characters - they can subscribe later
-    subscription_id = create_subscription(socket, [], [])
+    preload_config = Map.get(params, "preload", %{})
+    subscription_id = create_subscription(socket, [], [], preload_config)
 
     socket =
       socket
@@ -278,6 +281,46 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   # Handle preload after join completes
   @impl true
+  def handle_info({:after_join, systems, preload_config}, socket) do
+    Logger.debug("📡 Starting preload after join completed",
+      user_id: socket.assigns.user_id,
+      subscription_id: socket.assigns.subscription_id,
+      systems_count: length(systems)
+    )
+
+    # Check if extended preload is requested
+    if preload_config["enabled"] != false && map_size(preload_config) > 0 do
+      # Request extended historical preload
+      case WandererKills.HistoricalFetcher.request_preload(
+             socket.assigns.subscription_id,
+             preload_config
+           ) do
+        :ok ->
+          Logger.info("📚 Extended preload requested",
+            user_id: socket.assigns.user_id,
+            subscription_id: socket.assigns.subscription_id,
+            config: preload_config
+          )
+
+        {:error, reason} ->
+          Logger.error("❌ Failed to request extended preload",
+            user_id: socket.assigns.user_id,
+            subscription_id: socket.assigns.subscription_id,
+            error: reason
+          )
+
+          # Fall back to standard preload
+          preload_kills_for_systems(socket, systems, "initial join")
+      end
+    else
+      # Standard preload behavior
+      preload_kills_for_systems(socket, systems, "initial join")
+    end
+
+    {:noreply, socket}
+  end
+
+  # Handle legacy after_join without preload config
   def handle_info({:after_join, systems}, socket) do
     Logger.debug("📡 Starting preload after join completed",
       user_id: socket.assigns.user_id,
@@ -359,6 +402,57 @@ defmodule WandererKillsWeb.KillmailChannel do
     {:noreply, socket}
   end
 
+  # Handle preload status updates from HistoricalFetcher
+  def handle_info(
+        %Phoenix.Socket.Broadcast{
+          topic: topic,
+          event: "preload_status",
+          payload: payload
+        },
+        socket
+      ) do
+    if String.ends_with?(topic, socket.assigns.subscription_id) do
+      push(socket, "preload_status", payload)
+    end
+
+    {:noreply, socket}
+  end
+
+  def handle_info(
+        %Phoenix.Socket.Broadcast{
+          topic: topic,
+          event: "preload_batch",
+          payload: payload
+        },
+        socket
+      ) do
+    if String.ends_with?(topic, socket.assigns.subscription_id) do
+      push(socket, "preload_batch", payload)
+
+      # Track kills sent
+      if payload[:kills] do
+        WebSocketStats.increment_kills_sent(:preload, length(payload.kills))
+      end
+    end
+
+    {:noreply, socket}
+  end
+
+  def handle_info(
+        %Phoenix.Socket.Broadcast{
+          topic: topic,
+          event: "preload_complete",
+          payload: payload
+        },
+        socket
+      ) do
+    if String.ends_with?(topic, socket.assigns.subscription_id) do
+      push(socket, "preload_complete", payload)
+    end
+
+    {:noreply, socket}
+  end
+
   # Handle any unmatched PubSub messages
   def handle_info(message, socket) do
     Logger.debug("📨 Unhandled PubSub message",
@@ -422,11 +516,12 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Private helper functions
 
   # Helper function to handle join with filters
-  defp join_with_filters(socket, systems, characters) do
+  defp join_with_filters(socket, systems, characters, preload_config) do
     with {:ok, valid_systems} <- validate_systems(systems),
          {:ok, valid_characters} <- validate_characters(characters) do
       # Register this WebSocket connection as a subscriber
-      subscription_id = create_subscription(socket, valid_systems, valid_characters)
+      subscription_id =
+        create_subscription(socket, valid_systems, valid_characters, preload_config)
 
       # Track subscription creation
       WebSocketStats.track_subscription(:added, length(valid_systems), %{
@@ -448,6 +543,13 @@ defmodule WandererKillsWeb.KillmailChannel do
         |> assign(:subscription_id, subscription_id)
         |> assign(:subscribed_systems, MapSet.new(valid_systems))
         |> assign(:subscribed_characters, MapSet.new(valid_characters))
+        |> assign(:preload_config, preload_config)
+
+      # Subscribe to the subscription's own topic for preload updates
+      Phoenix.PubSub.subscribe(
+        WandererKills.PubSub,
+        "killmails:#{subscription_id}"
+      )
 
       Logger.debug("🔌 Client connected and joined killmail channel",
         user_id: socket.assigns.user_id,
@@ -474,7 +576,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       # Schedule preload after join completes (can't push during join)
       if length(valid_systems) > 0 do
-        send(self(), {:after_join, valid_systems})
+        send(self(), {:after_join, valid_systems, preload_config})
       end
 
       response = %{
@@ -566,7 +668,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
-  defp create_subscription(socket, systems, characters) do
+  defp create_subscription(socket, systems, characters, preload_config) do
     subscription_id = generate_random_id()
 
     # Register with SubscriptionManager with character support
@@ -576,7 +678,8 @@ defmodule WandererKillsWeb.KillmailChannel do
       "system_ids" => systems,
       "character_ids" => characters,
       "socket_pid" => self(),
-      "connected_at" => DateTime.utc_now()
+      "connected_at" => DateTime.utc_now(),
+      "preload_config" => preload_config
     })
 
     subscription_id

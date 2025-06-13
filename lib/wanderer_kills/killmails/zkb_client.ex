@@ -14,9 +14,20 @@ defmodule WandererKills.Killmails.ZkbClientBehaviour do
   @callback fetch_system_killmails(integer()) :: {:ok, [map()]} | {:error, term()}
 
   @doc """
+  Fetches killmails for a system from zKillboard with options.
+  """
+  @callback fetch_system_killmails(integer(), keyword()) :: {:ok, [map()]} | {:error, term()}
+
+  @doc """
   Gets the killmail count for a system.
   """
   @callback get_system_killmail_count(integer()) :: {:ok, integer()} | {:error, term()}
+
+  @doc """
+  Fetches all pages of killmails for a system, yielding each page to the given function.
+  """
+  @callback fetch_system_killmails_paginated(integer(), keyword(), (list() -> any())) ::
+              {:ok, non_neg_integer()} | {:error, term()}
 end
 
 defmodule WandererKills.Killmails.ZkbClient do
@@ -105,9 +116,33 @@ defmodule WandererKills.Killmails.ZkbClient do
   """
   @spec fetch_system_killmails(system_id()) :: {:ok, [killmail()]} | {:error, term()}
   def fetch_system_killmails(system_id) when is_integer(system_id) and system_id > 0 do
+    fetch_system_killmails(system_id, [])
+  end
+
+  def fetch_system_killmails(invalid_id) do
+    {:error,
+     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
+  end
+
+  @doc """
+  Fetches killmails for a system from zKillboard with telemetry and options.
+
+  ## Options
+    * `:page` - Page number for pagination (default: 1)
+    * `:limit` - Number of results per page, max 200 (default: nil, returns zkb default)
+    * `:start_time` - ISO8601 timestamp for start of time range
+    * `:end_time` - ISO8601 timestamp for end of time range
+    * `:past_seconds` - Number of seconds to look back
+
+  Returns {:ok, [killmail]} or {:error, reason}.
+  """
+  @spec fetch_system_killmails(system_id(), keyword()) :: {:ok, [killmail()]} | {:error, term()}
+  def fetch_system_killmails(system_id, opts)
+      when is_integer(system_id) and system_id > 0 and is_list(opts) do
     Logger.debug("Fetching system killmails from ZKB",
       system_id: system_id,
       operation: :fetch_system_killmails,
+      options: opts,
       step: :start
     )
 
@@ -118,12 +153,16 @@ defmodule WandererKills.Killmails.ZkbClient do
     Logger.debug("[ZKB] Fetching system killmails",
       system_id: system_id,
       data_source: "zkillboard.com/api",
-      request_type: "historical_data"
+      request_type: "historical_data",
+      options: opts
     )
+
+    # Build query parameters from options
+    query_params = build_zkb_query_params(opts)
 
     request_opts =
       ClientProvider.build_request_opts(
-        params: [no_items: true],
+        params: query_params,
         headers: ClientProvider.eve_api_headers(),
         timeout: 60_000
       )
@@ -192,7 +231,7 @@ defmodule WandererKills.Killmails.ZkbClient do
     end
   end
 
-  def fetch_system_killmails(invalid_id) do
+  def fetch_system_killmails(invalid_id, _opts) do
     {:error,
      Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
@@ -447,7 +486,77 @@ defmodule WandererKills.Killmails.ZkbClient do
     end
   end
 
-  # Note: Query parameter building now handled by WandererKills.Http.Client
+  @doc """
+  Fetches all pages of killmails for a system, yielding each page to the given function.
+
+  ## Options
+    * `:start_time` - ISO8601 timestamp for start of time range
+    * `:end_time` - ISO8601 timestamp for end of time range
+    * `:past_seconds` - Number of seconds to look back
+    * `:max_pages` - Maximum number of pages to fetch (default: nil, fetches all)
+
+  Returns {:ok, total_count} or {:error, reason}.
+  """
+  @spec fetch_system_killmails_paginated(system_id(), keyword(), (list() -> any())) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def fetch_system_killmails_paginated(system_id, opts \\ [], yield_fn)
+      when is_integer(system_id) and system_id > 0 and is_function(yield_fn, 1) do
+    max_pages = Keyword.get(opts, :max_pages)
+    fetch_opts = Keyword.drop(opts, [:max_pages])
+
+    do_fetch_paginated(system_id, fetch_opts, yield_fn, 1, 0, max_pages)
+  end
+
+  defp do_fetch_paginated(system_id, opts, yield_fn, page, total_count, max_pages) do
+    if max_pages && page > max_pages do
+      {:ok, total_count}
+    else
+      fetch_opts = Keyword.put(opts, :page, page)
+
+      case fetch_system_killmails(system_id, fetch_opts) do
+        {:ok, []} ->
+          # No more results
+          {:ok, total_count}
+
+        {:ok, killmails} ->
+          # Yield this page to the callback
+          yield_fn.(killmails)
+
+          # Continue to next page
+          new_total = total_count + length(killmails)
+          do_fetch_paginated(system_id, opts, yield_fn, page + 1, new_total, max_pages)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  # Helper to build zkillboard query parameters
+  defp build_zkb_query_params(opts) do
+    base_params = [no_items: true]
+
+    opts
+    |> Enum.reduce(base_params, fn
+      {:page, page}, acc when is_integer(page) and page > 0 ->
+        Keyword.put(acc, :page, page)
+
+      {:limit, limit}, acc when is_integer(limit) and limit > 0 and limit <= 200 ->
+        Keyword.put(acc, :limit, limit)
+
+      {:start_time, start_time}, acc when is_binary(start_time) ->
+        Keyword.put(acc, :startTime, start_time)
+
+      {:end_time, end_time}, acc when is_binary(end_time) ->
+        Keyword.put(acc, :endTime, end_time)
+
+      {:past_seconds, seconds}, acc when is_integer(seconds) and seconds > 0 ->
+        Keyword.put(acc, :pastSeconds, seconds)
+
+      _, acc ->
+        acc
+    end)
+  end
 
   # Helper functions for enriching killmails
   defp get_victim_info(killmail) do

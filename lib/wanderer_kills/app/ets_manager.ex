@@ -10,6 +10,7 @@ defmodule WandererKills.App.EtsManager do
   require Logger
 
   @websocket_stats_table :websocket_stats
+  @wanderer_kills_stats_table :wanderer_kills_stats
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -39,9 +40,24 @@ defmodule WandererKills.App.EtsManager do
         Logger.debug("ETS table #{@websocket_stats_table} already exists, skipping creation")
     end
 
+    # Create the wanderer_kills_stats table for unified status reporting
+    case :ets.info(@wanderer_kills_stats_table) do
+      :undefined ->
+        :ets.new(@wanderer_kills_stats_table, [
+          :named_table,
+          :public,
+          :set,
+          read_concurrency: true,
+          write_concurrency: true
+        ])
+
+      _ ->
+        Logger.debug("ETS table #{@wanderer_kills_stats_table} already exists, skipping creation")
+    end
+
     Logger.info("ETS tables initialized successfully")
 
-    {:ok, %{tables: [@websocket_stats_table]}}
+    {:ok, %{tables: [@websocket_stats_table, @wanderer_kills_stats_table]}}
   end
 
   @doc """

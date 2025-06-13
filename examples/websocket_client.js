@@ -12,6 +12,26 @@
  * - Mixed subscriptions: Combine both system and character filters (OR logic)
  * - Real-time updates: Receive killmails as they happen
  * - Historical preload: Get recent kills when first subscribing
+ * - Extended preload: Request up to 1 week of historical data with progressive delivery
+ *
+ * Extended Preload Configuration:
+ * When connecting, you can request extended historical data by providing a preload config:
+ * {
+ *   enabled: true,              // Enable extended preload (default: true)
+ *   limit_per_system: 100,      // Max kills per system (default: 100, max: 200)
+ *   since_hours: 168,           // Hours to look back (default: 168 = 1 week)
+ *   delivery_batch_size: 10,    // Kills per batch (default: 10)
+ *   delivery_interval_ms: 1000  // Delay between batches (default: 1000ms)
+ * }
+ *
+ * The extended preload feature:
+ * - Fetches historical data asynchronously with rate limiting
+ * - Delivers kills progressively in batches to prevent overwhelming clients
+ * - Sends status updates during the preload process
+ * - Handles up to 200 kills per system going back 1 week
+ *
+ * Usage:
+ * node websocket_client.js [basic|preload|advanced]
  */
 
 // Import Phoenix Socket (you'll need to install phoenix)
@@ -29,10 +49,21 @@ class WandererKillsClient {
 
   /**
    * Connect to the WebSocket server
-   * @param {number} timeout - Connection timeout in milliseconds (default: 10000)
+   * @param {Object} options - Connection options
+   * @param {number[]} options.systems - System IDs to subscribe to
+   * @param {number[]} options.characters - Character IDs to track
+   * @param {Object} options.preload - Extended preload configuration
+   * @param {number} options.timeout - Connection timeout in milliseconds (default: 10000)
    * @returns {Promise} Resolves when connected, rejects on error or timeout
    */
-  async connect(timeout = 10000) {
+  async connect(options = {}) {
+    const {
+      systems = [],
+      characters = [],
+      preload = null,
+      timeout = 10000
+    } = options;
+
     return new Promise((resolve, reject) => {
       // Set up a connection timeout
       const timeoutId = setTimeout(() => {
@@ -64,14 +95,29 @@ class WandererKillsClient {
       // Connect to the socket
       this.socket.connect();
 
+      // Build channel params
+      const channelParams = {};
+      if (systems.length > 0) channelParams.systems = systems;
+      if (characters.length > 0) channelParams.characters = characters;
+      if (preload) channelParams.preload = preload;
+
       // Join the killmails channel
-      this.channel = this.socket.channel('killmails:lobby', {});
+      this.channel = this.socket.channel('killmails:lobby', channelParams);
 
       this.channel.join()
         .receive('ok', (response) => {
           clearTimeout(timeoutId);
           console.log('Connected to WandererKills WebSocket');
           console.log('Connection details:', response);
+
+          // Track initial subscriptions
+          if (systems.length > 0) {
+            systems.forEach(id => this.systemSubscriptions.add(id));
+          }
+          if (characters.length > 0) {
+            characters.forEach(id => this.characterSubscriptions.add(id));
+          }
+
           this.setupEventHandlers();
           resolve(response);
         })
@@ -124,6 +170,31 @@ class WandererKillsClient {
     // Listen for kill count updates
     this.channel.on('kill_count_update', (payload) => {
       console.log(`📊 Kill count update for system ${payload.system_id}: ${payload.count} kills`);
+    });
+
+    // Extended preload events
+    this.channel.on('preload_status', (payload) => {
+      console.log(`⏳ Preload progress: ${payload.status}`);
+      console.log(`   Current system: ${payload.current_system || 'N/A'}`);
+      console.log(`   Systems complete: ${payload.systems_complete}/${payload.total_systems}`);
+    });
+
+    this.channel.on('preload_batch', (payload) => {
+      console.log(`📦 Received preload batch: ${payload.kills.length} historical kills`);
+      // Process historical kills - these come in the same format as regular kills
+      payload.kills.forEach((kill) => {
+        console.log(`   Historical kill ${kill.killmail_id} from ${kill.kill_time}`);
+      });
+    });
+
+    this.channel.on('preload_complete', (payload) => {
+      console.log(`✅ Preload complete!`);
+      console.log(`   Total kills loaded: ${payload.total_kills}`);
+      console.log(`   Systems processed: ${payload.systems_processed}`);
+      if (payload.errors && payload.errors.length > 0) {
+        console.log(`   ⚠️ Errors encountered: ${payload.errors.length}`);
+        payload.errors.forEach(err => console.log(`      - ${err}`));
+      }
     });
   }
 
@@ -264,12 +335,12 @@ class WandererKillsClient {
   }
 }
 
-// Example usage
-async function example() {
+// Example usage - Basic connection
+async function basicExample() {
   const client = new WandererKillsClient('ws://localhost:4004');
 
   try {
-    // Connect to the server
+    // Connect to the server without preload
     await client.connect();
 
     // Subscribe to some popular systems
@@ -283,35 +354,88 @@ async function example() {
     // Get current status
     await client.getStatus();
 
-    // Example: Subscribe to more characters after 2 minutes
-    setTimeout(async () => {
-      console.log('\n📍 Adding more character subscriptions...');
-      await client.subscribeToCharacters([12345678, 87654321]);
-      await client.getStatus();
-    }, 2 * 60 * 1000);
-
-    // Example: Unsubscribe from Jita after 5 minutes
-    setTimeout(async () => {
-      console.log('\n📍 Unsubscribing from Jita...');
-      await client.unsubscribeFromSystems([30000142]);
-    }, 5 * 60 * 1000);
-
-    // Example: Unsubscribe from some characters after 7 minutes
-    setTimeout(async () => {
-      console.log('\n📍 Unsubscribing from some characters...');
-      await client.unsubscribeFromCharacters([95465499]);
-      await client.getStatus();
-    }, 7 * 60 * 1000);
-
-    // Disconnect after 10 minutes
+    // Keep connection alive for 5 minutes
     setTimeout(async () => {
       console.log('\n📍 Disconnecting...');
+      await client.disconnect();
+      process.exit(0);
+    }, 5 * 60 * 1000);
+
+  } catch (error) {
+    console.error('Client error:', error);
+    await client.disconnect();
+    process.exit(1);
+  }
+}
+
+// Example with extended historical data preload
+async function extendedPreloadExample() {
+  const client = new WandererKillsClient('ws://localhost:4004');
+  let historicalKills = [];
+  let realtimeKills = [];
+
+  try {
+    // Connect with initial systems and extended preload configuration
+    await client.connect({
+      systems: [30000142, 30002187], // Jita and Amarr
+      characters: [95465499],         // Track specific character
+      preload: {
+        enabled: true,
+        limit_per_system: 50,     // Get up to 50 kills per system
+        since_hours: 72,          // Look back 3 days
+        delivery_batch_size: 10,  // Deliver in batches of 10
+        delivery_interval_ms: 500 // 500ms between batches
+      }
+    });
+
+    console.log('🚀 Connected with extended preload configuration');
+
+    // Override handlers to collect historical vs realtime kills
+    client.channel.on('preload_batch', (payload) => {
+      console.log(`📦 Received ${payload.kills.length} historical kills`);
+      historicalKills = historicalKills.concat(payload.kills);
+    });
+
+    client.channel.on('killmail_update', (payload) => {
+      if (!payload.preload) {
+        console.log(`🔥 ${payload.killmails.length} new real-time kills!`);
+        realtimeKills = realtimeKills.concat(payload.killmails);
+      }
+    });
+
+    client.channel.on('preload_complete', (result) => {
+      console.log('\n📊 Historical Data Summary:');
+      console.log(`   Total historical kills: ${historicalKills.length}`);
+      console.log(`   Systems processed: ${result.systems_processed}`);
+
+      // Analyze historical data
+      const totalValue = historicalKills.reduce((sum, kill) =>
+        sum + (kill.zkb?.total_value || 0), 0
+      );
+      console.log(`   Total ISK destroyed: ${(totalValue / 1000000000).toFixed(2)}B ISK`);
+
+      // Find most expensive kill
+      const mostExpensive = historicalKills.reduce((max, kill) =>
+        (kill.zkb?.total_value || 0) > (max.zkb?.total_value || 0) ? kill : max
+      , historicalKills[0]);
+
+      if (mostExpensive) {
+        console.log(`   Most expensive kill: ${mostExpensive.killmail_id} - ${(mostExpensive.zkb.total_value / 1000000000).toFixed(2)}B ISK`);
+      }
+    });
+
+    // Keep running for 10 minutes to see real-time kills after preload
+    setTimeout(async () => {
+      console.log('\n📊 Final Summary:');
+      console.log(`   Historical kills loaded: ${historicalKills.length}`);
+      console.log(`   Real-time kills received: ${realtimeKills.length}`);
+
       await client.disconnect();
       process.exit(0);
     }, 10 * 60 * 1000);
 
   } catch (error) {
-    console.error('Client error:', error);
+    console.error('Extended preload example error:', error);
     await client.disconnect();
     process.exit(1);
   }
@@ -357,7 +481,29 @@ async function advancedExample() {
 // Run the example if this file is executed directly
 // For ES modules, use import.meta.url
 if (import.meta.url === `file://${process.argv[1]}`) {
-  example();
+  // Check command line arguments to determine which example to run
+  const args = process.argv.slice(2);
+  const exampleType = args[0] || 'basic';
+
+  console.log(`🚀 Running ${exampleType} example...\n`);
+
+  switch (exampleType) {
+    case 'basic':
+      basicExample();
+      break;
+    case 'preload':
+      extendedPreloadExample();
+      break;
+    case 'advanced':
+      advancedExample();
+      break;
+    default:
+      console.log('Usage: node websocket_client.js [basic|preload|advanced]');
+      console.log('  basic    - Simple connection and subscription');
+      console.log('  preload  - Extended historical data preload example');
+      console.log('  advanced - Mixed system and character subscriptions');
+      process.exit(1);
+  }
 }
 
 export default WandererKillsClient; 

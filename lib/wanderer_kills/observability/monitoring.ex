@@ -375,9 +375,18 @@ defmodule WandererKills.Observability.Monitoring do
   def handle_info(:log_parser_summary, state) do
     stats = state.parser_stats
 
-    Logger.info(
-      "[Parser] Killmail processing summary - Stored: #{stats.stored}, Skipped: #{stats.skipped}, Failed: #{stats.failed}"
-    )
+    # Store parser stats in ETS for unified status reporter
+    :ets.insert(:wanderer_kills_stats, {:parser_stats, stats})
+
+    # Note: Summary logging now handled by UnifiedStatus module
+    # Only log if there's significant error activity
+    if stats.failed > 10 do
+      Logger.warning(
+        "[Parser] High error rate detected",
+        parser_errors: stats.failed,
+        parser_total_processed: stats.total_processed
+      )
+    end
 
     # Emit telemetry for the summary
     :telemetry.execute(
