@@ -20,7 +20,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
     # Skip cache clearing - let it be handled by TestHelpers.clear_all_caches()
     # WandererKills.Killmails.CharacterCache.clear_cache()
     KillmailStore.clear_all()
-    
+
     # Clear all subscriptions to ensure clean state
     WandererKills.SubscriptionManager.clear_all_subscriptions()
 

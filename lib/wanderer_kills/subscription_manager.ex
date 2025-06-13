@@ -318,7 +318,7 @@ defmodule WandererKills.SubscriptionManager do
     # Clear all subscription indices
     CharacterIndex.clear()
     SystemIndex.clear()
-    
+
     # Return a fresh state
     new_state = %State{subscriptions: %{}, websocket_subscriptions: %{}}
     {:reply, :ok, new_state}

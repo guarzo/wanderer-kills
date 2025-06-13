@@ -9,10 +9,10 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
     WandererKills.TestHelpers.clear_all_caches()
     WandererKills.Subscriptions.CharacterIndex.clear()
     WandererKills.Subscriptions.SystemIndex.clear()
-    
+
     # Clear all subscriptions
     WandererKills.SubscriptionManager.clear_all_subscriptions()
-    
+
     # Create a socket with unique user_id for each test
     unique_user_id = "test_user_#{System.unique_integer([:positive])}"
     {:ok, socket} = connect(WandererKillsWeb.UserSocket, %{"user_id" => unique_user_id})

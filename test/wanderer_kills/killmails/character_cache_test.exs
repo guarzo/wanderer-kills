@@ -7,14 +7,13 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
   setup do
     # Use the test helpers to properly clear caches
     WandererKills.TestHelpers.clear_all_caches()
-    
+
     on_exit(fn ->
       WandererKills.TestHelpers.clear_all_caches()
     end)
-    
+
     :ok
   end
-  
 
   describe "extract_characters_cached/1" do
     test "extracts and caches characters from killmail" do

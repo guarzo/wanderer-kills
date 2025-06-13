@@ -9,7 +9,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
     WandererKills.TestHelpers.clear_all_caches()
     WandererKills.Subscriptions.CharacterIndex.clear()
     WandererKills.Subscriptions.SystemIndex.clear()
-    
+
     # Clear all subscriptions 
     WandererKills.SubscriptionManager.clear_all_subscriptions()
 
@@ -19,6 +19,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
   describe "POST /api/v1/subscriptions" do
     test "creates subscription with system_ids only", %{conn: conn} do
       unique_subscriber = "test_user_#{System.unique_integer([:positive])}"
+
       params = %{
         "subscriber_id" => unique_subscriber,
         "system_ids" => [30_000_142, 30_000_143],
@@ -40,6 +41,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "creates subscription with character_ids only", %{conn: conn} do
       unique_subscriber = "test_user_#{System.unique_integer([:positive])}"
+
       params = %{
         "subscriber_id" => unique_subscriber,
         "character_ids" => [95_465_499, 90_379_338],

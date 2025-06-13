@@ -15,11 +15,11 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
 
   describe "large character list performance" do
     @describetag :performance
-    
+
     setup do
       # Ensure cache is available without clearing it
       WandererKills.Test.SharedContexts.ensure_cache_available()
-      
+
       # Clear state specific to these tests
       CharacterIndex.clear()
 
@@ -85,6 +85,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
       # Create a large killmail with many attackers
       # Use a timestamp-based ID to avoid cache pollution from other tests
       unique_id = System.system_time(:millisecond) * 1000 + :rand.uniform(999)
+
       large_killmail = %{
         "killmail_id" => unique_id,
         "solar_system_id" => 30_000_142,

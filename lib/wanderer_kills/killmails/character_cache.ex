@@ -70,6 +70,28 @@ defmodule WandererKills.Killmails.CharacterCache do
   @namespace "character_extraction"
   @default_ttl :timer.minutes(5)
 
+  # Get the configured cache adapter
+  defp cache_adapter do
+    Application.get_env(:wanderer_kills, :cache_adapter, Cachex)
+  end
+
+  # Helper function to get cache stats that works with different adapters
+  defp get_cache_stats_internal do
+    adapter = cache_adapter()
+
+    case adapter do
+      Cachex ->
+        Cachex.stats(@cache_name)
+
+      _ ->
+        # For ETS adapter and others, we don't have detailed stats
+        case adapter.size(@cache_name) do
+          {:ok, size} -> {:ok, %{hits: 0, misses: 0, size: size}}
+          error -> error
+        end
+    end
+  end
+
   @doc """
   Extracts character IDs from a killmail, using cache when possible.
 
@@ -118,33 +140,26 @@ defmodule WandererKills.Killmails.CharacterCache do
   """
   @spec batch_extract_cached([map()]) :: %{integer() => [integer()]}
   def batch_extract_cached(killmails) when is_list(killmails) do
-    # Check if cache is available
-    case Process.whereis(@cache_name) do
-      nil ->
-        # Cache not available, fall back to direct extraction
+    try do
+      # Separate killmails with and without IDs
+      {with_ids, without_ids} = Enum.split_with(killmails, & &1["killmail_id"])
+
+      # Process killmails with IDs (cacheable)
+      cached_results = process_cacheable_killmails(with_ids)
+
+      # Process killmails without IDs (non-cacheable)
+      uncached_results =
+        without_ids
+        |> Enum.map(fn km ->
+          {System.unique_integer(), CharacterMatcher.extract_character_ids(km)}
+        end)
+        |> Map.new()
+
+      Map.merge(cached_results, uncached_results)
+    rescue
+      _error ->
+        # Cache became unavailable during processing, fall back
         fallback_batch_extract(killmails)
-      _pid ->
-        try do
-          # Separate killmails with and without IDs
-          {with_ids, without_ids} = Enum.split_with(killmails, & &1["killmail_id"])
-
-          # Process killmails with IDs (cacheable)
-          cached_results = process_cacheable_killmails(with_ids)
-
-          # Process killmails without IDs (non-cacheable)
-          uncached_results =
-            without_ids
-            |> Enum.map(fn km ->
-              {System.unique_integer(), CharacterMatcher.extract_character_ids(km)}
-            end)
-            |> Map.new()
-
-          Map.merge(cached_results, uncached_results)
-        rescue
-          ArgumentError ->
-            # Cache became unavailable during processing, fall back
-            fallback_batch_extract(killmails)
-        end
     end
   end
 
@@ -185,38 +200,29 @@ defmodule WandererKills.Killmails.CharacterCache do
   """
   @spec get_cache_stats() :: map()
   def get_cache_stats do
-    # Check if cache exists first
-    case Process.whereis(@cache_name) do
-      nil ->
+    case get_cache_stats_internal() do
+      {:ok, stats} ->
+        # Cachex stats structure is different - it's just counts
+        hits = Map.get(stats, :hits, 0)
+        misses = Map.get(stats, :misses, 0)
+        total = hits + misses
+
+        hit_rate = if total > 0, do: hits / total * 100, else: 0.0
+
         %{
           namespace: @namespace,
-          error: "Cache not available"
+          hits: hits,
+          misses: misses,
+          total_requests: total,
+          hit_rate: Float.round(hit_rate, 2),
+          ttl_minutes: div(@default_ttl, 60_000)
         }
-      _pid ->
-        case Cachex.stats(@cache_name) do
-          {:ok, stats} ->
-            # Cachex stats structure is different - it's just counts
-            hits = Map.get(stats, :hits, 0)
-            misses = Map.get(stats, :misses, 0)
-            total = hits + misses
 
-            hit_rate = if total > 0, do: hits / total * 100, else: 0.0
-
-            %{
-              namespace: @namespace,
-              hits: hits,
-              misses: misses,
-              total_requests: total,
-              hit_rate: Float.round(hit_rate, 2),
-              ttl_minutes: div(@default_ttl, 60_000)
-            }
-
-          {:error, _} ->
-            %{
-              namespace: @namespace,
-              error: "Unable to fetch cache stats"
-            }
-        end
+      {:error, _} ->
+        %{
+          namespace: @namespace,
+          error: "Unable to fetch cache stats"
+        }
     end
   end
 
@@ -225,24 +231,13 @@ defmodule WandererKills.Killmails.CharacterCache do
   """
   @spec clear_cache() :: :ok
   def clear_cache do
-    # Check if cache exists first
-    case Process.whereis(@cache_name) do
-      nil ->
-        # Cache doesn't exist yet, nothing to clear
+    # Clear cache using the configured adapter
+    case cache_adapter().clear(@cache_name) do
+      {:ok, _count} ->
         :ok
 
-      _pid ->
-        # Get all keys and filter by our namespace
-        case Cachex.keys(@cache_name) do
-          {:ok, keys} ->
-            keys
-            |> Enum.filter(&String.starts_with?(&1, @namespace <> ":"))
-            |> Enum.each(&Cachex.del(@cache_name, &1))
-
-          {:error, _} ->
-            Logger.warning("Failed to clear character cache")
-        end
-
+      {:error, _} ->
+        Logger.warning("Failed to clear character cache")
         :ok
     end
   end
@@ -254,43 +249,24 @@ defmodule WandererKills.Killmails.CharacterCache do
   end
 
   defp get_from_cache(key) do
-    # Check if cache exists first
-    case Process.whereis(@cache_name) do
-      nil ->
-        {:error, :cache_not_available}
-      _pid ->
-        case Cachex.get(@cache_name, key) do
-          {:ok, nil} -> {:error, :not_found}
-          {:ok, value} -> {:ok, value}
-          error -> error
-        end
+    case cache_adapter().get(@cache_name, key) do
+      {:ok, nil} -> {:error, :not_found}
+      {:ok, value} -> {:ok, value}
+      error -> error
     end
   end
 
   defp put_in_cache(key, value) do
-    # Check if cache exists first
-    case Process.whereis(@cache_name) do
-      nil ->
-        # Cache not available, just return ok
-        :ok
-      _pid ->
-        ttl = Config.get([:character_cache, :ttl_ms], @default_ttl)
-        result = Cachex.put(@cache_name, key, value, ttl: ttl)
-        Telemetry.character_cache(:put, key, %{character_count: length(value)})
-        result
-    end
+    ttl = Config.get([:character_cache, :ttl_ms], @default_ttl)
+    result = cache_adapter().put(@cache_name, key, value, ttl: ttl)
+    Telemetry.character_cache(:put, key, %{character_count: length(value)})
+    result
   end
 
   defp cached?(key) do
-    # Check if cache exists first
-    case Process.whereis(@cache_name) do
-      nil ->
-        false
-      _pid ->
-        case Cachex.exists?(@cache_name, key) do
-          {:ok, exists} -> exists
-          _ -> false
-        end
+    case cache_adapter().exists?(@cache_name, key) do
+      {:ok, exists} -> exists
+      _ -> false
     end
   end
 
