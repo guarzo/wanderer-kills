@@ -90,7 +90,7 @@ defmodule WandererKills.HistoricalFetcher do
         # Extract system IDs from subscription
         system_ids = Map.get(subscription, "system_ids", [])
 
-        if length(system_ids) == 0 do
+        if Enum.empty?(system_ids) do
           {:reply, {:error, Error.validation_error(:no_systems, "No systems in subscription")},
            state}
         else
@@ -126,7 +126,9 @@ defmodule WandererKills.HistoricalFetcher do
         end
 
       {:error, _} ->
-        {:reply, {:error, Error.not_found_error("subscription", "Subscription not found")}, state}
+        {:reply,
+         {:error, Error.not_found_error("subscription", %{message: "Subscription not found"})},
+         state}
     end
   end
 
@@ -261,34 +263,38 @@ defmodule WandererKills.HistoricalFetcher do
     if map_size(state.active_tasks) >= 3 do
       state
     else
-      case state.queue do
-        [] ->
-          state
-
-        [subscription_id | rest_queue] ->
-          case Map.get(state.requests, subscription_id) do
-            nil ->
-              # Request was cancelled
-              %{state | queue: rest_queue}
-
-            request ->
-              # Start processing this request
-              task = start_preload_task(request)
-
-              # Update state
-              new_active_tasks = Map.put(state.active_tasks, subscription_id, task.ref)
-
-              new_requests =
-                Map.put(state.requests, subscription_id, %{
-                  request
-                  | status: :processing,
-                    progress: Map.put(request.progress, :started_at, DateTime.utc_now())
-                })
-
-              %{state | queue: rest_queue, active_tasks: new_active_tasks, requests: new_requests}
-          end
-      end
+      process_queue_item(state)
     end
+  end
+
+  defp process_queue_item(%{queue: []} = state), do: state
+
+  defp process_queue_item(%{queue: [subscription_id | rest_queue]} = state) do
+    case Map.get(state.requests, subscription_id) do
+      nil ->
+        # Request was cancelled
+        %{state | queue: rest_queue}
+
+      request ->
+        start_and_track_preload_task(state, subscription_id, request, rest_queue)
+    end
+  end
+
+  defp start_and_track_preload_task(state, subscription_id, request, rest_queue) do
+    # Start processing this request
+    task = start_preload_task(request)
+
+    # Update state
+    new_active_tasks = Map.put(state.active_tasks, subscription_id, task.ref)
+
+    new_requests =
+      Map.put(state.requests, subscription_id, %{
+        request
+        | status: :processing,
+          progress: Map.put(request.progress, :started_at, DateTime.utc_now())
+      })
+
+    %{state | queue: rest_queue, active_tasks: new_active_tasks, requests: new_requests}
   end
 
   defp start_preload_task(request) do
@@ -320,10 +326,10 @@ defmodule WandererKills.HistoricalFetcher do
     start_time = DateTime.add(end_time, -request.config["since_hours"] * 3600, :second)
 
     # Process each system
-    Enum.reduce_while(request.system_ids, :ok, fn system_id, _acc ->
+    Enum.reduce_while(request.system_ids, 0, fn system_id, acc ->
       case fetch_and_deliver_system(request, system_id, start_time, end_time) do
-        :ok ->
-          {:cont, :ok}
+        {:ok, count} ->
+          {:cont, acc + count}
 
         {:error, reason} ->
           Logger.error("Failed to preload system",
@@ -359,64 +365,84 @@ defmodule WandererKills.HistoricalFetcher do
 
     result =
       ZkbClient.fetch_system_killmails_paginated(system_id, fetch_opts, fn page_kills ->
-        # Check rate limit before each page
-        case RateLimiter.check_rate_limit(:zkillboard) do
-          :ok ->
-            # Process and buffer kills
-            processed_kills = process_killmails(page_kills)
-
-            # Update buffer
-            send(buffer_pid, {:add_kills, processed_kills, self()})
-
-            receive do
-              {:buffer_state, buffer, _count} ->
-                # Deliver in batches
-                {to_deliver, remaining} =
-                  Enum.split(buffer, request.config["delivery_batch_size"])
-
-                if length(to_deliver) > 0 do
-                  deliver_batch(request.subscription_id, to_deliver)
-
-                  # Rate limit delivery
-                  Process.sleep(request.config["delivery_interval_ms"])
-                end
-
-                # Update buffer with remaining
-                send(buffer_pid, {:set_buffer, remaining})
-            end
-
-          {:error, :rate_limited} ->
-            # Wait and retry
-            Logger.warning("Rate limited, waiting 60 seconds", system_id: system_id)
-            Process.sleep(60_000)
-            :retry
-        end
+        process_page_with_rate_limit(request, system_id, page_kills, buffer_pid)
       end)
 
     # Get final state and deliver any remaining kills
     send(buffer_pid, {:get_final, self()})
 
-    receive do
-      {:final_state, final_buffer, total_fetched} ->
-        if length(final_buffer) > 0 do
-          deliver_batch(request.subscription_id, final_buffer)
-        end
+    total_count =
+      receive do
+        {:final_state, final_buffer, total_fetched} ->
+          if length(final_buffer) > 0 do
+            deliver_batch(request.subscription_id, final_buffer)
+          end
 
-        # Update progress
-        update_progress_async(request.subscription_id, system_id, total_fetched)
-    end
+          # Update progress
+          update_progress_async(request.subscription_id, system_id, total_fetched)
+          total_fetched
+      end
 
     # Clean up
     Process.exit(buffer_pid, :normal)
 
-    result
+    case result do
+      {:ok, _fetched_count} -> {:ok, total_count}
+      error -> error
+    end
+  end
+
+  defp process_page_with_rate_limit(request, system_id, page_kills, buffer_pid) do
+    # Check rate limit before each page
+    case RateLimiter.check_rate_limit(:zkillboard) do
+      :ok ->
+        handle_page_processing(request, page_kills, buffer_pid)
+
+      {:error, :rate_limited} ->
+        # Wait and retry
+        Logger.warning("Rate limited, waiting 60 seconds", system_id: system_id)
+        Process.sleep(60_000)
+        :retry
+    end
+  end
+
+  defp handle_page_processing(request, page_kills, buffer_pid) do
+    # Process and buffer kills
+    processed_kills = process_killmails(page_kills)
+
+    # Update buffer
+    send(buffer_pid, {:add_kills, processed_kills, self()})
+
+    receive do
+      {:buffer_state, buffer, _count} ->
+        deliver_batch_if_needed(request, buffer, buffer_pid)
+    end
+  end
+
+  defp deliver_batch_if_needed(request, buffer, buffer_pid) do
+    # Deliver in batches
+    {to_deliver, remaining} =
+      Enum.split(buffer, request.config["delivery_batch_size"])
+
+    if length(to_deliver) > 0 do
+      deliver_batch(request.subscription_id, to_deliver)
+
+      # Rate limit delivery
+      Process.sleep(request.config["delivery_interval_ms"])
+    end
+
+    # Update buffer with remaining
+    send(buffer_pid, {:set_buffer, remaining})
   end
 
   defp process_killmails(killmails) do
+    # Use a far past cutoff since we want to process historical killmails
+    cutoff = DateTime.add(DateTime.utc_now(), -365 * 24 * 3600, :second)
+
     # Process killmails through the unified processor
     killmails
     |> Enum.map(fn killmail ->
-      case UnifiedProcessor.process_killmail(killmail, source: :historical_preload) do
+      case UnifiedProcessor.process_killmail(killmail, cutoff) do
         {:ok, processed} -> processed
         _ -> nil
       end

@@ -189,17 +189,7 @@ defmodule WandererKills.Observability.ApiTracker do
   defp extract_endpoint(%{url: url}) when is_binary(url) do
     case URI.parse(url) do
       %{path: path} when is_binary(path) ->
-        # Extract meaningful endpoint pattern
-        path
-        |> String.split("/")
-        |> Enum.map(fn segment ->
-          if String.match?(segment, ~r/^\d+$/) do
-            "{id}"
-          else
-            segment
-          end
-        end)
-        |> Enum.join("/")
+        normalize_endpoint_path(path)
 
       _ ->
         nil
@@ -207,6 +197,17 @@ defmodule WandererKills.Observability.ApiTracker do
   end
 
   defp extract_endpoint(_), do: nil
+
+  defp normalize_endpoint_path(path) do
+    path
+    |> String.split("/")
+    |> Enum.map(&replace_id_segment/1)
+    |> Enum.join("/")
+  end
+
+  defp replace_id_segment(segment) do
+    if String.match?(segment, ~r/^\d+$/), do: "{id}", else: segment
+  end
 
   defp calculate_service_stats(service) do
     now = System.monotonic_time(:millisecond)

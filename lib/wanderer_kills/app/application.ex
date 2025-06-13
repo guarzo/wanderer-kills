@@ -62,9 +62,11 @@ defmodule WandererKills.App.Application do
         Logger.info("[Application] Supervisor started successfully")
         # Start ship type update asynchronously without blocking
         spawn(fn ->
-          Process.sleep(1000)  # Give the system a moment to fully start
+          # Give the system a moment to fully start
+          Process.sleep(1000)
           start_ship_type_update()
         end)
+
         Logger.info("[Application] Application startup completed successfully")
         {:ok, pid}
 
@@ -118,30 +120,40 @@ defmodule WandererKills.App.Application do
   defp start_ship_type_update do
     Logger.info("[Application] Starting ship type update task")
 
-    case SupervisedTask.start_child(
-      fn ->
-        Logger.info("[Application] Ship type update task executing")
-        result = case WandererKills.ShipTypes.Updater.update_ship_types() do
-          {:error, reason} ->
-            Logger.error("Failed to update ship types: #{inspect(reason)}")
-            {:error, reason}
+    task_result =
+      SupervisedTask.start_child(
+        &execute_ship_type_update/0,
+        task_name: "ship_type_update",
+        metadata: %{module: __MODULE__}
+      )
 
-          result ->
-            Logger.info("Ship type update completed successfully")
-            result
-        end
-        Logger.info("[Application] Ship type update task finished")
-        result
-      end,
-      task_name: "ship_type_update",
-      metadata: %{module: __MODULE__}
-    ) do
-      {:ok, _pid} ->
-        Logger.info("[Application] Ship type update task started successfully")
-      {:error, reason} ->
-        Logger.error("[Application] Failed to start ship type update task: #{inspect(reason)}")
-    end
-
+    handle_task_start_result(task_result)
     :ok
+  end
+
+  defp execute_ship_type_update do
+    Logger.info("[Application] Ship type update task executing")
+
+    result =
+      case WandererKills.ShipTypes.Updater.update_ship_types() do
+        {:error, reason} ->
+          Logger.error("Failed to update ship types: #{inspect(reason)}")
+          {:error, reason}
+
+        result ->
+          Logger.info("Ship type update completed successfully")
+          result
+      end
+
+    Logger.info("[Application] Ship type update task finished")
+    result
+  end
+
+  defp handle_task_start_result({:ok, _pid}) do
+    Logger.info("[Application] Ship type update task started successfully")
+  end
+
+  defp handle_task_start_result({:error, reason}) do
+    Logger.error("[Application] Failed to start ship type update task: #{inspect(reason)}")
   end
 end
