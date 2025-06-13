@@ -13,18 +13,16 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
   alias WandererKills.Storage.KillmailStore
 
   setup do
-    # Ensure cache is available
-    ensure_cache_available()
-
-    # Clear any existing data
-    :ok = Application.stop(:wanderer_kills)
-    :ok = Application.start(:wanderer_kills)
-
-    # Ensure cache is available after restart
-    ensure_cache_available()
-
-    # Wait for services to start
-    Process.sleep(100)
+    # Clear all state without restarting the application
+    WandererKills.TestHelpers.clear_all_caches()
+    WandererKills.Subscriptions.CharacterIndex.clear()
+    WandererKills.Subscriptions.SystemIndex.clear()
+    # Skip cache clearing - let it be handled by TestHelpers.clear_all_caches()
+    # WandererKills.Killmails.CharacterCache.clear_cache()
+    KillmailStore.clear_all()
+    
+    # Clear all subscriptions to ensure clean state
+    WandererKills.SubscriptionManager.clear_all_subscriptions()
 
     :ok
   end
@@ -34,7 +32,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
       # Create a subscription for specific characters
       {:ok, subscription_id} =
         SubscriptionManager.add_subscription(%{
-          "subscriber_id" => "test_user",
+          "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
           "system_ids" => [],
           "character_ids" => [95_465_499, 90_379_338],
           "callback_url" => "https://example.com/webhook"
@@ -116,7 +114,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
       # Create a subscription with both systems and characters
       {:ok, _subscription_id} =
         SubscriptionManager.add_subscription(%{
-          "subscriber_id" => "test_user",
+          "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
           "system_ids" => [30_000_142],
           "character_ids" => [95_465_499],
           "callback_url" => "https://example.com/webhook"
@@ -204,7 +202,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
 
       {:ok, _subscription_id} =
         SubscriptionManager.add_subscription(%{
-          "subscriber_id" => "test_user",
+          "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
           "system_ids" => [],
           "character_ids" => character_ids,
           "callback_url" => "https://example.com/webhook"

@@ -5,18 +5,19 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
   setup :with_http_mocks
 
   setup do
-    # Clear state without restarting the application
+    # Clear caches and indexes
     WandererKills.TestHelpers.clear_all_caches()
     WandererKills.Subscriptions.CharacterIndex.clear()
     WandererKills.Subscriptions.SystemIndex.clear()
     
-    # Clear any existing WebSocket subscriptions
-    WandererKills.SubscriptionManager.clear_all_websocket_subscriptions()
+    # Clear all subscriptions
+    WandererKills.SubscriptionManager.clear_all_subscriptions()
+    
+    # Create a socket with unique user_id for each test
+    unique_user_id = "test_user_#{System.unique_integer([:positive])}"
+    {:ok, socket} = connect(WandererKillsWeb.UserSocket, %{"user_id" => unique_user_id})
 
-    # Create a socket with user_id
-    {:ok, socket} = connect(WandererKillsWeb.UserSocket, %{"user_id" => "test_user_123"})
-
-    %{socket: socket}
+    %{socket: socket, user_id: unique_user_id}
   end
 
   describe "join with character_ids" do

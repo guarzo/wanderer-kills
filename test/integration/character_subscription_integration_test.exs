@@ -7,49 +7,33 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
   """
 
   use ExUnit.Case, async: false
+  use WandererKills.Test.SharedContexts
 
   alias WandererKills.SubscriptionManager
   alias WandererKills.Subscriptions.CharacterIndex
   alias WandererKills.Killmails.{CharacterCache, BatchProcessor}
   alias WandererKills.Storage.KillmailStore
 
-  import Cachex.Spec
-
   setup do
-    # Ensure cache is available
-    ensure_cache_available()
-
-    # Clear all state
+    # Clear all state without restarting the application
+    WandererKills.TestHelpers.clear_all_caches()
     CharacterIndex.clear()
+    WandererKills.Subscriptions.SystemIndex.clear()
 
-    try do
-      CharacterCache.clear_cache()
-    rescue
-      ArgumentError ->
-        # Cache doesn't exist yet, that's ok
-        :ok
-    end
+    # Skip cache clearing - let it be handled by TestHelpers.clear_all_caches()
+    # Individual cache clears can cause race conditions in concurrent tests
 
     KillmailStore.clear_all()
 
-    # Restart the subscription manager to clear its state
-    :ok = Application.stop(:wanderer_kills)
-    :ok = Application.start(:wanderer_kills)
-
-    # Ensure cache is available after restart
-    ensure_cache_available()
+    # Clear all subscriptions to ensure clean state
+    WandererKills.SubscriptionManager.clear_all_subscriptions()
 
     on_exit(fn ->
       CharacterIndex.clear()
-
-      try do
-        CharacterCache.clear_cache()
-      rescue
-        ArgumentError ->
-          # Cache doesn't exist anymore, that's ok
-          :ok
-      end
-
+      # Skip cache clearing in on_exit to avoid race conditions
+      # if Process.whereis(:wanderer_cache) do
+      #   CharacterCache.clear_cache()
+      # end
       KillmailStore.clear_all()
     end)
 
@@ -175,7 +159,7 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
       {:ok, sub1} =
         SubscriptionManager.add_subscription(
           %{
-            "subscriber_id" => "user1",
+            "subscriber_id" => "user_#{System.unique_integer([:positive])}",
             "user_id" => "user1",
             "system_ids" => [],
             "character_ids" => [100, 200, 300],
@@ -514,36 +498,6 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
 
       # Should handle gracefully without matches
       assert not Map.has_key?(result, sub_id) or result[sub_id] == []
-    end
-  end
-
-  defp ensure_cache_available do
-    # Check if cache process is running by looking for it in the registry
-    case Process.whereis(:wanderer_cache) do
-      nil ->
-        # Start the cache manually for tests
-        opts = [
-          default_ttl: :timer.minutes(5),
-          expiration:
-            expiration(
-              interval: :timer.seconds(60),
-              default: :timer.minutes(5),
-              lazy: true
-            )
-        ]
-
-        case Cachex.start_link(:wanderer_cache, opts) do
-          {:ok, _pid} ->
-            # Give cache time to fully initialize
-            Process.sleep(10)
-            :ok
-
-          {:error, {:already_started, _pid}} ->
-            :ok
-        end
-
-      _pid ->
-        :ok
     end
   end
 end

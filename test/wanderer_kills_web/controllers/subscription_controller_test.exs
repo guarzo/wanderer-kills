@@ -5,21 +5,22 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
   alias WandererKills.SubscriptionManager
 
   setup do
-    # Clear state without restarting the application
+    # Clear caches and indexes
     WandererKills.TestHelpers.clear_all_caches()
     WandererKills.Subscriptions.CharacterIndex.clear()
     WandererKills.Subscriptions.SystemIndex.clear()
     
-    # Clear any existing webhook subscriptions
-    WandererKills.SubscriptionManager.clear_all_webhook_subscriptions()
+    # Clear all subscriptions 
+    WandererKills.SubscriptionManager.clear_all_subscriptions()
 
     :ok
   end
 
   describe "POST /api/v1/subscriptions" do
     test "creates subscription with system_ids only", %{conn: conn} do
+      unique_subscriber = "test_user_#{System.unique_integer([:positive])}"
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => unique_subscriber,
         "system_ids" => [30_000_142, 30_000_143],
         "callback_url" => "https://example.com/webhook"
       }
@@ -38,8 +39,9 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
     end
 
     test "creates subscription with character_ids only", %{conn: conn} do
+      unique_subscriber = "test_user_#{System.unique_integer([:positive])}"
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => unique_subscriber,
         "character_ids" => [95_465_499, 90_379_338],
         "callback_url" => "https://example.com/webhook"
       }
@@ -56,7 +58,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "creates subscription with both system_ids and character_ids", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         "system_ids" => [30_000_142],
         "character_ids" => [95_465_499],
         "callback_url" => "https://example.com/webhook"
@@ -97,7 +99,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "validates callback_url is required", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         "system_ids" => [30_000_142]
       }
 
@@ -112,7 +114,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "validates callback_url must be valid HTTP/HTTPS URL", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         "system_ids" => [30_000_142],
         "callback_url" => "not-a-url"
       }
@@ -128,7 +130,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "validates at least one filter is required", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         "callback_url" => "https://example.com/webhook"
       }
 
@@ -143,7 +145,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "validates system_ids must be positive integers", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         "system_ids" => [-1, 0, "not_a_number"],
         "callback_url" => "https://example.com/webhook"
       }
@@ -159,7 +161,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "validates character_ids must be positive integers", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         "character_ids" => [-1, 0, "not_a_number"],
         "callback_url" => "https://example.com/webhook"
       }
@@ -175,7 +177,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "enforces maximum system_ids limit", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         # 101 systems
         "system_ids" => Enum.to_list(1..101),
         "callback_url" => "https://example.com/webhook"
@@ -192,7 +194,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "enforces maximum character_ids limit", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         # 1001 characters
         "character_ids" => Enum.to_list(1..1001),
         "callback_url" => "https://example.com/webhook"
@@ -209,7 +211,7 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
 
     test "deduplicates and sorts IDs", %{conn: conn} do
       params = %{
-        "subscriber_id" => "test_user_123",
+        "subscriber_id" => "test_user_#{System.unique_integer([:positive])}",
         "system_ids" => [30_000_143, 30_000_142, 30_000_143],
         "character_ids" => [789, 123, 456, 123],
         "callback_url" => "https://example.com/webhook"

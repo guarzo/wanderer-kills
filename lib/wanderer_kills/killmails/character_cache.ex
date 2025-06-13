@@ -118,21 +118,45 @@ defmodule WandererKills.Killmails.CharacterCache do
   """
   @spec batch_extract_cached([map()]) :: %{integer() => [integer()]}
   def batch_extract_cached(killmails) when is_list(killmails) do
-    # Separate killmails with and without IDs
-    {with_ids, without_ids} = Enum.split_with(killmails, & &1["killmail_id"])
+    # Check if cache is available
+    case Process.whereis(@cache_name) do
+      nil ->
+        # Cache not available, fall back to direct extraction
+        fallback_batch_extract(killmails)
+      _pid ->
+        try do
+          # Separate killmails with and without IDs
+          {with_ids, without_ids} = Enum.split_with(killmails, & &1["killmail_id"])
 
-    # Process killmails with IDs (cacheable)
-    cached_results = process_cacheable_killmails(with_ids)
+          # Process killmails with IDs (cacheable)
+          cached_results = process_cacheable_killmails(with_ids)
 
-    # Process killmails without IDs (non-cacheable)
-    uncached_results =
-      without_ids
-      |> Enum.map(fn km ->
-        {System.unique_integer(), CharacterMatcher.extract_character_ids(km)}
-      end)
-      |> Map.new()
+          # Process killmails without IDs (non-cacheable)
+          uncached_results =
+            without_ids
+            |> Enum.map(fn km ->
+              {System.unique_integer(), CharacterMatcher.extract_character_ids(km)}
+            end)
+            |> Map.new()
 
-    Map.merge(cached_results, uncached_results)
+          Map.merge(cached_results, uncached_results)
+        rescue
+          ArgumentError ->
+            # Cache became unavailable during processing, fall back
+            fallback_batch_extract(killmails)
+        end
+    end
+  end
+
+  # Fallback function for when cache is not available
+  defp fallback_batch_extract(killmails) do
+    killmails
+    |> Enum.map(fn killmail ->
+      id = killmail["killmail_id"] || System.unique_integer()
+      characters = CharacterMatcher.extract_character_ids(killmail)
+      {id, characters}
+    end)
+    |> Map.new()
   end
 
   @doc """

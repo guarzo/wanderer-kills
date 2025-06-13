@@ -5,12 +5,11 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
   alias WandererKills.Killmails.CharacterCache
 
   setup do
-    # The application and cache are already started by test_helper.exs
-    # Just clear the character cache entries before each test
-    CharacterCache.clear_cache()
+    # Use the test helpers to properly clear caches
+    WandererKills.TestHelpers.clear_all_caches()
     
     on_exit(fn ->
-      CharacterCache.clear_cache()
+      WandererKills.TestHelpers.clear_all_caches()
     end)
     
     :ok

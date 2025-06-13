@@ -150,6 +150,14 @@ defmodule WandererKills.SubscriptionManager do
     GenServer.call(__MODULE__, :get_stats)
   end
 
+  @doc """
+  Clears all subscriptions. For testing only.
+  """
+  @spec clear_all_subscriptions() :: :ok
+  def clear_all_subscriptions do
+    GenServer.call(__MODULE__, :clear_all_subscriptions)
+  end
+
   # ============================================================================
   # Server Callbacks
   # ============================================================================
@@ -304,6 +312,16 @@ defmodule WandererKills.SubscriptionManager do
     }
 
     {:reply, stats, state}
+  end
+
+  def handle_call(:clear_all_subscriptions, _from, _state) do
+    # Clear all subscription indices
+    CharacterIndex.clear()
+    SystemIndex.clear()
+    
+    # Return a fresh state
+    new_state = %State{subscriptions: %{}, websocket_subscriptions: %{}}
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -549,12 +567,12 @@ defmodule WandererKills.SubscriptionManager do
     http_systems =
       state.subscriptions
       |> Map.values()
-      |> Enum.flat_map(& &1["system_ids"])
+      |> Enum.flat_map(fn sub -> sub["system_ids"] || [] end)
 
     websocket_systems =
       state.websocket_subscriptions
       |> Map.values()
-      |> Enum.flat_map(& &1["system_ids"])
+      |> Enum.flat_map(fn sub -> sub["system_ids"] || [] end)
 
     (http_systems ++ websocket_systems)
     |> Enum.uniq()
