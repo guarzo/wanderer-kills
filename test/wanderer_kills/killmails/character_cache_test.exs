@@ -5,13 +5,8 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
   alias WandererKills.Killmails.CharacterCache
 
   setup do
-    # Ensure cache is available before each test
-    ensure_cache_available()
-    
-    # Give cache a moment to fully initialize
-    Process.sleep(10)
-    
-    # Only clear character extraction cache entries
+    # The application and cache are already started by test_helper.exs
+    # Just clear the character cache entries before each test
     CharacterCache.clear_cache()
     
     on_exit(fn ->
@@ -20,6 +15,7 @@ defmodule WandererKills.Killmails.CharacterCacheTest do
     
     :ok
   end
+  
 
   describe "extract_characters_cached/1" do
     test "extracts and caches characters from killmail" do

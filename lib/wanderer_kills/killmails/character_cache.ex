@@ -161,29 +161,38 @@ defmodule WandererKills.Killmails.CharacterCache do
   """
   @spec get_cache_stats() :: map()
   def get_cache_stats do
-    case Cachex.stats(@cache_name) do
-      {:ok, stats} ->
-        # Cachex stats structure is different - it's just counts
-        hits = Map.get(stats, :hits, 0)
-        misses = Map.get(stats, :misses, 0)
-        total = hits + misses
-
-        hit_rate = if total > 0, do: hits / total * 100, else: 0.0
-
+    # Check if cache exists first
+    case Process.whereis(@cache_name) do
+      nil ->
         %{
           namespace: @namespace,
-          hits: hits,
-          misses: misses,
-          total_requests: total,
-          hit_rate: Float.round(hit_rate, 2),
-          ttl_minutes: div(@default_ttl, 60_000)
+          error: "Cache not available"
         }
+      _pid ->
+        case Cachex.stats(@cache_name) do
+          {:ok, stats} ->
+            # Cachex stats structure is different - it's just counts
+            hits = Map.get(stats, :hits, 0)
+            misses = Map.get(stats, :misses, 0)
+            total = hits + misses
 
-      {:error, _} ->
-        %{
-          namespace: @namespace,
-          error: "Unable to fetch cache stats"
-        }
+            hit_rate = if total > 0, do: hits / total * 100, else: 0.0
+
+            %{
+              namespace: @namespace,
+              hits: hits,
+              misses: misses,
+              total_requests: total,
+              hit_rate: Float.round(hit_rate, 2),
+              ttl_minutes: div(@default_ttl, 60_000)
+            }
+
+          {:error, _} ->
+            %{
+              namespace: @namespace,
+              error: "Unable to fetch cache stats"
+            }
+        end
     end
   end
 
@@ -221,24 +230,43 @@ defmodule WandererKills.Killmails.CharacterCache do
   end
 
   defp get_from_cache(key) do
-    case Cachex.get(@cache_name, key) do
-      {:ok, nil} -> {:error, :not_found}
-      {:ok, value} -> {:ok, value}
-      error -> error
+    # Check if cache exists first
+    case Process.whereis(@cache_name) do
+      nil ->
+        {:error, :cache_not_available}
+      _pid ->
+        case Cachex.get(@cache_name, key) do
+          {:ok, nil} -> {:error, :not_found}
+          {:ok, value} -> {:ok, value}
+          error -> error
+        end
     end
   end
 
   defp put_in_cache(key, value) do
-    ttl = Config.get([:character_cache, :ttl_ms], @default_ttl)
-    result = Cachex.put(@cache_name, key, value, ttl: ttl)
-    Telemetry.character_cache(:put, key, %{character_count: length(value)})
-    result
+    # Check if cache exists first
+    case Process.whereis(@cache_name) do
+      nil ->
+        # Cache not available, just return ok
+        :ok
+      _pid ->
+        ttl = Config.get([:character_cache, :ttl_ms], @default_ttl)
+        result = Cachex.put(@cache_name, key, value, ttl: ttl)
+        Telemetry.character_cache(:put, key, %{character_count: length(value)})
+        result
+    end
   end
 
   defp cached?(key) do
-    case Cachex.exists?(@cache_name, key) do
-      {:ok, exists} -> exists
-      _ -> false
+    # Check if cache exists first
+    case Process.whereis(@cache_name) do
+      nil ->
+        false
+      _pid ->
+        case Cachex.exists?(@cache_name, key) do
+          {:ok, exists} -> exists
+          _ -> false
+        end
     end
   end
 
