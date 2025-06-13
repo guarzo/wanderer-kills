@@ -77,8 +77,8 @@ RUN apt-get update \
  && groupadd -r app \
  && useradd -r -d /app -s /usr/sbin/nologin -g app app
 
-# Copy release from build stage
-COPY --from=build --chown=app:app /app/release/* ./
+# Copy release from build stage with proper structure
+COPY --from=build --chown=app:app /app/release/ ./
 
 # Runtime configuration
 ENV REPLACE_OS_VARS=true \
