@@ -2,7 +2,16 @@
  * WandererKills WebSocket Client Example
  * 
  * This example shows how to connect to the WandererKills WebSocket API
- * to receive real-time killmail updates for specific EVE Online systems.
+ * to receive real-time killmail updates for:
+ * - Specific EVE Online systems
+ * - Specific characters (as victim or attacker)
+ * 
+ * Features:
+ * - System-based subscriptions: Monitor specific solar systems
+ * - Character-based subscriptions: Track when specific characters get kills or die
+ * - Mixed subscriptions: Combine both system and character filters (OR logic)
+ * - Real-time updates: Receive killmails as they happen
+ * - Historical preload: Get recent kills when first subscribing
  */
 
 // Import Phoenix Socket (you'll need to install phoenix)
@@ -14,7 +23,8 @@ class WandererKillsClient {
     this.serverUrl = serverUrl;
     this.socket = null;
     this.channel = null;
-    this.subscriptions = new Set();
+    this.systemSubscriptions = new Set();
+    this.characterSubscriptions = new Set();
   }
 
   /**
@@ -89,15 +99,24 @@ class WandererKillsClient {
       console.log(`🔥 New killmails in system ${payload.system_id}:`);
       console.log(`   Killmails: ${payload.killmails.length}`);
       console.log(`   Timestamp: ${payload.timestamp}`);
+      console.log(`   Preload: ${payload.preload ? 'Yes (historical data)' : 'No (real-time)'}`);
       
       // Process each killmail
       payload.killmails.forEach((killmail, index) => {
         console.log(`   [${index + 1}] Killmail ID: ${killmail.killmail_id}`);
         if (killmail.victim) {
-          console.log(`       Victim: ${killmail.victim.character_name || 'Unknown'} (${killmail.victim.ship_type_name || 'Unknown ship'})`);
+          console.log(`       Victim: ${killmail.victim.character_name || 'Unknown'} (${killmail.victim.ship_name || 'Unknown ship'})`);
+          console.log(`       Corporation: ${killmail.victim.corporation_name || 'Unknown'}`);
         }
         if (killmail.attackers && killmail.attackers.length > 0) {
           console.log(`       Attackers: ${killmail.attackers.length}`);
+          const finalBlow = killmail.attackers.find(a => a.final_blow);
+          if (finalBlow) {
+            console.log(`       Final blow: ${finalBlow.character_name || 'Unknown'} (${finalBlow.ship_name || 'Unknown ship'})`);
+          }
+        }
+        if (killmail.zkb) {
+          console.log(`       Value: ${(killmail.zkb.total_value / 1000000).toFixed(2)}M ISK`);
         }
       });
     });
@@ -116,9 +135,9 @@ class WandererKillsClient {
     return new Promise((resolve, reject) => {
       this.channel.push('subscribe_systems', { systems: systemIds })
         .receive('ok', (response) => {
-          systemIds.forEach(id => this.subscriptions.add(id));
+          systemIds.forEach(id => this.systemSubscriptions.add(id));
           console.log(`✅ Subscribed to systems: ${systemIds.join(', ')}`);
-          console.log(`📡 Total subscriptions: ${response.subscribed_systems.length}`);
+          console.log(`📡 Total system subscriptions: ${response.subscribed_systems.length}`);
           resolve(response);
         })
         .receive('error', (error) => {
@@ -136,13 +155,51 @@ class WandererKillsClient {
     return new Promise((resolve, reject) => {
       this.channel.push('unsubscribe_systems', { systems: systemIds })
         .receive('ok', (response) => {
-          systemIds.forEach(id => this.subscriptions.delete(id));
+          systemIds.forEach(id => this.systemSubscriptions.delete(id));
           console.log(`❌ Unsubscribed from systems: ${systemIds.join(', ')}`);
-          console.log(`📡 Remaining subscriptions: ${response.subscribed_systems.length}`);
+          console.log(`📡 Remaining system subscriptions: ${response.subscribed_systems.length}`);
           resolve(response);
         })
         .receive('error', (error) => {
           console.error('Failed to unsubscribe from systems:', error);
+          reject(error);
+        });
+    });
+  }
+
+  /**
+   * Subscribe to specific characters (track as victim or attacker)
+   * @param {number[]} characterIds - Array of EVE Online character IDs
+   */
+  async subscribeToCharacters(characterIds) {
+    return new Promise((resolve, reject) => {
+      this.channel.push('subscribe_characters', { characters: characterIds })
+        .receive('ok', (response) => {
+          console.log(`✅ Subscribed to characters: ${characterIds.join(', ')}`);
+          console.log(`👤 Total character subscriptions: ${response.subscribed_characters.length}`);
+          resolve(response);
+        })
+        .receive('error', (error) => {
+          console.error('Failed to subscribe to characters:', error);
+          reject(error);
+        });
+    });
+  }
+
+  /**
+   * Unsubscribe from specific characters
+   * @param {number[]} characterIds - Array of EVE Online character IDs
+   */
+  async unsubscribeFromCharacters(characterIds) {
+    return new Promise((resolve, reject) => {
+      this.channel.push('unsubscribe_characters', { characters: characterIds })
+        .receive('ok', (response) => {
+          console.log(`❌ Unsubscribed from characters: ${characterIds.join(', ')}`);
+          console.log(`👤 Remaining character subscriptions: ${response.subscribed_characters.length}`);
+          resolve(response);
+        })
+        .receive('error', (error) => {
+          console.error('Failed to unsubscribe from characters:', error);
           reject(error);
         });
     });
@@ -156,6 +213,9 @@ class WandererKillsClient {
       this.channel.push('get_status', {})
         .receive('ok', (response) => {
           console.log('📋 Current status:', response);
+          console.log(`   Subscription ID: ${response.subscription_id}`);
+          console.log(`   Subscribed systems: ${response.subscribed_systems.length}`);
+          console.log(`   Subscribed characters: ${response.subscribed_characters.length}`);
           resolve(response);
         })
         .receive('error', (error) => {
@@ -216,21 +276,80 @@ async function example() {
     // Jita (30000142), Dodixie (30002659), Amarr (30002187)
     await client.subscribeToSystems([30000142, 30002659, 30002187]);
 
+    // Subscribe to specific characters (example character IDs)
+    // These will track kills where these characters appear as victim or attacker
+    await client.subscribeToCharacters([95465499, 90379338]);
+
     // Get current status
     await client.getStatus();
 
-    // Keep the connection alive for 5 minutes, then unsubscribe from Jita
+    // Example: Subscribe to more characters after 2 minutes
     setTimeout(async () => {
+      console.log('\n📍 Adding more character subscriptions...');
+      await client.subscribeToCharacters([12345678, 87654321]);
+      await client.getStatus();
+    }, 2 * 60 * 1000);
+
+    // Example: Unsubscribe from Jita after 5 minutes
+    setTimeout(async () => {
+      console.log('\n📍 Unsubscribing from Jita...');
       await client.unsubscribeFromSystems([30000142]);
     }, 5 * 60 * 1000);
 
+    // Example: Unsubscribe from some characters after 7 minutes
+    setTimeout(async () => {
+      console.log('\n📍 Unsubscribing from some characters...');
+      await client.unsubscribeFromCharacters([95465499]);
+      await client.getStatus();
+    }, 7 * 60 * 1000);
+
     // Disconnect after 10 minutes
     setTimeout(async () => {
+      console.log('\n📍 Disconnecting...');
       await client.disconnect();
+      process.exit(0);
     }, 10 * 60 * 1000);
 
   } catch (error) {
     console.error('Client error:', error);
+    await client.disconnect();
+    process.exit(1);
+  }
+}
+
+// Advanced example showing mixed subscriptions
+async function advancedExample() {
+  const client = new WandererKillsClient('ws://localhost:4004');
+
+  try {
+    // Connect with initial subscriptions
+    await client.connect();
+
+    // Join with both systems and characters at once
+    // This creates an OR filter - you'll receive kills that match:
+    // - Any of the specified systems OR
+    // - Any of the specified characters (as victim or attacker)
+    const channel = client.socket.channel('killmails:lobby', {
+      systems: [30000142, 30002187], // Jita, Amarr
+      characters: [95465499, 90379338] // Example character IDs
+    });
+
+    await new Promise((resolve, reject) => {
+      channel.join()
+        .receive('ok', resolve)
+        .receive('error', reject);
+    });
+
+    console.log('✅ Connected with mixed subscriptions');
+
+    // The channel will now receive killmails from:
+    // 1. Jita system (30000142)
+    // 2. Amarr system (30002187)
+    // 3. Any system where character 95465499 gets a kill or dies
+    // 4. Any system where character 90379338 gets a kill or dies
+
+  } catch (error) {
+    console.error('Advanced example error:', error);
     await client.disconnect();
   }
 }

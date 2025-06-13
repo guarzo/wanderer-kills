@@ -257,19 +257,132 @@ channel.push('subscribe', {
 
 ### Channel Events
 
-#### new_kill
+#### killmail_update (Full Format)
+This is the primary event sent when new killmails are received. The format matches the REST API response but is delivered in real-time.
+
 ```json
 {
-  "killmail_id": 123456789,
-  "kill_time": "2024-01-15T14:30:00Z", 
   "system_id": 30000142,
-  "victim": {...},
-  "attackers": [...],
-  "zkb": {...}
+  "killmails": [
+    {
+      "killmail_id": 123456789,
+      "kill_time": "2024-01-15T14:30:00Z",
+      "system_id": 30000142,
+      "victim": {
+        "character_id": 987654321,
+        "character_name": "Victim Name",
+        "corporation_id": 123456789,
+        "corporation_name": "Victim Corp",
+        "alliance_id": 99000001,
+        "alliance_name": "Victim Alliance",
+        "faction_id": 500001,
+        "faction_name": "Caldari State",
+        "ship_type_id": 671,
+        "ship_name": "Raven",
+        "ship_group": "Battleship",
+        "ship_category": "Ship",
+        "damage_taken": 284752,
+        "items": [
+          {
+            "type_id": 2048,
+            "type_name": "Damage Control II",
+            "singleton": 0,
+            "flag": 11,
+            "quantity_dropped": 1,
+            "quantity_destroyed": 0
+          },
+          {
+            "type_id": 3841,
+            "type_name": "Large Shield Extender II",
+            "singleton": 0,
+            "flag": 27,
+            "quantity_dropped": 0,
+            "quantity_destroyed": 2
+          }
+        ]
+      },
+      "attackers": [
+        {
+          "character_id": 111222333,
+          "character_name": "Attacker Name",
+          "corporation_id": 444555666,
+          "corporation_name": "Attacker Corp",
+          "alliance_id": 99000002,
+          "alliance_name": "Attacker Alliance",
+          "faction_id": null,
+          "faction_name": null,
+          "security_status": -5.0,
+          "ship_type_id": 17918,
+          "ship_name": "Rattlesnake",
+          "ship_group": "Battleship",
+          "ship_category": "Ship",
+          "weapon_type_id": 24475,
+          "weapon_name": "Caldari Navy Inferno Cruise Missile",
+          "damage_done": 142376,
+          "final_blow": true
+        },
+        {
+          "character_id": 222333444,
+          "character_name": "Attacker 2",
+          "corporation_id": 555666777,
+          "corporation_name": "Attacker Corp 2",
+          "alliance_id": 99000002,
+          "alliance_name": "Attacker Alliance",
+          "faction_id": null,
+          "faction_name": null,
+          "security_status": -2.5,
+          "ship_type_id": 17920,
+          "ship_name": "Bhaalgorn",
+          "ship_group": "Battleship",
+          "ship_category": "Ship",
+          "weapon_type_id": 3520,
+          "weapon_name": "Mega Pulse Laser II",
+          "damage_done": 142376,
+          "final_blow": false
+        }
+      ],
+      "zkb": {
+        "location_id": 50000001,
+        "hash": "abc123def456ghi789",
+        "fitted_value": 150000000.0,
+        "dropped_value": 25000000.0,
+        "destroyed_value": 125000000.0,
+        "total_value": 175000000.0,
+        "points": 15,
+        "npc": false,
+        "solo": false,
+        "awox": false,
+        "labels": ["pvp", "5b+"],
+        "involved": 2,
+        "red": true,
+        "blue": false
+      },
+      "position": {
+        "x": -249633820926.72,
+        "y": 112460619145.18,
+        "z": -164388952709.3
+      },
+      "war_id": null,
+      "is_npc": false,
+      "is_solo": false,
+      "is_awox": false
+    }
+  ],
+  "timestamp": "2024-01-15T14:30:05Z",
+  "preload": false
 }
 ```
 
-#### system_stats
+#### kill_count_update
+```json
+{
+  "system_id": 30000142,
+  "count": 48,
+  "timestamp": "2024-01-15T15:00:00Z"
+}
+```
+
+#### system_stats (Deprecated - use kill_count_update)
 ```json
 {
   "system_id": 30000142,
