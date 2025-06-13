@@ -767,46 +767,50 @@ defmodule WandererKills.Observability.Telemetry do
 
   def handle_system_event([:wanderer_kills, :system, event], measurements, metadata, _config) do
     case event do
-      :memory ->
-        Logger.debug(
-          "[System] Memory usage - Total: #{measurements.total_memory}MB, Process: #{measurements.process_memory}MB"
-        )
-
-      :cpu ->
-        # Safely handle the case where total_cpu might not be present
-        case Map.get(measurements, :total_cpu) do
-          nil ->
-            # If total_cpu is not available, log the available metrics
-            Logger.debug(
-              "[System] System metrics - Processes: #{measurements.process_count}, Ports: #{measurements.port_count}, Schedulers: #{measurements.schedulers}, Run Queue: #{measurements.run_queue}"
-            )
-
-          total_cpu ->
-            # Log with total_cpu and process_cpu if available
-            process_cpu = Map.get(measurements, :process_cpu, "N/A")
-            Logger.debug("[System] CPU usage - Total: #{total_cpu}%, Process: #{process_cpu}%")
-        end
-
-      :filter ->
-        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-
-        Logger.debug(
-          "[System] Filtered #{measurements.killmail_count} killmails in #{duration_ms}ms, found #{measurements.match_count} matches"
-        )
-
-      :index ->
-        duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-
-        operation_details =
-          case metadata do
-            %{system_count: count} -> " (#{count} systems)"
-            %{subscription_id: sub_id} -> " (#{sub_id})"
-            _ -> ""
-          end
-
-        Logger.debug(
-          "[System] Index #{metadata.operation} completed in #{duration_ms}ms#{operation_details}"
-        )
+      :memory -> handle_memory_event(measurements)
+      :cpu -> handle_cpu_event(measurements)
+      :filter -> handle_filter_event(measurements)
+      :index -> handle_index_event(measurements, metadata)
     end
   end
+
+  defp handle_memory_event(measurements) do
+    Logger.debug(
+      "[System] Memory usage - Total: #{measurements.total_memory}MB, Process: #{measurements.process_memory}MB"
+    )
+  end
+
+  defp handle_cpu_event(measurements) do
+    case Map.get(measurements, :total_cpu) do
+      nil ->
+        Logger.debug(
+          "[System] System metrics - Processes: #{measurements.process_count}, Ports: #{measurements.port_count}, Schedulers: #{measurements.schedulers}, Run Queue: #{measurements.run_queue}"
+        )
+
+      total_cpu ->
+        process_cpu = Map.get(measurements, :process_cpu, "N/A")
+        Logger.debug("[System] CPU usage - Total: #{total_cpu}%, Process: #{process_cpu}%")
+    end
+  end
+
+  defp handle_filter_event(measurements) do
+    duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+
+    Logger.debug(
+      "[System] Filtered #{measurements.killmail_count} killmails in #{duration_ms}ms, found #{measurements.match_count} matches"
+    )
+  end
+
+  defp handle_index_event(measurements, metadata) do
+    duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
+    operation_details = format_operation_details(metadata)
+
+    Logger.debug(
+      "[System] Index #{metadata.operation} completed in #{duration_ms}ms#{operation_details}"
+    )
+  end
+
+  defp format_operation_details(%{system_count: count}), do: " (#{count} systems)"
+  defp format_operation_details(%{subscription_id: sub_id}), do: " (#{sub_id})"
+  defp format_operation_details(_), do: ""
 end

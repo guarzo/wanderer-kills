@@ -135,33 +135,55 @@ defmodule WandererKillsWeb.SubscriptionController do
       "callback_url" => params["callback_url"]
     }
 
-    cond do
-      is_nil(attrs["subscriber_id"]) or attrs["subscriber_id"] == "" ->
-        {:error, "subscriber_id is required"}
+    with :ok <- validate_required_subscriber_id(attrs["subscriber_id"]),
+         :ok <- validate_required_callback_url(attrs["callback_url"]),
+         :ok <- validate_callback_url_format(attrs["callback_url"]),
+         :ok <- validate_at_least_one_id(attrs),
+         :ok <- validate_ids_format(attrs["system_ids"], "system_ids"),
+         :ok <- validate_ids_format(attrs["character_ids"], "character_ids"),
+         :ok <- validate_ids_count(attrs["system_ids"], "system_ids", 100),
+         :ok <- validate_ids_count(attrs["character_ids"], "character_ids", 1000) do
+      {:ok, attrs}
+    end
+  end
 
-      is_nil(attrs["callback_url"]) or attrs["callback_url"] == "" ->
-        {:error, "callback_url is required"}
+  defp validate_required_subscriber_id(nil), do: {:error, "subscriber_id is required"}
+  defp validate_required_subscriber_id(""), do: {:error, "subscriber_id is required"}
+  defp validate_required_subscriber_id(_), do: :ok
 
-      not valid_url?(attrs["callback_url"]) ->
-        {:error, "callback_url must be a valid HTTP/HTTPS URL"}
+  defp validate_required_callback_url(nil), do: {:error, "callback_url is required"}
+  defp validate_required_callback_url(""), do: {:error, "callback_url is required"}
+  defp validate_required_callback_url(_), do: :ok
 
-      Enum.empty?(attrs["system_ids"]) and Enum.empty?(attrs["character_ids"]) ->
-        {:error, "At least one system_id or character_id is required"}
+  defp validate_callback_url_format(url) do
+    if valid_url?(url) do
+      :ok
+    else
+      {:error, "callback_url must be a valid HTTP/HTTPS URL"}
+    end
+  end
 
-      not valid_ids?(attrs["system_ids"]) ->
-        {:error, "system_ids must be an array of positive integers"}
+  defp validate_at_least_one_id(attrs) do
+    if Enum.empty?(attrs["system_ids"]) and Enum.empty?(attrs["character_ids"]) do
+      {:error, "At least one system_id or character_id is required"}
+    else
+      :ok
+    end
+  end
 
-      not valid_ids?(attrs["character_ids"]) ->
-        {:error, "character_ids must be an array of positive integers"}
+  defp validate_ids_format(ids, field_name) do
+    if valid_ids?(ids) do
+      :ok
+    else
+      {:error, "#{field_name} must be an array of positive integers"}
+    end
+  end
 
-      length(attrs["system_ids"]) > 100 ->
-        {:error, "Maximum 100 system_ids allowed per subscription"}
-
-      length(attrs["character_ids"]) > 1000 ->
-        {:error, "Maximum 1000 character_ids allowed per subscription"}
-
-      true ->
-        {:ok, attrs}
+  defp validate_ids_count(ids, field_name, max_count) do
+    if length(ids) > max_count do
+      {:error, "Maximum #{max_count} #{field_name} allowed per subscription"}
+    else
+      :ok
     end
   end
 

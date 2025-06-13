@@ -1,45 +1,10 @@
 defmodule WandererKills.Killmails.CharacterCacheTest do
   use ExUnit.Case, async: false
+  use WandererKills.Test.SharedContexts
 
   alias WandererKills.Killmails.CharacterCache
-  import Cachex.Spec
 
-  setup do
-    # Ensure cache is available before each test
-    ensure_cache_available()
-
-    # Clear the cache before each test
-    CharacterCache.clear_cache()
-
-    on_exit(fn ->
-      CharacterCache.clear_cache()
-    end)
-
-    :ok
-  end
-
-  defp ensure_cache_available do
-    # Check if cache exists, if not start it
-    case Cachex.exists?(:wanderer_cache, "test_key") do
-      {:ok, _} ->
-        :ok
-
-      {:error, :no_cache} ->
-        # Start the cache manually for tests
-        opts = [
-          default_ttl: :timer.minutes(5),
-          expiration:
-            expiration(
-              interval: :timer.seconds(60),
-              default: :timer.minutes(5),
-              lazy: true
-            )
-        ]
-
-        {:ok, _pid} = Cachex.start_link(:wanderer_cache, opts)
-        :ok
-    end
-  end
+  setup :with_clean_environment
 
   describe "extract_characters_cached/1" do
     test "extracts and caches characters from killmail" do

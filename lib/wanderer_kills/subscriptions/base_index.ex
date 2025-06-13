@@ -1,19 +1,5 @@
 defmodule WandererKills.Subscriptions.BaseIndex do
   @moduledoc """
-  Shared GenServer implementation for ETS-based subscription indexes.
-
-  This module provides a common implementation that can be used by both
-  CharacterIndex and SystemIndex to eliminate code duplication while
-  maintaining type safety and performance characteristics.
-
-  ## Usage
-
-      defmodule MyEntityIndex do
-        use WandererKills.Subscriptions.BaseIndex,
-          entity_type: :my_entity,
-          table_name: :my_entity_subscription_index
-      end
-
   ## Architecture
 
   The implementation maintains two data structures:
@@ -36,7 +22,7 @@ defmodule WandererKills.Subscriptions.BaseIndex do
 
   Automatically emits telemetry events for performance monitoring:
   - `:add` - Adding subscriptions to index
-  - `:remove` - Removing subscriptions from index  
+  - `:remove` - Removing subscriptions from index
   - `:update` - Updating subscription entity lists
   - `:lookup` - Single entity lookups
   - `:batch_lookup` - Multiple entity lookups
@@ -47,17 +33,44 @@ defmodule WandererKills.Subscriptions.BaseIndex do
     entity_type_string = Atom.to_string(entity_type)
     table_name = Keyword.fetch!(opts, :table_name)
 
+    # Generate the module code by combining smaller quote blocks
+    [
+      generate_module_header(),
+      generate_module_attributes(entity_type, entity_type_string, table_name),
+      generate_client_api(entity_type),
+      generate_server_callbacks(entity_type_string)
+    ]
+    |> Enum.map(&Macro.expand(&1, __CALLER__))
+    |> combine_quoted_expressions()
+  end
+
+  # Combines multiple quoted expressions into a single block
+  defp combine_quoted_expressions(expressions) do
+    quote do
+      unquote_splicing(expressions)
+    end
+  end
+
+  defp generate_module_header do
     quote do
       use GenServer
       require Logger
       alias WandererKills.Observability.Telemetry
-
       @behaviour WandererKills.Subscriptions.IndexBehaviour
+    end
+  end
 
+  defp generate_module_attributes(entity_type, entity_type_string, table_name) do
+    quote do
       @entity_type unquote(entity_type)
       @entity_type_string unquote(entity_type_string)
       @table_name unquote(table_name)
       @cleanup_interval :timer.minutes(5)
+    end
+  end
+
+  defp generate_client_api(entity_type) do
+    quote do
 
       # ============================================================================
       # Client API
@@ -137,7 +150,11 @@ defmodule WandererKills.Subscriptions.BaseIndex do
       def clear do
         GenServer.call(__MODULE__, :clear)
       end
+    end
+  end
 
+  defp generate_server_callbacks(_entity_type_string) do
+    quote do
       # ============================================================================
       # Server Callbacks
       # ============================================================================
@@ -419,16 +436,32 @@ defmodule WandererKills.Subscriptions.BaseIndex do
         acc + length(entities)
       end)
 
-    Map.merge(
-      %{
-        total_subscriptions: total_subscriptions,
-        memory_usage_bytes: memory_usage_bytes
-      },
-      %{
-        String.to_atom("total_#{entity_type_string}_entries") => total_entity_entries,
-        String.to_atom("total_#{entity_type_string}_subscriptions") => total_entity_subscriptions
-      }
-    )
+    base_stats = %{
+      total_subscriptions: total_subscriptions,
+      memory_usage_bytes: memory_usage_bytes
+    }
+
+    # Add entity-specific stats based on the entity type
+    case entity_type_string do
+      "character" ->
+        Map.merge(base_stats, %{
+          total_character_entries: total_entity_entries,
+          total_character_subscriptions: total_entity_subscriptions
+        })
+      
+      "system" ->
+        Map.merge(base_stats, %{
+          total_system_entries: total_entity_entries,
+          total_system_subscriptions: total_entity_subscriptions
+        })
+      
+      _ ->
+        # For other entity types, use generic keys
+        Map.merge(base_stats, %{
+          total_entity_entries: total_entity_entries,
+          total_entity_subscriptions: total_entity_subscriptions
+        })
+    end
   end
 
   @doc """

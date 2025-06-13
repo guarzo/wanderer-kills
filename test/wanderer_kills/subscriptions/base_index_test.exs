@@ -99,7 +99,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
 
       stats = TestEntityIndex.get_stats()
       assert stats.total_subscriptions == 1
-      assert stats.total_test_entity_entries == 0
+      assert stats.total_entity_entries == 0
     end
 
     test "logs warning for large entity lists" do
@@ -152,7 +152,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
       assert TestEntityIndex.find_subscriptions_for_entity(456) == []
 
       stats = TestEntityIndex.get_stats()
-      assert stats.total_test_entity_entries == 0
+      assert stats.total_entity_entries == 0
     end
 
     test "updates non-existent subscription" do
@@ -187,7 +187,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
       assert TestEntityIndex.find_subscriptions_for_entity(789) == []
 
       stats = TestEntityIndex.get_stats()
-      assert stats.total_test_entity_entries == 0
+      assert stats.total_entity_entries == 0
     end
 
     test "handles removing non-existent subscription" do
@@ -248,9 +248,9 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
 
       assert stats.total_subscriptions == 3
       # 123, 456, 789
-      assert stats.total_test_entity_entries == 3
+      assert stats.total_entity_entries == 3
       # 3 + 2 + 0
-      assert stats.total_test_entity_subscriptions == 5
+      assert stats.total_entity_subscriptions == 5
       assert is_number(stats.memory_usage_bytes)
       assert stats.memory_usage_bytes > 0
     end
@@ -259,8 +259,8 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
       stats = TestEntityIndex.get_stats()
 
       assert stats.total_subscriptions == 0
-      assert stats.total_test_entity_entries == 0
-      assert stats.total_test_entity_subscriptions == 0
+      assert stats.total_entity_entries == 0
+      assert stats.total_entity_subscriptions == 0
       assert is_number(stats.memory_usage_bytes)
     end
   end
@@ -281,7 +281,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
       assert TestEntityIndex.find_subscriptions_for_entity(123) == []
       stats_after = TestEntityIndex.get_stats()
       assert stats_after.total_subscriptions == 0
-      assert stats_after.total_test_entity_entries == 0
+      assert stats_after.total_entity_entries == 0
     end
   end
 
@@ -365,7 +365,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
 
       # Verify no entries remain
       stats = TestEntityIndex.get_stats()
-      assert stats.total_test_entity_entries == 0
+      assert stats.total_entity_entries == 0
     end
   end
 end

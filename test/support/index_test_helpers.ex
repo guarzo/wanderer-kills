@@ -319,14 +319,24 @@ defmodule IndexTestHelpers do
   # Extracts entity-specific subscription count from stats
   defp get_entity_subscriptions_count(stats, index_module) do
     entity_type = get_entity_type(index_module)
-    key = String.to_atom("total_#{entity_type}_subscriptions")
+    key = 
+      case entity_type do
+        "character" -> :total_character_subscriptions
+        "system" -> :total_system_subscriptions
+        _ -> :total_entity_subscriptions
+      end
     Map.get(stats, key, 0)
   end
 
   # Extracts entity-specific entry count from stats
   defp get_entity_entries_count(stats, index_module) do
     entity_type = get_entity_type(index_module)
-    key = String.to_atom("total_#{entity_type}_entries")
+    key = 
+      case entity_type do
+        "character" -> :total_character_entries
+        "system" -> :total_system_entries
+        _ -> :total_entity_entries
+      end
     Map.get(stats, key, 0)
   end
 

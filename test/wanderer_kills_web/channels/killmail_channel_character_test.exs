@@ -5,9 +5,15 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
   setup :with_http_mocks
 
   setup do
+    # Ensure cache is available
+    ensure_cache_available()
+    
     # Clear any existing subscriptions
     :ok = Application.stop(:wanderer_kills)
     :ok = Application.start(:wanderer_kills)
+    
+    # Ensure cache is available after restart
+    ensure_cache_available()
 
     # Create a socket with user_id
     {:ok, socket} = connect(WandererKillsWeb.UserSocket, %{"user_id" => "test_user_123"})

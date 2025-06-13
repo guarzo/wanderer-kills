@@ -168,67 +168,55 @@ defmodule WandererKills.SubscriptionManager do
 
   @impl true
   def handle_call({:add_subscription, attrs, type}, _from, state) do
-    with :ok <- validate_subscription_attrs(attrs) do
-      subscription_id = generate_subscription_id()
+    case validate_subscription_attrs(attrs) do
+      :ok ->
+        subscription_id = generate_subscription_id()
 
-      base_subscription = %{
-        "id" => subscription_id,
-        "subscriber_id" => attrs["subscriber_id"],
-        "system_ids" => attrs["system_ids"] || [],
-        "character_ids" => attrs["character_ids"] || [],
-        "created_at" => DateTime.utc_now()
-      }
+        base_subscription = %{
+          "id" => subscription_id,
+          "subscriber_id" => attrs["subscriber_id"],
+          "system_ids" => attrs["system_ids"] || [],
+          "character_ids" => attrs["character_ids"] || [],
+          "created_at" => DateTime.utc_now()
+        }
 
-      {subscription, new_state} =
-        case type do
-          :webhook ->
-            subscription = Map.put(base_subscription, "callback_url", attrs["callback_url"])
-            {subscription, put_in(state.subscriptions[subscription_id], subscription)}
+        {subscription, new_state} =
+          case type do
+            :webhook ->
+              subscription = Map.put(base_subscription, "callback_url", attrs["callback_url"])
+              {subscription, put_in(state.subscriptions[subscription_id], subscription)}
 
-          :websocket ->
-            subscription =
-              Map.merge(base_subscription, %{
-                "socket_pid" => attrs["socket_pid"],
-                "user_id" => attrs["user_id"]
-              })
+            :websocket ->
+              subscription =
+                Map.merge(base_subscription, %{
+                  "socket_pid" => attrs["socket_pid"],
+                  "user_id" => attrs["user_id"]
+                })
 
-            {subscription, put_in(state.websocket_subscriptions[subscription_id], subscription)}
+              {subscription, put_in(state.websocket_subscriptions[subscription_id], subscription)}
+          end
+
+        Logger.info("📝 New subscription created via add_subscription",
+          subscription_id: subscription_id,
+          subscriber_id: attrs["subscriber_id"],
+          type: type,
+          system_count: length(subscription["system_ids"]),
+          character_count: length(subscription["character_ids"])
+        )
+
+        # Update character index
+        update_character_index(subscription_id, subscription["character_ids"], type)
+
+        # Update system index
+        update_system_index(subscription_id, subscription["system_ids"])
+
+        # Preload recent kills asynchronously if it's a webhook subscription
+        if type == :webhook do
+          Preloader.preload_for_subscription(subscription)
         end
 
-      Logger.info("📝 New subscription created via add_subscription",
-        subscription_id: subscription_id,
-        subscriber_id: attrs["subscriber_id"],
-        type: type,
-        system_count: length(subscription["system_ids"]),
-        character_count: length(subscription["character_ids"])
-      )
+        {:reply, {:ok, subscription_id}, new_state}
 
-      # Update character index
-      if subscription["character_ids"] && subscription["character_ids"] != [] do
-        CharacterIndex.add_subscription(subscription_id, subscription["character_ids"])
-
-        # Log first-time character subscription for visibility
-        if type == :websocket and length(subscription["character_ids"]) > 0 do
-          Logger.info("🎯 Character-based subscription activated",
-            subscription_id: subscription_id,
-            character_count: length(subscription["character_ids"]),
-            type: type
-          )
-        end
-      end
-
-      # Update system index
-      if subscription["system_ids"] && subscription["system_ids"] != [] do
-        SystemIndex.add_subscription(subscription_id, subscription["system_ids"])
-      end
-
-      # Preload recent kills asynchronously if it's a webhook subscription
-      if type == :webhook do
-        Preloader.preload_for_subscription(subscription)
-      end
-
-      {:reply, {:ok, subscription_id}, new_state}
-    else
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -438,6 +426,26 @@ defmodule WandererKills.SubscriptionManager do
   # Private Functions
   # ============================================================================
 
+  defp update_character_index(subscription_id, character_ids, type) do
+    if character_ids && character_ids != [] do
+      CharacterIndex.add_subscription(subscription_id, character_ids)
+
+      if type == :websocket and length(character_ids) > 0 do
+        Logger.info("🎯 Character-based subscription activated",
+          subscription_id: subscription_id,
+          character_count: length(character_ids),
+          type: type
+        )
+      end
+    end
+  end
+
+  defp update_system_index(subscription_id, system_ids) do
+    if system_ids && system_ids != [] do
+      SystemIndex.add_subscription(subscription_id, system_ids)
+    end
+  end
+
   defp validate_subscription(subscriber_id, system_ids) do
     cond do
       subscriber_id == nil or subscriber_id == "" ->
@@ -455,27 +463,48 @@ defmodule WandererKills.SubscriptionManager do
   end
 
   defp validate_subscription_attrs(attrs) do
-    cond do
-      attrs["subscriber_id"] == nil or attrs["subscriber_id"] == "" ->
-        {:error, "Subscriber ID is required"}
+    with :ok <- validate_subscriber_id(attrs["subscriber_id"]),
+         :ok <- validate_at_least_one_id_present(attrs),
+         :ok <- validate_system_ids(attrs["system_ids"]),
+         :ok <- validate_character_ids(attrs["character_ids"]) do
+      :ok
+    end
+  end
 
-      # At least one of system_ids or character_ids must be provided
-      (attrs["system_ids"] == nil or attrs["system_ids"] == []) and
-          (attrs["character_ids"] == nil or attrs["character_ids"] == []) ->
-        {:error, "At least one system ID or character ID is required"}
+  defp validate_subscriber_id(nil), do: {:error, "Subscriber ID is required"}
+  defp validate_subscriber_id(""), do: {:error, "Subscriber ID is required"}
+  defp validate_subscriber_id(_), do: :ok
 
-      # Validate system_ids if provided
-      attrs["system_ids"] != nil and attrs["system_ids"] != [] and
-          not Enum.all?(attrs["system_ids"], &is_integer/1) ->
-        {:error, "All system IDs must be integers"}
+  defp validate_at_least_one_id_present(attrs) do
+    system_ids_empty = attrs["system_ids"] == nil or attrs["system_ids"] == []
+    character_ids_empty = attrs["character_ids"] == nil or attrs["character_ids"] == []
 
-      # Validate character_ids if provided
-      attrs["character_ids"] != nil and attrs["character_ids"] != [] and
-          not Enum.all?(attrs["character_ids"], &is_integer/1) ->
-        {:error, "All character IDs must be integers"}
+    if system_ids_empty and character_ids_empty do
+      {:error, "At least one system ID or character ID is required"}
+    else
+      :ok
+    end
+  end
 
-      true ->
-        :ok
+  defp validate_system_ids(nil), do: :ok
+  defp validate_system_ids([]), do: :ok
+
+  defp validate_system_ids(system_ids) do
+    if Enum.all?(system_ids, &is_integer/1) do
+      :ok
+    else
+      {:error, "All system IDs must be integers"}
+    end
+  end
+
+  defp validate_character_ids(nil), do: :ok
+  defp validate_character_ids([]), do: :ok
+
+  defp validate_character_ids(character_ids) do
+    if Enum.all?(character_ids, &is_integer/1) do
+      :ok
+    else
+      {:error, "All character IDs must be integers"}
     end
   end
 

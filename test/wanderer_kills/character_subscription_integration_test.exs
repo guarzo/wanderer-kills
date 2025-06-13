@@ -7,14 +7,21 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
   """
 
   use ExUnit.Case, async: false
+  use WandererKills.Test.SharedContexts
 
   alias WandererKills.SubscriptionManager
   alias WandererKills.Storage.KillmailStore
 
   setup do
+    # Ensure cache is available
+    ensure_cache_available()
+    
     # Clear any existing data
     :ok = Application.stop(:wanderer_kills)
     :ok = Application.start(:wanderer_kills)
+    
+    # Ensure cache is available after restart
+    ensure_cache_available()
 
     # Wait for services to start
     Process.sleep(100)

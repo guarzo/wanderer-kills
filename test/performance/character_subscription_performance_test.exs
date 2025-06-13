@@ -7,6 +7,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
   """
 
   use ExUnit.Case, async: false
+  use WandererKills.Test.SharedContexts
 
   alias WandererKills.SubscriptionManager
   alias WandererKills.Subscriptions.CharacterIndex
@@ -14,14 +15,14 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
 
   describe "large character list performance" do
     @describetag :performance
+    setup :with_clean_environment
+    
     setup do
-      # Clear state
+      # Clear state specific to these tests
       CharacterIndex.clear()
-      CharacterCache.clear_cache()
 
       on_exit(fn ->
         CharacterIndex.clear()
-        CharacterCache.clear_cache()
       end)
 
       :ok
