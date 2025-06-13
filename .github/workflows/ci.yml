@@ -174,13 +174,35 @@ jobs:
         run: |
           # Basic container test - start and check health
           docker run -d --name test_container -p 4004:4004 guarzo/wanderer-kills:test
-          sleep 10
+          
+          # Give it a moment to start
+          sleep 5
+          
+          # Check container status
+          echo "Container status:"
+          docker ps -a | grep test_container || true
+          
+          # Check logs regardless
+          echo "Container logs:"
+          docker logs test_container 2>&1 || true
+          
+          # Wait a bit more
+          sleep 5
+          
           # Check if container is still running
           if ! docker ps | grep test_container; then
             echo "Container failed to start or exited"
-            docker logs test_container
+            echo "Final container status:"
+            docker ps -a | grep test_container || true
+            echo "Final logs:"
+            docker logs test_container 2>&1 || true
             exit 1
           fi
+          
+          # Try to check health endpoint
+          echo "Checking health endpoint:"
+          curl -f http://localhost:4004/health || echo "Health check failed"
+          
           # Clean up
           docker stop test_container
           docker rm test_container

@@ -83,14 +83,14 @@ RUN apt-get update \
  && useradd -r -d /app -s /usr/sbin/nologin -g app app
 
 # Copy release from build stage with proper structure
-COPY --from=build --chown=app:app /app/release/ ./
+COPY --from=build --chown=app:app /app/release/. ./
 
 # Runtime configuration
 ENV REPLACE_OS_VARS=true \
     HOME=/app \
-    LANG=C.UTF-8 \
-    LANGUAGE=C.UTF-8 \
-    LC_ALL=C.UTF-8
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
 
 # Metadata
 ARG BUILD_DATE
