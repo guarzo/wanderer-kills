@@ -52,7 +52,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
       {lookup_time, lookup_results} =
         :timer.tc(fn ->
           Enum.map(1..10, fn i ->
-            CharacterIndex.find_subscriptions_for_character(i * 100)
+            CharacterIndex.find_subscriptions_for_entity(i * 100)
           end)
         end)
 
@@ -70,7 +70,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
 
       {batch_lookup_time, batch_result} =
         :timer.tc(fn ->
-          CharacterIndex.find_subscriptions_for_characters(test_characters)
+          CharacterIndex.find_subscriptions_for_entities(test_characters)
         end)
 
       # Batch lookup should be very fast (under 5ms)
@@ -251,7 +251,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
       {lookup_time, lookup_results} =
         :timer.tc(fn ->
           Enum.map(test_characters, fn char_id ->
-            CharacterIndex.find_subscriptions_for_character(char_id)
+            CharacterIndex.find_subscriptions_for_entity(char_id)
           end)
         end)
 
@@ -265,7 +265,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
       # Test batch lookup performance
       {batch_lookup_time, batch_results} =
         :timer.tc(fn ->
-          CharacterIndex.find_subscriptions_for_characters(test_characters)
+          CharacterIndex.find_subscriptions_for_entities(test_characters)
         end)
 
       # Batch lookup should be reasonably fast (may not always be faster due to overhead)
@@ -300,7 +300,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
               )
 
             # Do some operations
-            chars = CharacterIndex.find_subscriptions_for_character(i * 10 + 5)
+            chars = CharacterIndex.find_subscriptions_for_entity(i * 10 + 5)
             assert sub_id in chars
 
             # Update subscription

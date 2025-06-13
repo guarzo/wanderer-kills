@@ -211,7 +211,7 @@ defmodule WandererKills.Killmails.BatchProcessor do
       |> Task.async_stream(
         fn killmail ->
           character_ids = CharacterCache.extract_characters_cached(killmail)
-          subscription_ids = CharacterIndex.find_subscriptions_for_characters(character_ids)
+          subscription_ids = CharacterIndex.find_subscriptions_for_entities(character_ids)
           {killmail["killmail_id"], subscription_ids}
         end,
         max_concurrency: System.schedulers_online() * 2,

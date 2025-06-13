@@ -138,7 +138,7 @@ defmodule WandererKills.Benchmarks.BatchProcessorBenchmark do
     {lookup_time, _} =
       :timer.tc(fn ->
         Enum.each(test_characters, fn char_id ->
-          CharacterIndex.find_subscriptions_for_character(char_id)
+          CharacterIndex.find_subscriptions_for_entity(char_id)
         end)
       end)
 
@@ -147,7 +147,7 @@ defmodule WandererKills.Benchmarks.BatchProcessorBenchmark do
     # Benchmark batch lookup
     {batch_lookup_time, _} =
       :timer.tc(fn ->
-        CharacterIndex.find_subscriptions_for_characters(test_characters)
+        CharacterIndex.find_subscriptions_for_entities(test_characters)
       end)
 
     Logger.info("Batch lookup of 100 characters: #{batch_lookup_time / 1000}ms")

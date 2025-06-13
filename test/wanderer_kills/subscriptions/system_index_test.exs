@@ -18,16 +18,16 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
     test "adds subscription with single system" do
       SystemIndex.add_subscription("sub_1", [30_000_142])
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == ["sub_1"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == []
     end
 
     test "adds subscription with multiple systems" do
       SystemIndex.add_subscription("sub_1", [30_000_142, 30_000_144, 30_000_148])
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == ["sub_1"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == ["sub_1"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_148) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_148) == ["sub_1"]
     end
 
     test "handles multiple subscriptions for same system" do
@@ -35,7 +35,7 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
       SystemIndex.add_subscription("sub_2", [30_000_142, 30_000_144])
       SystemIndex.add_subscription("sub_3", [30_000_142])
 
-      subs = SystemIndex.find_subscriptions_for_system(30_000_142)
+      subs = SystemIndex.find_subscriptions_for_entity(30_000_142)
       assert length(subs) == 3
       assert "sub_1" in subs
       assert "sub_2" in subs
@@ -60,32 +60,32 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
     test "adds new systems to existing subscription" do
       SystemIndex.update_subscription("sub_1", [30_000_142, 30_000_144, 30_000_148])
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == ["sub_1"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == ["sub_1"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_148) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_148) == ["sub_1"]
     end
 
     test "removes systems no longer in subscription" do
       SystemIndex.update_subscription("sub_1", [30_000_142])
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == ["sub_1"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == []
     end
 
     test "completely changes system list" do
       SystemIndex.update_subscription("sub_1", [30_000_148, 30_000_999])
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == []
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == []
-      assert SystemIndex.find_subscriptions_for_system(30_000_148) == ["sub_1"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_999) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_148) == ["sub_1"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_999) == ["sub_1"]
     end
 
     test "handles updating to empty system list" do
       SystemIndex.update_subscription("sub_1", [])
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == []
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == []
 
       stats = SystemIndex.get_stats()
       assert stats.total_system_entries == 0
@@ -102,18 +102,18 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
     test "removes subscription from all its systems" do
       SystemIndex.remove_subscription("sub_1")
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == []
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == ["sub_2"]
-      assert SystemIndex.find_subscriptions_for_system(30_000_148) == ["sub_2"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == ["sub_2"]
+      assert SystemIndex.find_subscriptions_for_entity(30_000_148) == ["sub_2"]
     end
 
     test "cleans up system entries with no subscriptions" do
       SystemIndex.remove_subscription("sub_1")
       SystemIndex.remove_subscription("sub_2")
 
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == []
-      assert SystemIndex.find_subscriptions_for_system(30_000_144) == []
-      assert SystemIndex.find_subscriptions_for_system(30_000_148) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_144) == []
+      assert SystemIndex.find_subscriptions_for_entity(30_000_148) == []
 
       stats = SystemIndex.get_stats()
       assert stats.total_system_entries == 0
@@ -123,12 +123,12 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
       SystemIndex.remove_subscription("sub_999")
 
       # Should not affect existing subscriptions
-      assert SystemIndex.find_subscriptions_for_system(30_000_142) == ["sub_1"]
-      assert length(SystemIndex.find_subscriptions_for_system(30_000_144)) == 2
+      assert SystemIndex.find_subscriptions_for_entity(30_000_142) == ["sub_1"]
+      assert length(SystemIndex.find_subscriptions_for_entity(30_000_144)) == 2
     end
   end
 
-  describe "find_subscriptions_for_systems/1" do
+  describe "find_subscriptions_for_entities/1" do
     setup do
       SystemIndex.add_subscription("sub_1", [30_000_142, 30_000_144])
       SystemIndex.add_subscription("sub_2", [30_000_144, 30_000_148])
@@ -137,7 +137,7 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
     end
 
     test "finds all unique subscriptions for multiple systems" do
-      subs = SystemIndex.find_subscriptions_for_systems([30_000_142, 30_000_148])
+      subs = SystemIndex.find_subscriptions_for_entities([30_000_142, 30_000_148])
       assert length(subs) == 3
       assert "sub_1" in subs
       assert "sub_2" in subs
@@ -146,7 +146,7 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
 
     test "deduplicates subscription IDs" do
       # Both systems are in sub_2
-      subs = SystemIndex.find_subscriptions_for_systems([30_000_144, 30_000_148])
+      subs = SystemIndex.find_subscriptions_for_entities([30_000_144, 30_000_148])
       assert length(subs) == 3
       assert "sub_1" in subs
       assert "sub_2" in subs
@@ -154,15 +154,15 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
     end
 
     test "returns empty list for unknown systems" do
-      assert SystemIndex.find_subscriptions_for_systems([30_001_111, 30_002_222]) == []
+      assert SystemIndex.find_subscriptions_for_entities([30_001_111, 30_002_222]) == []
     end
 
     test "handles empty system list" do
-      assert SystemIndex.find_subscriptions_for_systems([]) == []
+      assert SystemIndex.find_subscriptions_for_entities([]) == []
     end
 
     test "handles mix of known and unknown systems" do
-      subs = SystemIndex.find_subscriptions_for_systems([30_000_142, 30_001_111])
+      subs = SystemIndex.find_subscriptions_for_entities([30_000_142, 30_001_111])
       assert subs == ["sub_1"]
     end
   end
@@ -193,7 +193,7 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
       # Time a lookup
       {time, result} =
         :timer.tc(fn ->
-          SystemIndex.find_subscriptions_for_system(30_005_005)
+          SystemIndex.find_subscriptions_for_entity(30_005_005)
         end)
 
       assert result == ["sub_500"]
@@ -209,7 +209,7 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
 
       {time, result} =
         :timer.tc(fn ->
-          SystemIndex.find_subscriptions_for_system(30_000_142)
+          SystemIndex.find_subscriptions_for_entity(30_000_142)
         end)
 
       assert length(result) == 1000
@@ -229,7 +229,7 @@ defmodule WandererKills.Subscriptions.SystemIndexTest do
 
       {time, result} =
         :timer.tc(fn ->
-          SystemIndex.find_subscriptions_for_systems(systems_to_find)
+          SystemIndex.find_subscriptions_for_entities(systems_to_find)
         end)
 
       # Should find subscriptions efficiently

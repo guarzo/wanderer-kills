@@ -53,8 +53,8 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
       assert stats.total_subscribed_systems == 1
 
       # Verify character index is updated
-      char_subs_1 = CharacterIndex.find_subscriptions_for_character(95_465_499)
-      char_subs_2 = CharacterIndex.find_subscriptions_for_character(90_379_338)
+      char_subs_1 = CharacterIndex.find_subscriptions_for_entity(95_465_499)
+      char_subs_2 = CharacterIndex.find_subscriptions_for_entity(90_379_338)
       assert subscription_id in char_subs_1
       assert subscription_id in char_subs_2
 
@@ -106,7 +106,7 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
       Process.sleep(10)
 
       # Verify character index is updated
-      char_subs_3 = CharacterIndex.find_subscriptions_for_character(12_345_678)
+      char_subs_3 = CharacterIndex.find_subscriptions_for_entity(12_345_678)
       assert subscription_id in char_subs_3
 
       # Test updated filtering
@@ -136,9 +136,9 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
       Process.sleep(10)
 
       # Verify character index is cleaned up
-      assert CharacterIndex.find_subscriptions_for_character(95_465_499) == []
-      assert CharacterIndex.find_subscriptions_for_character(90_379_338) == []
-      assert CharacterIndex.find_subscriptions_for_character(12_345_678) == []
+      assert CharacterIndex.find_subscriptions_for_entity(95_465_499) == []
+      assert CharacterIndex.find_subscriptions_for_entity(90_379_338) == []
+      assert CharacterIndex.find_subscriptions_for_entity(12_345_678) == []
 
       # Verify stats are updated
       final_stats = SubscriptionManager.get_stats()
@@ -186,23 +186,23 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
 
       # Test character lookups
       # Only sub1
-      assert length(CharacterIndex.find_subscriptions_for_character(100)) == 1
+      assert length(CharacterIndex.find_subscriptions_for_entity(100)) == 1
 
-      char_200_subs = CharacterIndex.find_subscriptions_for_character(200)
+      char_200_subs = CharacterIndex.find_subscriptions_for_entity(200)
       # sub1 and sub2
       assert length(char_200_subs) == 2
       assert sub1 in char_200_subs
       assert sub2 in char_200_subs
 
-      char_300_subs = CharacterIndex.find_subscriptions_for_character(300)
+      char_300_subs = CharacterIndex.find_subscriptions_for_entity(300)
       # sub1 and sub2
       assert length(char_300_subs) == 2
 
-      assert CharacterIndex.find_subscriptions_for_character(500) == [sub3]
-      assert CharacterIndex.find_subscriptions_for_character(999) == []
+      assert CharacterIndex.find_subscriptions_for_entity(500) == [sub3]
+      assert CharacterIndex.find_subscriptions_for_entity(999) == []
 
       # Test batch character lookup
-      batch_result = CharacterIndex.find_subscriptions_for_characters([200, 300, 500])
+      batch_result = CharacterIndex.find_subscriptions_for_entities([200, 300, 500])
       # sub1, sub2, sub3
       assert length(batch_result) == 3
       assert sub1 in batch_result
@@ -339,7 +339,7 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
       # Verify character index can handle the load
       {lookup_time, lookup_result} =
         :timer.tc(fn ->
-          CharacterIndex.find_subscriptions_for_character(5000)
+          CharacterIndex.find_subscriptions_for_entity(5000)
         end)
 
       # Character lookup should be very fast (under 1ms)
@@ -430,7 +430,7 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
         )
 
       # Should not be in character index
-      assert CharacterIndex.find_subscriptions_for_character(123) == []
+      assert CharacterIndex.find_subscriptions_for_entity(123) == []
 
       # But should still work for system matching
       killmail = %{

@@ -18,16 +18,16 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
     test "adds subscription with single character" do
       CharacterIndex.add_subscription("sub_1", [123])
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == ["sub_1"]
-      assert CharacterIndex.find_subscriptions_for_character(456) == []
+      assert CharacterIndex.find_subscriptions_for_entity(123) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(456) == []
     end
 
     test "adds subscription with multiple characters" do
       CharacterIndex.add_subscription("sub_1", [123, 456, 789])
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == ["sub_1"]
-      assert CharacterIndex.find_subscriptions_for_character(456) == ["sub_1"]
-      assert CharacterIndex.find_subscriptions_for_character(789) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(123) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(456) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(789) == ["sub_1"]
     end
 
     test "handles multiple subscriptions for same character" do
@@ -35,7 +35,7 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
       CharacterIndex.add_subscription("sub_2", [123, 456])
       CharacterIndex.add_subscription("sub_3", [123])
 
-      subs = CharacterIndex.find_subscriptions_for_character(123)
+      subs = CharacterIndex.find_subscriptions_for_entity(123)
       assert length(subs) == 3
       assert "sub_1" in subs
       assert "sub_2" in subs
@@ -60,32 +60,32 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
     test "adds new characters to existing subscription" do
       CharacterIndex.update_subscription("sub_1", [123, 456, 789])
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == ["sub_1"]
-      assert CharacterIndex.find_subscriptions_for_character(456) == ["sub_1"]
-      assert CharacterIndex.find_subscriptions_for_character(789) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(123) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(456) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(789) == ["sub_1"]
     end
 
     test "removes characters no longer in subscription" do
       CharacterIndex.update_subscription("sub_1", [123])
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == ["sub_1"]
-      assert CharacterIndex.find_subscriptions_for_character(456) == []
+      assert CharacterIndex.find_subscriptions_for_entity(123) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(456) == []
     end
 
     test "completely changes character list" do
       CharacterIndex.update_subscription("sub_1", [789, 999])
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == []
-      assert CharacterIndex.find_subscriptions_for_character(456) == []
-      assert CharacterIndex.find_subscriptions_for_character(789) == ["sub_1"]
-      assert CharacterIndex.find_subscriptions_for_character(999) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(123) == []
+      assert CharacterIndex.find_subscriptions_for_entity(456) == []
+      assert CharacterIndex.find_subscriptions_for_entity(789) == ["sub_1"]
+      assert CharacterIndex.find_subscriptions_for_entity(999) == ["sub_1"]
     end
 
     test "handles updating to empty character list" do
       CharacterIndex.update_subscription("sub_1", [])
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == []
-      assert CharacterIndex.find_subscriptions_for_character(456) == []
+      assert CharacterIndex.find_subscriptions_for_entity(123) == []
+      assert CharacterIndex.find_subscriptions_for_entity(456) == []
 
       stats = CharacterIndex.get_stats()
       assert stats.total_character_entries == 0
@@ -102,18 +102,18 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
     test "removes subscription from all its characters" do
       CharacterIndex.remove_subscription("sub_1")
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == []
-      assert CharacterIndex.find_subscriptions_for_character(456) == ["sub_2"]
-      assert CharacterIndex.find_subscriptions_for_character(789) == ["sub_2"]
+      assert CharacterIndex.find_subscriptions_for_entity(123) == []
+      assert CharacterIndex.find_subscriptions_for_entity(456) == ["sub_2"]
+      assert CharacterIndex.find_subscriptions_for_entity(789) == ["sub_2"]
     end
 
     test "cleans up character entries with no subscriptions" do
       CharacterIndex.remove_subscription("sub_1")
       CharacterIndex.remove_subscription("sub_2")
 
-      assert CharacterIndex.find_subscriptions_for_character(123) == []
-      assert CharacterIndex.find_subscriptions_for_character(456) == []
-      assert CharacterIndex.find_subscriptions_for_character(789) == []
+      assert CharacterIndex.find_subscriptions_for_entity(123) == []
+      assert CharacterIndex.find_subscriptions_for_entity(456) == []
+      assert CharacterIndex.find_subscriptions_for_entity(789) == []
 
       stats = CharacterIndex.get_stats()
       assert stats.total_character_entries == 0
@@ -123,12 +123,12 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
       CharacterIndex.remove_subscription("sub_999")
 
       # Should not affect existing subscriptions
-      assert CharacterIndex.find_subscriptions_for_character(123) == ["sub_1"]
-      assert length(CharacterIndex.find_subscriptions_for_character(456)) == 2
+      assert CharacterIndex.find_subscriptions_for_entity(123) == ["sub_1"]
+      assert length(CharacterIndex.find_subscriptions_for_entity(456)) == 2
     end
   end
 
-  describe "find_subscriptions_for_characters/1" do
+  describe "find_subscriptions_for_entities/1" do
     setup do
       CharacterIndex.add_subscription("sub_1", [123, 456])
       CharacterIndex.add_subscription("sub_2", [456, 789])
@@ -137,7 +137,7 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
     end
 
     test "finds all unique subscriptions for multiple characters" do
-      subs = CharacterIndex.find_subscriptions_for_characters([123, 789])
+      subs = CharacterIndex.find_subscriptions_for_entities([123, 789])
       assert length(subs) == 3
       assert "sub_1" in subs
       assert "sub_2" in subs
@@ -146,7 +146,7 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
 
     test "deduplicates subscription IDs" do
       # Both characters are in sub_2
-      subs = CharacterIndex.find_subscriptions_for_characters([456, 789])
+      subs = CharacterIndex.find_subscriptions_for_entities([456, 789])
       assert length(subs) == 3
       assert "sub_1" in subs
       assert "sub_2" in subs
@@ -154,15 +154,15 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
     end
 
     test "returns empty list for unknown characters" do
-      assert CharacterIndex.find_subscriptions_for_characters([111, 222]) == []
+      assert CharacterIndex.find_subscriptions_for_entities([111, 222]) == []
     end
 
     test "handles empty character list" do
-      assert CharacterIndex.find_subscriptions_for_characters([]) == []
+      assert CharacterIndex.find_subscriptions_for_entities([]) == []
     end
 
     test "handles mix of known and unknown characters" do
-      subs = CharacterIndex.find_subscriptions_for_characters([123, 111])
+      subs = CharacterIndex.find_subscriptions_for_entities([123, 111])
       assert subs == ["sub_1"]
     end
   end
@@ -194,7 +194,7 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
       # Time a lookup
       {time, result} =
         :timer.tc(fn ->
-          CharacterIndex.find_subscriptions_for_character(5005)
+          CharacterIndex.find_subscriptions_for_entity(5005)
         end)
 
       assert result == ["sub_500"]
@@ -210,7 +210,7 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
 
       {time, result} =
         :timer.tc(fn ->
-          CharacterIndex.find_subscriptions_for_character(123)
+          CharacterIndex.find_subscriptions_for_entity(123)
         end)
 
       assert length(result) == 1000
@@ -230,7 +230,7 @@ defmodule WandererKills.Subscriptions.CharacterIndexTest do
 
       {time, result} =
         :timer.tc(fn ->
-          CharacterIndex.find_subscriptions_for_characters(characters_to_find)
+          CharacterIndex.find_subscriptions_for_entities(characters_to_find)
         end)
 
       # Should find subscriptions efficiently
