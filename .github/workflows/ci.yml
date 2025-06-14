@@ -103,12 +103,17 @@ jobs:
           # Run dialyzer and capture output
           MIX_ENV=dev mix dialyzer --format short > dialyzer_output.txt 2>&1 || DIALYZER_EXIT_CODE=$?
           
-          # Count warnings
+          # Count warnings - ensure we get a single number
           if [ -f dialyzer_output.txt ]; then
-            WARNINGS=$(grep -c "warning:" dialyzer_output.txt || echo "0")
+            # Count warning lines and ensure it's a single number
+            WARNINGS=$(grep -c "warning:" dialyzer_output.txt 2>/dev/null | head -1 || echo "0")
+            # Ensure WARNINGS is a valid number
+            if ! [[ "$WARNINGS" =~ ^[0-9]+$ ]]; then
+              WARNINGS="0"
+            fi
             echo "dialyzer_warnings=$WARNINGS" >> $GITHUB_OUTPUT
             
-            if [ "$WARNINGS" -eq 0 ]; then
+            if [ "$WARNINGS" -eq "0" ]; then
               echo "✅ **Dialyzer passed with 0 warnings**" >> $GITHUB_STEP_SUMMARY
               echo "dialyzer_status=passing" >> $GITHUB_OUTPUT
             else
