@@ -38,13 +38,18 @@ defmodule WandererKills.App.Application do
          {Phoenix.PubSub, name: WandererKills.PubSub},
          WandererKills.Subscriptions.CharacterIndex,
          WandererKills.Subscriptions.SystemIndex,
-         {WandererKills.SubscriptionManager, [pubsub_name: WandererKills.PubSub]}
+         {WandererKills.SubscriptionManager, [pubsub_name: WandererKills.PubSub]},
+         WandererKills.RateLimiter,
+         WandererKills.HistoricalFetcher
        ] ++
          cache_children() ++
          [
+           WandererKills.Observability.ApiTracker,
            WandererKills.Observability.Metrics,
            WandererKills.Observability.Monitoring,
+           WandererKills.Observability.TelemetryMetrics,
            WandererKills.Observability.WebSocketStats,
+           WandererKills.Observability.UnifiedStatus,
            WandererKillsWeb.Endpoint,
            {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
          ])
@@ -55,10 +60,19 @@ defmodule WandererKills.App.Application do
 
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
-        start_ship_type_update()
+        Logger.info("[Application] Supervisor started successfully")
+        # Start ship type update asynchronously without blocking
+        spawn(fn ->
+          # Give the system a moment to fully start
+          Process.sleep(1000)
+          start_ship_type_update()
+        end)
+
+        Logger.info("[Application] Application startup completed successfully")
         {:ok, pid}
 
       error ->
+        Logger.error("[Application] Supervisor failed to start: #{inspect(error)}")
         error
     end
   end
@@ -105,20 +119,42 @@ defmodule WandererKills.App.Application do
 
   @spec start_ship_type_update() :: :ok
   defp start_ship_type_update do
-    SupervisedTask.start_child(
-      fn ->
-        case WandererKills.ShipTypes.Updater.update_ship_types() do
-          {:error, reason} ->
-            Logger.error("Failed to update ship types: #{inspect(reason)}")
+    Logger.info("[Application] Starting ship type update task")
 
-          _ ->
-            :ok
-        end
-      end,
-      task_name: "ship_type_update",
-      metadata: %{module: __MODULE__}
-    )
+    task_result =
+      SupervisedTask.start_child(
+        &execute_ship_type_update/0,
+        task_name: "ship_type_update",
+        metadata: %{module: __MODULE__}
+      )
 
+    handle_task_start_result(task_result)
     :ok
+  end
+
+  defp execute_ship_type_update do
+    Logger.info("[Application] Ship type update task executing")
+
+    result =
+      case WandererKills.ShipTypes.Updater.update_ship_types() do
+        {:error, reason} ->
+          Logger.error("Failed to update ship types: #{inspect(reason)}")
+          {:error, reason}
+
+        result ->
+          Logger.info("Ship type update completed successfully")
+          result
+      end
+
+    Logger.info("[Application] Ship type update task finished")
+    result
+  end
+
+  defp handle_task_start_result({:ok, _pid}) do
+    Logger.info("[Application] Ship type update task started successfully")
+  end
+
+  defp handle_task_start_result({:error, reason}) do
+    Logger.error("[Application] Failed to start ship type update task: #{inspect(reason)}")
   end
 end

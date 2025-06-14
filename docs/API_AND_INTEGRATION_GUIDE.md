@@ -177,26 +177,60 @@ const socket = new Socket('ws://localhost:4004/socket', {
 
 socket.connect();
 
-// Join a killmail channel for a specific system
-const channel = socket.channel('killmails:system:30000142', {});
+// Join the killmail lobby channel with systems and optional extended preload
+const channel = socket.channel('killmails:lobby', {
+  systems: [30000142, 30000144],
+  characters: [95465499],  // Optional: track specific characters
+  preload: {               // Optional: extended historical data preload
+    enabled: true,
+    limit_per_system: 100,
+    since_hours: 168,
+    delivery_batch_size: 10,
+    delivery_interval_ms: 1000
+  }
+});
 
 channel.join()
   .receive('ok', resp => console.log('Joined successfully', resp))
   .receive('error', resp => console.log('Unable to join', resp));
 
-// Listen for kill events
-channel.on('new_kill', payload => {
-  console.log('New kill:', payload.killmail_id);
+// Listen for killmail updates
+channel.on('killmail_update', payload => {
+  console.log(`Received ${payload.killmails.length} kills for system ${payload.system_id}`);
+  console.log('Is preload:', payload.preload);
 });
 
-channel.on('system_stats', payload => {
-  console.log(`System ${payload.system_id} has ${payload.kill_count} kills`);
+channel.on('kill_count_update', payload => {
+  console.log(`System ${payload.system_id} has ${payload.count} kills`);
 });
 
-// Subscribe to multiple systems
-channel.push('subscribe', { systems: [30000142, 30000144] })
-  .receive('ok', resp => console.log('Subscribed to systems', resp))
+// Extended preload events (when preload config is provided)
+channel.on('preload_status', payload => {
+  console.log('Preload progress:', payload);
+  // Example: {status: "fetching", current_system: 30000142, systems_complete: 1, total_systems: 2}
+});
+
+channel.on('preload_batch', payload => {
+  console.log(`Received preload batch: ${payload.kills.length} kills`);
+  // Process historical kills from payload.kills
+});
+
+channel.on('preload_complete', payload => {
+  console.log('Preload complete:', payload);
+  // Example: {total_kills: 500, systems_processed: 2, errors: []}
+});
+
+// Subscribe to additional systems after joining
+channel.push('subscribe_systems', { systems: [30000145] })
+  .receive('ok', resp => console.log('Subscribed to additional systems', resp))
   .receive('error', resp => console.log('Failed to subscribe', resp));
+
+// Get current subscription status
+channel.push('get_status', {})
+  .receive('ok', resp => {
+    console.log('Current subscription:', resp);
+    // {subscription_id: "...", subscribed_systems: [...], subscribed_characters: [...]}
+  });
 ```
 
 ### Character-Based Subscriptions
@@ -230,6 +264,137 @@ channel.push('unsubscribe_characters', { character_ids: [95465499] })
 - **Performance Optimized**: Efficient character indexing for fast lookups with large character lists
 - **Scale Support**: Up to 1000 character IDs per subscription
 - **Real-time Processing**: Sub-millisecond character matching performance
+
+### Extended Historical Data Preload
+
+WandererKills supports extended historical data preload, allowing clients to request up to 1 week of historical killmail data when establishing a subscription. This data is fetched asynchronously with rate limiting and delivered progressively to prevent overwhelming clients.
+
+#### Preload Configuration
+
+When joining the channel, include a `preload` configuration object:
+
+```javascript
+const channel = socket.channel('killmails:lobby', {
+  systems: [30000142],
+  preload: {
+    enabled: true,              // Enable extended preload (default: true)
+    limit_per_system: 100,      // Max kills per system to fetch (default: 100)
+    since_hours: 168,           // Hours to look back (default: 168 = 1 week)
+    delivery_batch_size: 10,    // Kills per batch delivery (default: 10)
+    delivery_interval_ms: 1000  // Delay between batches in ms (default: 1000)
+  }
+});
+```
+
+#### Preload Parameters
+
+| Parameter | Type | Description | Default | Max |
+|-----------|------|-------------|---------|-----|
+| `enabled` | boolean | Enable/disable extended preload | true | - |
+| `limit_per_system` | integer | Maximum kills to fetch per system | 100 | 200 |
+| `since_hours` | integer | Hours of history to fetch | 168 | 168 |
+| `delivery_batch_size` | integer | Kills per delivery batch | 10 | 50 |
+| `delivery_interval_ms` | integer | Milliseconds between batches | 1000 | - |
+
+#### Preload Events
+
+The extended preload feature sends three types of events:
+
+**1. preload_status** - Progress updates during fetching
+```json
+{
+  "status": "fetching",
+  "current_system": 30000142,
+  "systems_complete": 1,
+  "total_systems": 3
+}
+```
+
+**2. preload_batch** - Batched delivery of historical kills
+```json
+{
+  "kills": [...],  // Array of killmail objects
+  "batch_size": 10
+}
+```
+
+**3. preload_complete** - Notification when preload finishes
+```json
+{
+  "total_kills": 245,
+  "systems_processed": 3,
+  "errors": []  // Any errors encountered
+}
+```
+
+#### Rate Limiting
+
+The preload system includes built-in rate limiting to prevent API blocking:
+- **zkillboard**: 10 requests per minute
+- **ESI**: 100 requests per minute
+- Automatic retry with exponential backoff on rate limit errors
+- Queue-based processing to manage multiple concurrent preloads
+
+#### Best Practices for Extended Preload
+
+1. **Consider Data Volume**: High-activity systems may have thousands of kills per week
+2. **Adjust Batch Size**: Larger batches are more efficient but may cause client lag
+3. **Handle Progressive Delivery**: Process kills as they arrive rather than waiting for completion
+4. **Monitor Progress**: Use preload_status events to show loading indicators
+5. **Error Handling**: Check the errors array in preload_complete for partial failures
+
+#### Example: Full Preload Implementation
+
+```javascript
+let historicalKills = [];
+let preloadProgress = { current: 0, total: 0 };
+
+const channel = socket.channel('killmails:lobby', {
+  systems: [30000142, 30000144, 30000145],
+  preload: {
+    limit_per_system: 50,
+    since_hours: 72,  // Last 3 days
+    delivery_batch_size: 20
+  }
+});
+
+// Track preload progress
+channel.on('preload_status', (status) => {
+  preloadProgress = {
+    current: status.systems_complete,
+    total: status.total_systems
+  };
+  updateProgressBar(preloadProgress);
+});
+
+// Collect historical kills
+channel.on('preload_batch', (batch) => {
+  historicalKills = historicalKills.concat(batch.kills);
+  console.log(`Total historical kills: ${historicalKills.length}`);
+
+  // Process batch immediately if needed
+  processBatchedKills(batch.kills);
+});
+
+// Handle completion
+channel.on('preload_complete', (result) => {
+  console.log(`Preload complete: ${result.total_kills} kills from ${result.systems_processed} systems`);
+
+  if (result.errors.length > 0) {
+    console.warn('Preload errors:', result.errors);
+  }
+
+  // All historical data is now loaded
+  displayHistoricalAnalytics(historicalKills);
+});
+
+// Join and start preload
+channel.join()
+  .receive('ok', resp => {
+    console.log('Connected with extended preload');
+    showLoadingIndicator();
+  });
+```
 
 #### Character Subscription Parameters
 

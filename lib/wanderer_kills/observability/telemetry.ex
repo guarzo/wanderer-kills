@@ -88,7 +88,7 @@ defmodule WandererKills.Observability.Telemetry do
     :telemetry.execute(
       [:wanderer_kills, :http, :request, :start],
       %{system_time: System.system_time(:native)},
-      %{method: method, url: url}
+      %{method: method, url: url, service: determine_service(url)}
     )
   end
 
@@ -100,7 +100,7 @@ defmodule WandererKills.Observability.Telemetry do
     :telemetry.execute(
       [:wanderer_kills, :http, :request, :stop],
       %{duration: duration},
-      %{method: method, url: url, status_code: status_code}
+      %{method: method, url: url, status_code: status_code, service: determine_service(url)}
     )
   end
 
@@ -112,9 +112,23 @@ defmodule WandererKills.Observability.Telemetry do
     :telemetry.execute(
       [:wanderer_kills, :http, :request, :stop],
       %{duration: duration},
-      %{method: method, url: url, error: error}
+      %{method: method, url: url, error: error, service: determine_service(url)}
     )
   end
+
+  # Helper to determine service from URL
+  defp determine_service(url) when is_binary(url) do
+    # Convert to lowercase for case-insensitive comparison
+    url_lower = String.downcase(url)
+
+    cond do
+      String.contains?(url_lower, "zkillboard.com") -> :zkillboard
+      String.contains?(url_lower, "esi.evetech.net") -> :esi
+      true -> :unknown
+    end
+  end
+
+  defp determine_service(_), do: :unknown
 
   @doc """
   Executes fetch system start telemetry.

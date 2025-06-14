@@ -44,6 +44,7 @@ defmodule WandererKills.Observability.Monitoring do
   use GenServer
   require Logger
   alias WandererKills.Support.Clock
+  alias WandererKills.App.EtsManager
 
   @cache_names [:wanderer_cache]
   @health_check_interval :timer.minutes(5)
@@ -375,9 +376,20 @@ defmodule WandererKills.Observability.Monitoring do
   def handle_info(:log_parser_summary, state) do
     stats = state.parser_stats
 
-    Logger.info(
-      "[Parser] Killmail processing summary - Stored: #{stats.stored}, Skipped: #{stats.skipped}, Failed: #{stats.failed}"
-    )
+    # Store parser stats in ETS for unified status reporter
+    if :ets.info(EtsManager.wanderer_kills_stats_table()) != :undefined do
+      :ets.insert(EtsManager.wanderer_kills_stats_table(), {:parser_stats, stats})
+    end
+
+    # Note: Summary logging now handled by UnifiedStatus module
+    # Only log if there's significant error activity
+    if stats.failed > 10 do
+      Logger.warning(
+        "[Parser] High error rate detected",
+        parser_errors: stats.failed,
+        parser_total_processed: stats.total_processed
+      )
+    end
 
     # Emit telemetry for the summary
     :telemetry.execute(
@@ -467,9 +479,16 @@ defmodule WandererKills.Observability.Monitoring do
   defp build_cache_metrics(cache_name) do
     case Cachex.stats(cache_name) do
       {:ok, stats} ->
+        # Get size separately as it's not included in stats
+        size =
+          case Cachex.size(cache_name) do
+            {:ok, s} -> s
+            _ -> 0
+          end
+
         %{
           name: cache_name,
-          size: Map.get(stats, :size, 0),
+          size: size,
           hit_rate: Map.get(stats, :hit_rate, 0.0),
           miss_rate: Map.get(stats, :miss_rate, 0.0),
           evictions: Map.get(stats, :evictions, 0),
@@ -489,8 +508,18 @@ defmodule WandererKills.Observability.Monitoring do
   @spec get_cache_stats_internal(atom()) :: {:ok, map()} | {:error, term()}
   defp get_cache_stats_internal(cache_name) do
     case Cachex.stats(cache_name) do
-      {:ok, stats} -> {:ok, stats}
-      {:error, reason} -> {:error, reason}
+      {:ok, stats} ->
+        # Add size to stats since Cachex doesn't include it
+        size =
+          case Cachex.size(cache_name) do
+            {:ok, s} -> s
+            _ -> 0
+          end
+
+        {:ok, Map.put(stats, :size, size)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

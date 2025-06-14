@@ -26,7 +26,9 @@
       ".cursor/**/*",
       "_build/**/*",
       "feedback.md",
-      "test.results"
+      "test.results",
+      "docs",
+      "prfeedback.md"
     ]
   },
   "security": {

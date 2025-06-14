@@ -13,6 +13,7 @@ defmodule WandererKills.RedisQ do
   require Logger
 
   alias WandererKills.Killmails.UnifiedProcessor
+  alias WandererKills.App.EtsManager
   alias WandererKills.ESI.Client, as: EsiClient
   alias WandererKills.Support.Clock
   alias WandererKills.Http.Client, as: HttpClient
@@ -258,27 +259,16 @@ defmodule WandererKills.RedisQ do
   defp log_summary(stats) do
     duration = DateTime.diff(DateTime.utc_now(), stats.last_reset, :second)
 
-    total_activity =
-      stats.kills_received + stats.kills_older + stats.kills_skipped + stats.legacy_kills
+    # Store stats in ETS for unified status reporter
+    if :ets.info(EtsManager.wanderer_kills_stats_table()) != :undefined do
+      :ets.insert(EtsManager.wanderer_kills_stats_table(), {:redisq_stats, stats})
+    end
 
-    if total_activity > 0 or stats.errors > 0 do
-      message = """
-      [RedisQ Stats] Processed: #{stats.kills_received} | \
-      Older: #{stats.kills_older} | \
-      Skipped: #{stats.kills_skipped} | \
-      Legacy: #{stats.legacy_kills} | \
-      Systems: #{MapSet.size(stats.systems_active)} | \
-      Errors: #{stats.errors} | \
-      Duration: #{duration}s\
-      """
-
-      Logger.info(
-        String.trim(message),
-        redisq_kills_processed: stats.kills_received + stats.legacy_kills,
-        redisq_kills_older: stats.kills_older,
-        redisq_kills_skipped: stats.kills_skipped,
-        redisq_legacy_kills: stats.legacy_kills,
-        redisq_active_systems: MapSet.size(stats.systems_active),
+    # Note: Summary logging now handled by UnifiedStatus module
+    # Only log if there's significant error activity
+    if stats.errors > 10 do
+      Logger.warning(
+        "[RedisQ] High error rate detected",
         redisq_errors: stats.errors,
         redisq_duration_s: duration
       )
