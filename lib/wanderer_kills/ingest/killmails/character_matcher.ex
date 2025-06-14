@@ -28,6 +28,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterMatcher do
   """
 
   alias WandererKills.Core.Observability.Telemetry
+  alias WandererKills.Domain.Killmail
 
   @doc """
   Checks if a killmail contains any of the specified character IDs.
@@ -52,21 +53,24 @@ defmodule WandererKills.Ingest.Killmails.CharacterMatcher do
       iex> CharacterMatcher.killmail_has_characters?(killmail, [123])
       true
   """
-  @spec killmail_has_characters?(map(), list(integer())) :: boolean()
+  @spec killmail_has_characters?(Killmail.t(), list(integer())) :: boolean()
   def killmail_has_characters?(_killmail, []), do: false
   def killmail_has_characters?(_killmail, nil), do: false
 
-  def killmail_has_characters?(killmail, character_ids) when is_list(character_ids) do
+  def killmail_has_characters?(%Killmail{} = killmail, character_ids) when is_list(character_ids) do
+    # Use struct fields directly for better performance
     start_time = System.monotonic_time()
     character_set = MapSet.new(character_ids)
 
-    victim_match = check_victim_match(killmail, character_set)
+    victim_match = killmail.victim && killmail.victim.character_id in character_set
 
     result =
       if victim_match do
         true
       else
-        check_attackers_match(killmail, character_set)
+        Enum.any?(killmail.attackers, fn attacker ->
+          attacker.character_id && attacker.character_id in character_set
+        end)
       end
 
     duration = System.monotonic_time() - start_time
@@ -100,58 +104,15 @@ defmodule WandererKills.Ingest.Killmails.CharacterMatcher do
       iex> CharacterMatcher.extract_character_ids(killmail)
       [123, 456, 789]
   """
-  @spec extract_character_ids(map()) :: list(integer())
-  def extract_character_ids(killmail) do
-    victim_id = get_victim_character_id(killmail)
-    attacker_ids = get_attacker_character_ids(killmail)
-
+  @spec extract_character_ids(Killmail.t()) :: list(integer())
+  def extract_character_ids(%Killmail{} = killmail) do
+    victim_id = killmail.victim && killmail.victim.character_id
+    attacker_ids = Enum.map(killmail.attackers, & &1.character_id)
+    
     [victim_id | attacker_ids]
-    # Remove nil values
     |> Enum.filter(& &1)
     |> Enum.uniq()
-    # Sort for consistent output
     |> Enum.sort()
   end
 
-  # Private helper functions
-
-  defp check_victim_match(killmail, character_set) do
-    victim_id = get_victim_character_id(killmail)
-    victim_id && MapSet.member?(character_set, victim_id)
-  end
-
-  defp check_attackers_match(killmail, character_set) do
-    killmail
-    |> get_attackers()
-    |> Enum.any?(fn attacker ->
-      character_id = get_character_id(attacker)
-      character_id && MapSet.member?(character_set, character_id)
-    end)
-  end
-
-  defp get_victim_character_id(killmail) do
-    # Handle both string and atom keys
-    victim = killmail["victim"] || killmail[:victim] || %{}
-    get_character_id(victim)
-  end
-
-  defp get_attacker_character_ids(killmail) do
-    killmail
-    |> get_attackers()
-    |> Enum.map(&get_character_id/1)
-    # Remove nil values
-    |> Enum.filter(& &1)
-  end
-
-  defp get_attackers(killmail) do
-    # Handle both string and atom keys
-    killmail["attackers"] || killmail[:attackers] || []
-  end
-
-  defp get_character_id(entity) when is_map(entity) do
-    # Handle both string and atom keys for character_id
-    entity["character_id"] || entity[:character_id]
-  end
-
-  defp get_character_id(_), do: nil
 end

@@ -20,10 +20,9 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   @type process_options :: [
           store: boolean(),
           enrich: boolean(),
-          validate_only: boolean(),
-          use_structs: boolean()
+          validate_only: boolean()
         ]
-  @type process_result :: {:ok, Killmail.t() | map()} | {:ok, :kill_older} | {:error, term()}
+  @type process_result :: {:ok, Killmail.t()} | {:ok, :kill_older} | {:error, term()}
 
   @doc """
   Processes any killmail, automatically detecting if it's full or partial.
@@ -37,7 +36,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
     - `:validate_only` - Only validate, don't process (default: false)
 
   ## Returns
-  - `{:ok, processed_killmail}` - On successful processing
+  - `{:ok, processed_killmail}` - Killmail struct on successful processing
   - `{:ok, :kill_older}` - When killmail is older than cutoff
   - `{:error, reason}` - On failure
   """
@@ -93,12 +92,11 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   ## Returns
   - `{:ok, processed_killmails}` - List of successfully processed killmails
   """
-  @spec process_batch([map()], DateTime.t(), process_options()) :: {:ok, [Killmail.t() | map()]}
+  @spec process_batch([map()], DateTime.t(), process_options()) :: {:ok, [Killmail.t()]}
   def process_batch(killmails, cutoff_time, opts \\ []) when is_list(killmails) do
     enrich? = Keyword.get(opts, :enrich, true)
     store? = Keyword.get(opts, :store, true)
     validate_only? = Keyword.get(opts, :validate_only, false)
-    use_structs? = Keyword.get(opts, :use_structs, true)
 
     # Process all killmails through validation and data building first
     validated_killmails =
@@ -108,7 +106,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
       |> collect_valid_killmails()
 
     if validate_only? do
-      {:ok, maybe_convert_to_structs(validated_killmails, use_structs?)}
+      {:ok, convert_to_structs(validated_killmails)}
     else
       # Batch enrich all valid killmails if enrichment is enabled
       final_killmails = apply_enrichment(validated_killmails, enrich?)
@@ -118,8 +116,8 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
         Enum.each(final_killmails, &store_killmail_async/1)
       end
 
-      # Convert to structs if requested
-      result_killmails = maybe_convert_to_structs(final_killmails, use_structs?)
+      # Convert to structs
+      result_killmails = convert_to_structs(final_killmails)
 
       # Monitoring is handled at the entry point level
       {:ok, result_killmails}
@@ -286,14 +284,19 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
     killmails_to_process
   end
 
-  # Helper functions for struct conversion
+  # Helper function for struct conversion
 
-  defp maybe_convert_to_structs(killmails, false), do: killmails
-  defp maybe_convert_to_structs(killmails, true) do
+  defp convert_to_structs(killmails) do
     Enum.map(killmails, fn killmail ->
       case Killmail.new(killmail) do
         {:ok, struct} -> struct
-        {:error, _} -> killmail  # Fall back to map if conversion fails
+        {:error, reason} -> 
+          # Log error but don't fail the entire batch
+          log_error("Failed to convert killmail to struct", 
+            killmail_id: killmail["killmail_id"],
+            error: reason
+          )
+          raise "Failed to convert killmail #{killmail["killmail_id"]} to struct: #{inspect(reason)}"
       end
     end)
   end

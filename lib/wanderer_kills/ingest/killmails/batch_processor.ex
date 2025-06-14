@@ -65,10 +65,11 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
 
   alias WandererKills.Ingest.Killmails.{CharacterCache, CharacterMatcher}
   alias WandererKills.Subs.Subscriptions.{CharacterIndex, Filter}
+  alias WandererKills.Domain.Killmail
 
   require Logger
 
-  @type killmail :: map()
+  @type killmail :: Killmail.t()
   @type character_id :: integer()
   @type subscription_id :: String.t()
 
@@ -79,12 +80,12 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
   by extracting character IDs in a single pass.
 
   ## Parameters
-    - killmails: List of killmail maps
+    - killmails: List of killmail structs
     
   ## Returns
     - MapSet of all unique character IDs found
   """
-  @spec extract_all_characters([killmail()]) :: MapSet.t(character_id())
+  @spec extract_all_characters([Killmail.t()]) :: MapSet.t(character_id())
   def extract_all_characters(killmails) when is_list(killmails) do
     start_time = System.monotonic_time()
     killmail_count = length(killmails)
@@ -127,13 +128,13 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
   character subscriptions using the CharacterIndex.
 
   ## Parameters
-    - killmails: List of killmail maps
+    - killmails: List of killmail structs
     - subscription_character_map: Map of subscription_id => [character_ids]
     
   ## Returns
     - Map of subscription_id => [matching_killmails]
   """
-  @spec match_killmails_to_subscriptions([killmail()], map()) :: map()
+  @spec match_killmails_to_subscriptions([Killmail.t()], map()) :: map()
   def match_killmails_to_subscriptions(killmails, subscription_character_map)
       when is_list(killmails) and is_map(subscription_character_map) do
     start_time = System.monotonic_time()
@@ -200,12 +201,12 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
   Uses the CharacterIndex to quickly identify relevant subscriptions.
 
   ## Parameters
-    - killmails: List of killmail maps
+    - killmails: List of killmail structs
     
   ## Returns
     - Map of killmail_id => [subscription_ids]
   """
-  @spec find_interested_subscriptions([killmail()]) :: map()
+  @spec find_interested_subscriptions([Killmail.t()]) :: map()
   def find_interested_subscriptions(killmails) when is_list(killmails) do
     start_time = System.monotonic_time()
     killmail_count = length(killmails)
@@ -217,7 +218,7 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
         fn killmail ->
           character_ids = extract_characters_from_killmail_cached(killmail) |> MapSet.to_list()
           subscription_ids = CharacterIndex.find_subscriptions_for_entities(character_ids)
-          {killmail["killmail_id"], subscription_ids}
+          {get_killmail_id(killmail), subscription_ids}
         end,
         max_concurrency: System.schedulers_online() * 2,
         ordered: false
@@ -260,13 +261,13 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
   This is useful for batch webhook notifications.
 
   ## Parameters
-    - killmails: List of killmail maps
+    - killmails: List of killmail structs
     - subscriptions: Map of subscription_id => subscription_data
     
   ## Returns
     - Map of subscription_id => [killmails]
   """
-  @spec group_killmails_by_subscription([killmail()], map()) :: map()
+  @spec group_killmails_by_subscription([Killmail.t()], map()) :: map()
   def group_killmails_by_subscription(killmails, subscriptions)
       when is_list(killmails) and is_map(subscriptions) do
     start_time = System.monotonic_time()
@@ -342,7 +343,7 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
         # Cache not available, fall back to direct extraction
         killmails
         |> Map.new(fn killmail ->
-          killmail_id = killmail["killmail_id"]
+          killmail_id = get_killmail_id(killmail)
           characters = CharacterMatcher.extract_character_ids(killmail)
           {killmail_id, MapSet.new(characters)}
         end)
@@ -353,7 +354,7 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
     {valid_killmails, invalid_killmails} =
       killmails
       |> Enum.split_with(fn killmail ->
-        killmail_id = killmail["killmail_id"]
+        killmail_id = get_killmail_id(killmail)
         killmail_id != nil and Map.has_key?(killmail_characters, killmail_id)
       end)
 
@@ -372,8 +373,11 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
     # Filter valid killmails by character matching
     valid_killmails
     |> Enum.filter(fn killmail ->
-      killmail_chars = Map.get(killmail_characters, killmail["killmail_id"], MapSet.new())
+      killmail_chars = Map.get(killmail_characters, get_killmail_id(killmail), MapSet.new())
       not MapSet.disjoint?(killmail_chars, character_set)
     end)
   end
+
+  # Helper function to get killmail_id from struct
+  defp get_killmail_id(%Killmail{killmail_id: id}), do: id
 end

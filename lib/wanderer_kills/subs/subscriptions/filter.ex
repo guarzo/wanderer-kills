@@ -48,6 +48,7 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
 
   alias WandererKills.Ingest.Killmails.CharacterMatcher
   alias WandererKills.Core.Observability.Telemetry
+  alias WandererKills.Domain.Killmail
 
   require Logger
 
@@ -74,8 +75,8 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
       iex> Filter.matches_subscription?(killmail, subscription)
       true
   """
-  @spec matches_subscription?(map(), map()) :: boolean()
-  def matches_subscription?(killmail, subscription) do
+  @spec matches_subscription?(Killmail.t(), map()) :: boolean()
+  def matches_subscription?(%Killmail{} = killmail, subscription) do
     system_ids = subscription["system_ids"] || []
     character_ids = subscription["character_ids"] || []
 
@@ -103,7 +104,7 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
   ## Returns
     - List of killmails that match the subscription
   """
-  @spec filter_killmails(list(map()), map()) :: list(map())
+  @spec filter_killmails(list(Killmail.t()), map()) :: list(Killmail.t())
   def filter_killmails(killmails, subscription) do
     start_time = System.monotonic_time()
     killmail_count = length(killmails)
@@ -189,7 +190,7 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
 
   # Private functions
 
-  defp check_system_match(killmail, subscription) do
+  defp check_system_match(%Killmail{system_id: system_id}, subscription) do
     case subscription["system_ids"] do
       nil ->
         false
@@ -198,12 +199,11 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
         false
 
       system_ids ->
-        system_id = killmail["solar_system_id"] || killmail["system_id"]
         system_id in system_ids
     end
   end
 
-  defp check_character_match(killmail, subscription) do
+  defp check_character_match(%Killmail{} = killmail, subscription) do
     case subscription["character_ids"] do
       nil ->
         false

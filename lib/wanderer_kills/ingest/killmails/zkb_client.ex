@@ -581,17 +581,26 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   end
 
   # Helper functions for enriching killmails
-  defp get_victim_info(killmail) do
+  defp get_victim_info(%{victim: victim}) when not is_nil(victim) do
+    {:ok, victim}
+  end
+  defp get_victim_info(killmail) when is_map(killmail) do
     victim = Map.get(killmail, "victim", %{})
     {:ok, victim}
   end
 
-  defp get_attackers_info(killmail) do
+  defp get_attackers_info(%{attackers: attackers}) when not is_nil(attackers) do
+    {:ok, attackers}
+  end
+  defp get_attackers_info(killmail) when is_map(killmail) do
     attackers = Map.get(killmail, "attackers", [])
     {:ok, attackers}
   end
 
-  defp get_items_info(killmail) do
+  defp get_items_info(%{items: items}) when not is_nil(items) do
+    {:ok, items}
+  end
+  defp get_items_info(killmail) when is_map(killmail) do
     items = Map.get(killmail, "items", [])
     {:ok, items}
   end

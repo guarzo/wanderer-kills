@@ -17,6 +17,7 @@ defmodule WandererKills.Ingest.RedisQ do
   alias WandererKills.Ingest.ESI.Client, as: EsiClient
   alias WandererKills.Core.Support.Clock
   alias WandererKills.Ingest.Http.Client, as: HttpClient
+  alias WandererKills.Domain.Killmail
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 
@@ -486,19 +487,18 @@ defmodule WandererKills.Ingest.RedisQ do
   end
 
   # Broadcast killmail update to PubSub subscribers using enriched killmail
-  defp broadcast_killmail_update_enriched(enriched_killmail) do
-    system_id =
-      Map.get(enriched_killmail, "solar_system_id") || Map.get(enriched_killmail, "system_id")
-
-    killmail_id = Map.get(enriched_killmail, "killmail_id")
+  defp broadcast_killmail_update_enriched(%Killmail{} = killmail) do
+    system_id = killmail.system_id
+    killmail_id = killmail.killmail_id
 
     if system_id do
       # Track system activity for statistics
       send(self(), {:track_system, system_id})
 
-      # Broadcast detailed kill update
+      # Broadcast detailed kill update - convert to map for compatibility
+      killmail_map = Killmail.to_map(killmail)
       WandererKills.Subs.SubscriptionManager.broadcast_killmail_update_async(system_id, [
-        enriched_killmail
+        killmail_map
       ])
 
       # Also broadcast kill count update (increment by 1)

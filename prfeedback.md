@@ -33,11 +33,28 @@
 **Recommendation**: Rename helper/manager modules: use nouns for data (ShipTypes, Killmail) and add verb suffixes only for processes (ShipTypes.Updater, Subscription.Manager).  
 **Context**: Found various "helper" and "manager" suffixes used inconsistently.
 
-### 6. Domain Structs
+### 6. Domain Structs (IN PROGRESS)
 **Issue**: Extensive use of plain maps instead of typed structs  
 **Current**: Only 4 modules define structs (Error, UnifiedStatus, RedisQ.State, SubscriptionManager)  
 **Recommendation**: Introduce domain structs (e.g., %Killmail{}) and replace loose maps; add type-checked constructor helpers.  
 **Context**: Most killmail and game data passed as untyped maps throughout the system.
+
+**Progress**: 
+- ✅ Created domain structs: `Killmail`, `Victim`, `Attacker`, `ZkbMetadata`
+- ✅ Updated `UnifiedProcessor` to use structs by default
+- ✅ Modified modules to support both structs and maps:
+  - `Transformations` - All functions handle structs
+  - `Api.Helpers` - Added JSON conversion
+  - `Filter` - Converts structs to maps for compatibility
+  - `CharacterMatcher` - Direct struct field access
+  - `BatchProcessor` - Helper functions for struct/map access
+  - `RedisQ` - Handles struct broadcasting
+  - `ZkbClient` - Helper functions support structs
+
+**Remaining**: 
+- ESI Client returns maps from external APIs (keep as-is)
+- Pipeline modules work with raw API data (keep as-is)
+- Storage layer uses maps for ETS compatibility (keep as-is)
 
 ## Code Quality & Style
 

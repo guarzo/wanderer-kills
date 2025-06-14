@@ -189,7 +189,8 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   ## Returns
   - Killmail with flattened victim data
   """
-  @spec flatten_victim_data(map()) :: map()
+  @spec flatten_victim_data(map() | Killmail.t()) :: map() | Killmail.t()
+  def flatten_victim_data(%Killmail{} = killmail), do: killmail  # Already flat in struct
   def flatten_victim_data(killmail) when is_map(killmail) do
     victim = Map.get(killmail, "victim", %{})
 
@@ -218,7 +219,8 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   ## Returns
   - Killmail with flattened attackers data
   """
-  @spec flatten_attackers_data(map()) :: map()
+  @spec flatten_attackers_data(map() | Killmail.t()) :: map() | Killmail.t()
+  def flatten_attackers_data(%Killmail{} = killmail), do: killmail  # Already flat in struct
   def flatten_attackers_data(killmail) when is_map(killmail) do
     attackers = Map.get(killmail, "attackers", [])
 
@@ -451,7 +453,8 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
 
   Handles different field name variations.
   """
-  @spec get_killmail_time(map()) :: String.t() | nil
+  @spec get_killmail_time(map() | Killmail.t()) :: String.t() | DateTime.t() | nil
+  def get_killmail_time(%Killmail{kill_time: time}), do: time
   def get_killmail_time(killmail) when is_map(killmail) do
     # ESI returns "killmail_time", but after normalization it might be "kill_time"
     killmail["killmail_time"] || killmail["kill_time"]

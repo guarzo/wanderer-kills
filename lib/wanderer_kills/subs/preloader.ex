@@ -19,9 +19,10 @@ defmodule WandererKills.Subs.Preloader do
   alias WandererKills.Core.Cache
   alias WandererKills.Ingest.Killmails.ZkbClient
   alias WandererKills.Core.Systems.KillmailProcessor
+  alias WandererKills.Domain.Killmail
 
   @type system_id :: integer()
-  @type killmail :: map()
+  @type killmail :: Killmail.t()
   @type limit :: pos_integer()
   @type hours :: pos_integer()
 
@@ -40,9 +41,9 @@ defmodule WandererKills.Subs.Preloader do
     - `since_hours` - How many hours back to fetch (for fresh fetches)
 
   ## Returns
-    - List of enriched killmail maps
+    - List of enriched killmail structs
   """
-  @spec preload_kills_for_system(system_id(), limit(), hours()) :: [killmail()]
+  @spec preload_kills_for_system(system_id(), limit(), hours()) :: [Killmail.t()]
   def preload_kills_for_system(system_id, limit, since_hours \\ 24) do
     Logger.info("📦 Preloading kills for system",
       system_id: system_id,
@@ -86,9 +87,9 @@ defmodule WandererKills.Subs.Preloader do
     - `filter_recent` - Whether to filter by recency (default: true)
 
   ## Returns
-    - List of enriched killmail maps
+    - List of enriched killmail structs
   """
-  @spec get_enriched_killmails([integer()], limit(), boolean()) :: [killmail()]
+  @spec get_enriched_killmails([integer()], limit(), boolean()) :: [Killmail.t()]
   def get_enriched_killmails(killmail_ids, limit, filter_recent \\ true) do
     Logger.debug("📦 get_enriched_killmails called", %{
       killmail_ids_count: length(killmail_ids),
@@ -156,14 +157,10 @@ defmodule WandererKills.Subs.Preloader do
 
   Handles both `kill_time` and legacy `killmail_time` fields.
   """
-  @spec extract_kill_times([killmail()]) :: [String.t()]
+  @spec extract_kill_times([Killmail.t()]) :: [String.t()]
   def extract_kill_times(kills) do
-    Enum.map(kills, fn kill ->
-      case kill do
-        %{"kill_time" => time} when not is_nil(time) -> to_string(time)
-        %{"killmail_time" => time} when not is_nil(time) -> to_string(time)
-        _ -> "unknown"
-      end
+    Enum.map(kills, fn %Killmail{kill_time: time} ->
+      if time, do: to_string(time), else: "unknown"
     end)
   end
 
@@ -174,15 +171,14 @@ defmodule WandererKills.Subs.Preloader do
   - Victim character name, OR
   - At least one attacker with a character name
   """
-  @spec count_enriched_kills([killmail()]) :: non_neg_integer()
+  @spec count_enriched_kills([Killmail.t()]) :: non_neg_integer()
   def count_enriched_kills(kills) do
-    Enum.count(kills, fn kill ->
-      victim_name = get_in(kill, ["victim", "character_name"])
-      attackers = kill["attackers"] || []
-
+    Enum.count(kills, fn %Killmail{victim: victim, attackers: attackers} ->
+      victim_name = victim && victim.character_name
+      
       victim_name != nil or
         Enum.any?(attackers, fn attacker ->
-          attacker["character_name"] != nil
+          attacker.character_name != nil
         end)
     end)
   end
@@ -190,14 +186,14 @@ defmodule WandererKills.Subs.Preloader do
   @doc """
   Checks if a killmail is recent enough based on cutoff time.
   """
-  @spec killmail_recent?(killmail(), DateTime.t()) :: boolean()
-  def killmail_recent?(killmail, cutoff_time) do
-    case killmail["kill_time"] do
+  @spec killmail_recent?(Killmail.t(), DateTime.t()) :: boolean()
+  def killmail_recent?(%Killmail{killmail_id: killmail_id, kill_time: kill_time}, cutoff_time) do
+    case kill_time do
       %DateTime{} = dt ->
         result = DateTime.compare(dt, cutoff_time) == :gt
 
         Logger.debug("📦 Checking if killmail is recent",
-          killmail_id: killmail["killmail_id"],
+          killmail_id: killmail_id,
           kill_time: DateTime.to_iso8601(dt),
           cutoff_time: DateTime.to_iso8601(cutoff_time),
           comparison_result: DateTime.compare(dt, cutoff_time),
@@ -212,7 +208,7 @@ defmodule WandererKills.Subs.Preloader do
             result = DateTime.compare(dt, cutoff_time) == :gt
 
             Logger.debug("📦 Checking if killmail is recent (parsed from string)",
-              killmail_id: killmail["killmail_id"],
+              killmail_id: killmail_id,
               kill_time_string: time_string,
               kill_time_parsed: DateTime.to_iso8601(dt),
               cutoff_time: DateTime.to_iso8601(cutoff_time),
@@ -224,7 +220,7 @@ defmodule WandererKills.Subs.Preloader do
 
           {:error, _} ->
             Logger.error("Failed to parse kill_time",
-              killmail_id: killmail["killmail_id"],
+              killmail_id: killmail_id,
               kill_time: time_string
             )
 
@@ -233,15 +229,14 @@ defmodule WandererKills.Subs.Preloader do
 
       nil ->
         Logger.error("Enriched killmail missing kill_time",
-          killmail_id: killmail["killmail_id"],
-          available_keys: Map.keys(killmail) |> Enum.sort()
+          killmail_id: killmail_id
         )
 
         false
 
       other ->
         Logger.error("Enriched killmail has invalid kill_time format",
-          killmail_id: killmail["killmail_id"],
+          killmail_id: killmail_id,
           kill_time_type: inspect(other),
           kill_time_value: inspect(other, limit: 100)
         )
@@ -253,9 +248,9 @@ defmodule WandererKills.Subs.Preloader do
   @doc """
   Logs a summary of preloaded kills.
   """
-  @spec log_preload_summary(map(), system_id(), [killmail()]) :: :ok
+  @spec log_preload_summary(map(), system_id(), [Killmail.t()]) :: :ok
   def log_preload_summary(context, system_id, kills) do
-    killmail_ids = Enum.map(kills, & &1["killmail_id"])
+    killmail_ids = Enum.map(kills, & &1.killmail_id)
     kill_times = extract_kill_times(kills)
     enriched_count = count_enriched_kills(kills)
 
@@ -387,14 +382,14 @@ defmodule WandererKills.Subs.Preloader do
 
   defp log_sample_kill([]), do: :ok
 
-  defp log_sample_kill([sample | _]) do
+  defp log_sample_kill([%Killmail{} = sample | _]) do
     Logger.debug("📦 Sample kill data",
-      killmail_id: sample["killmail_id"],
-      victim_character: get_in(sample, ["victim", "character_name"]),
-      victim_corp: get_in(sample, ["victim", "corporation_name"]),
-      attacker_count: length(sample["attackers"] || []),
-      solar_system_id: sample["solar_system_id"],
-      total_value: sample["total_value"]
+      killmail_id: sample.killmail_id,
+      victim_character: sample.victim && sample.victim.character_name,
+      victim_corp: sample.victim && sample.victim.corporation_name,
+      attacker_count: length(sample.attackers),
+      solar_system_id: sample.system_id,
+      total_value: sample.zkb && sample.zkb.total_value
     )
   end
 end
