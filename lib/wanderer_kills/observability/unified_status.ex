@@ -13,6 +13,7 @@ defmodule WandererKills.Observability.UnifiedStatus do
 
   alias WandererKills.Observability.{ApiTracker, WebSocketStats, Monitoring}
   alias WandererKills.RateLimiter
+  alias WandererKills.App.EtsManager
 
   @report_interval_ms 5 * 60 * 1_000
 
@@ -66,7 +67,7 @@ defmodule WandererKills.Observability.UnifiedStatus do
   @impl GenServer
   def handle_cast(:report_now, %__MODULE__{} = st) do
     generate_and_log_report(st)
-    {:noreply, st}
+    {:noreply, %{st | last_report_at: DateTime.utc_now()}}
   end
 
   @impl GenServer
@@ -153,8 +154,8 @@ defmodule WandererKills.Observability.UnifiedStatus do
   ### Processing
 
   defp collect_processing_metrics do
-    redisq_stats = ets_get(:wanderer_kills_stats, :redisq_stats, %{})
-    parser_stats = ets_get(:wanderer_kills_stats, :parser_stats, %{})
+    redisq_stats = ets_get(EtsManager.wanderer_kills_stats_table(), :redisq_stats, %{})
+    parser_stats = ets_get(EtsManager.wanderer_kills_stats_table(), :parser_stats, %{})
 
     redisq_received = Map.get(redisq_stats, :kills_received, 0)
     redisq_errors = Map.get(redisq_stats, :errors, 0)
@@ -199,7 +200,7 @@ defmodule WandererKills.Observability.UnifiedStatus do
 
   defp collect_websocket_metrics do
     stats =
-      ets_get(:wanderer_kills_stats, :websocket_stats, nil) ||
+      ets_get(EtsManager.wanderer_kills_stats_table(), :websocket_stats, nil) ||
         safe_apply(WebSocketStats, :get_stats, [], :unavailable)
 
     case stats do

@@ -21,6 +21,10 @@ defmodule WandererKills.Observability.ApiTracker do
   # API services we track
   @services [:zkillboard, :esi]
 
+  # Pre-compile match spec for cleanup efficiency
+  # Note: we can't use the cutoff value in a module attribute, 
+  # so we'll create a function that returns the compiled spec
+
   @type service :: :zkillboard | :esi
   @type metric :: %{
           timestamp: integer(),
@@ -130,16 +134,8 @@ defmodule WandererKills.Observability.ApiTracker do
     # Remove metrics older than window size
     cutoff = System.monotonic_time(:millisecond) - @window_size_ms
 
-    # Use match spec for efficient deletion
-    match_spec = [
-      {
-        {{:"$1", :"$2", :_}, %{timestamp: :"$2"}},
-        [{:<, :"$2", cutoff}],
-        [true]
-      }
-    ]
-
-    :ets.select_delete(@table_name, match_spec)
+    # Use pre-compiled match spec for efficient deletion
+    :ets.select_delete(@table_name, cleanup_match_spec(cutoff))
 
     # Schedule next cleanup
     Process.send_after(self(), :cleanup, @cleanup_interval_ms)
@@ -176,6 +172,11 @@ defmodule WandererKills.Observability.ApiTracker do
     end
   end
 
+  # TODO: Make service detection configuration-driven
+  # This could be improved by reading service patterns from config:
+  # config :wanderer_kills, :api_services,
+  #   zkillboard: [patterns: ["zkillboard.com"]],
+  #   esi: [patterns: ["esi.evetech.net", "esi.tech.ccp.is"]]
   defp determine_service(%{url: url}) when is_binary(url) do
     cond do
       String.contains?(url, "zkillboard.com") -> :zkillboard
@@ -273,5 +274,26 @@ defmodule WandererKills.Observability.ApiTracker do
   defp tracking_duration_minutes(state) do
     now = System.monotonic_time(:millisecond)
     div(now - state.start_time, :timer.minutes(1))
+  end
+
+  @impl true
+  def terminate(_reason, _state) do
+    # Clean up ETS table on termination
+    if :ets.info(@table_name) != :undefined do
+      :ets.delete(@table_name)
+    end
+
+    :ok
+  end
+
+  # Pre-compiled match spec function for cleanup efficiency
+  defp cleanup_match_spec(cutoff) do
+    [
+      {
+        {{:"$1", :"$2", :_}, %{timestamp: :"$2"}},
+        [{:<, :"$2", cutoff}],
+        [true]
+      }
+    ]
   end
 end

@@ -49,14 +49,28 @@ class WandererKillsClient {
 
   /**
    * Connect to the WebSocket server
-   * @param {Object} options - Connection options
+   * @param {Object|number} options - Connection options object or timeout number (deprecated)
    * @param {number[]} options.systems - System IDs to subscribe to
    * @param {number[]} options.characters - Character IDs to track
    * @param {Object} options.preload - Extended preload configuration
    * @param {number} options.timeout - Connection timeout in milliseconds (default: 10000)
    * @returns {Promise} Resolves when connected, rejects on error or timeout
+   * 
+   * @deprecated Passing a number directly as timeout is deprecated. Use options object instead.
+   * @example
+   * // New way (recommended)
+   * await client.connect({ systems: [30000142], timeout: 5000 });
+   * 
+   * // Old way (deprecated but still supported)
+   * await client.connect(5000);
    */
   async connect(options = {}) {
+    // Backward compatibility: if options is a number, treat it as timeout
+    if (typeof options === 'number') {
+      console.warn('Deprecated: Passing timeout as a number is deprecated. Use an options object instead.');
+      options = { timeout: options };
+    }
+    
     const {
       systems = [],
       characters = [],

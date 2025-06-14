@@ -466,7 +466,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       # Track kills sent
       if payload[:kills] do
-        WebSocketStats.increment_kills_sent(:preload, length(payload.kills))
+        WebSocketStats.increment_kills_sent(:preload, length(payload[:kills]))
       end
     end
 

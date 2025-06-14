@@ -13,6 +13,7 @@ defmodule WandererKills.RedisQ do
   require Logger
 
   alias WandererKills.Killmails.UnifiedProcessor
+  alias WandererKills.App.EtsManager
   alias WandererKills.ESI.Client, as: EsiClient
   alias WandererKills.Support.Clock
   alias WandererKills.Http.Client, as: HttpClient
@@ -259,7 +260,9 @@ defmodule WandererKills.RedisQ do
     duration = DateTime.diff(DateTime.utc_now(), stats.last_reset, :second)
 
     # Store stats in ETS for unified status reporter
-    :ets.insert(:wanderer_kills_stats, {:redisq_stats, stats})
+    if :ets.info(EtsManager.wanderer_kills_stats_table()) != :undefined do
+      :ets.insert(EtsManager.wanderer_kills_stats_table(), {:redisq_stats, stats})
+    end
 
     # Note: Summary logging now handled by UnifiedStatus module
     # Only log if there's significant error activity

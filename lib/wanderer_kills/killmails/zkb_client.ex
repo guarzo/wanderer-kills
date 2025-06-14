@@ -504,30 +504,49 @@ defmodule WandererKills.Killmails.ZkbClient do
     max_pages = Keyword.get(opts, :max_pages)
     fetch_opts = Keyword.drop(opts, [:max_pages])
 
-    do_fetch_paginated(system_id, fetch_opts, yield_fn, 1, 0, max_pages)
+    do_fetch_paginated_iterative(system_id, fetch_opts, yield_fn, max_pages)
   end
 
-  defp do_fetch_paginated(system_id, opts, yield_fn, page, total_count, max_pages) do
+  defp do_fetch_paginated_iterative(system_id, opts, yield_fn, max_pages) do
+    # {current_page, total_count}
+    initial_state = {1, 0}
+
+    result =
+      Enum.reduce_while(Stream.iterate(1, &(&1 + 1)), initial_state, fn page,
+                                                                        {_current_page,
+                                                                         total_count} ->
+        process_page_iteration(system_id, opts, yield_fn, max_pages, page, total_count)
+      end)
+
+    case result do
+      {:error, reason} -> {:error, reason}
+      {_final_page, total_count} -> {:ok, total_count}
+    end
+  end
+
+  defp process_page_iteration(system_id, opts, yield_fn, max_pages, page, total_count) do
+    # Check if we've hit the max pages limit
     if max_pages && page > max_pages do
-      {:ok, total_count}
+      {:halt, {page, total_count}}
     else
       fetch_opts = Keyword.put(opts, :page, page)
 
       case fetch_system_killmails(system_id, fetch_opts) do
         {:ok, []} ->
-          # No more results
-          {:ok, total_count}
+          # No more results, stop iteration
+          {:halt, {page, total_count}}
 
         {:ok, killmails} ->
           # Yield this page to the callback
           yield_fn.(killmails)
 
-          # Continue to next page
+          # Continue with updated total
           new_total = total_count + length(killmails)
-          do_fetch_paginated(system_id, opts, yield_fn, page + 1, new_total, max_pages)
+          {:cont, {page, new_total}}
 
         {:error, reason} ->
-          {:error, reason}
+          # Propagate error by halting with error
+          {:halt, {:error, reason}}
       end
     end
   end

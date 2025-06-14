@@ -91,6 +91,9 @@ defmodule WandererKills.RateLimiter do
       esi_refill_rate: esi_refill_rate
     )
 
+    # Schedule periodic token refill every second
+    Process.send_after(self(), :refill_tokens, 1_000)
+
     {:ok, state}
   end
 
@@ -98,34 +101,35 @@ defmodule WandererKills.RateLimiter do
   def handle_call({:consume_token, service}, _from, state) do
     bucket = Map.get(state, service)
 
-    # Refill tokens based on time elapsed
-    now = System.monotonic_time(:millisecond)
-    elapsed_ms = now - bucket.last_refill
-    elapsed_minutes = elapsed_ms / 60_000
-
-    tokens_to_add = elapsed_minutes * bucket.refill_rate
-    new_tokens = min(bucket.tokens + tokens_to_add, bucket.capacity * 1.0)
-
-    if new_tokens >= 1.0 do
+    if bucket.tokens >= 1.0 do
       # Consume a token
-      updated_bucket = %{bucket | tokens: new_tokens - 1.0, last_refill: now}
-
+      updated_bucket = %{bucket | tokens: bucket.tokens - 1.0}
       new_state = Map.put(state, service, updated_bucket)
+
+      # Emit telemetry for successful token consumption
+      :telemetry.execute(
+        [:wanderer_kills, :rate_limiter, :token_consumed],
+        %{tokens_remaining: updated_bucket.tokens},
+        %{service: service}
+      )
 
       {:reply, :ok, new_state}
     else
       # No tokens available
-      updated_bucket = %{bucket | tokens: new_tokens, last_refill: now}
-
-      new_state = Map.put(state, service, updated_bucket)
-
       Logger.warning("Rate limit exceeded",
         service: service,
-        available_tokens: new_tokens,
+        available_tokens: bucket.tokens,
         capacity: bucket.capacity
       )
 
-      {:reply, {:error, :rate_limited}, new_state}
+      # Emit telemetry for rate limit exceeded
+      :telemetry.execute(
+        [:wanderer_kills, :rate_limiter, :rate_limited],
+        %{tokens_available: bucket.tokens},
+        %{service: service}
+      )
+
+      {:reply, {:error, :rate_limited}, state}
     end
   end
 
@@ -159,6 +163,28 @@ defmodule WandererKills.RateLimiter do
     new_state = Map.put(state, service, updated_bucket)
 
     Logger.info("Bucket reset", service: service, tokens: bucket.capacity)
+
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_info(:refill_tokens, state) do
+    now = System.monotonic_time(:millisecond)
+
+    new_state =
+      Enum.reduce(state, %{}, fn {service, bucket}, acc ->
+        elapsed_ms = now - bucket.last_refill
+        elapsed_minutes = elapsed_ms / 60_000
+
+        tokens_to_add = elapsed_minutes * bucket.refill_rate
+        new_tokens = min(bucket.tokens + tokens_to_add, bucket.capacity * 1.0)
+
+        updated_bucket = %{bucket | tokens: new_tokens, last_refill: now}
+        Map.put(acc, service, updated_bucket)
+      end)
+
+    # Schedule next refill
+    Process.send_after(self(), :refill_tokens, 1_000)
 
     {:noreply, new_state}
   end

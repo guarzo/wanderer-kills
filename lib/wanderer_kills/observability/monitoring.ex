@@ -44,6 +44,7 @@ defmodule WandererKills.Observability.Monitoring do
   use GenServer
   require Logger
   alias WandererKills.Support.Clock
+  alias WandererKills.App.EtsManager
 
   @cache_names [:wanderer_cache]
   @health_check_interval :timer.minutes(5)
@@ -376,7 +377,9 @@ defmodule WandererKills.Observability.Monitoring do
     stats = state.parser_stats
 
     # Store parser stats in ETS for unified status reporter
-    :ets.insert(:wanderer_kills_stats, {:parser_stats, stats})
+    if :ets.info(EtsManager.wanderer_kills_stats_table()) != :undefined do
+      :ets.insert(EtsManager.wanderer_kills_stats_table(), {:parser_stats, stats})
+    end
 
     # Note: Summary logging now handled by UnifiedStatus module
     # Only log if there's significant error activity

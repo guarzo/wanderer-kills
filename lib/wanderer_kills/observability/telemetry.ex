@@ -118,9 +118,12 @@ defmodule WandererKills.Observability.Telemetry do
 
   # Helper to determine service from URL
   defp determine_service(url) when is_binary(url) do
+    # Convert to lowercase for case-insensitive comparison
+    url_lower = String.downcase(url)
+
     cond do
-      String.contains?(url, "zkillboard.com") -> :zkillboard
-      String.contains?(url, "esi.evetech.net") -> :esi
+      String.contains?(url_lower, "zkillboard.com") -> :zkillboard
+      String.contains?(url_lower, "esi.evetech.net") -> :esi
       true -> :unknown
     end
   end

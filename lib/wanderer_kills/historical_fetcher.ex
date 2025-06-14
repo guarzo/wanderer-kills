@@ -153,8 +153,14 @@ defmodule WandererKills.HistoricalFetcher do
   def handle_cast({:cancel_preload, subscription_id}, state) do
     # Cancel active task if any
     case Map.get(state.active_tasks, subscription_id) do
-      nil -> :ok
-      task_ref -> Process.demonitor(task_ref, [:flush])
+      nil ->
+        :ok
+
+      {pid, task_ref} ->
+        # Terminate the task process
+        Process.exit(pid, :cancelled)
+        # Demonitor to prevent receiving DOWN message
+        Process.demonitor(task_ref, [:flush])
     end
 
     # Remove from queue and requests
@@ -187,6 +193,25 @@ defmodule WandererKills.HistoricalFetcher do
             |> Map.update(:completed_systems, 0, &(&1 + 1))
             |> Map.update(:total_kills_fetched, 0, &(&1 + kills_fetched))
             |> Map.put(:current_system, system_id)
+
+          updated_request = %{request | progress: updated_progress}
+          Map.put(state.requests, subscription_id, updated_request)
+      end
+
+    {:noreply, %{state | requests: new_requests}}
+  end
+
+  @impl true
+  def handle_cast({:update_delivered_count, subscription_id, kills_delivered}, state) do
+    new_requests =
+      case Map.get(state.requests, subscription_id) do
+        nil ->
+          state.requests
+
+        request ->
+          updated_progress =
+            request.progress
+            |> Map.update(:total_kills_delivered, 0, &(&1 + kills_delivered))
 
           updated_request = %{request | progress: updated_progress}
           Map.put(state.requests, subscription_id, updated_request)
@@ -240,9 +265,48 @@ defmodule WandererKills.HistoricalFetcher do
   end
 
   @impl true
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
-    # Task crashed - will be handled by SupervisedTask telemetry
-    {:noreply, state}
+  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
+    # Find and remove the crashed task from active_tasks
+    {subscription_id, new_active_tasks} =
+      Enum.reduce(state.active_tasks, {nil, %{}}, fn
+        {sub_id, {task_pid, task_ref}}, {_found_id, acc}
+        when task_pid == pid and task_ref == ref ->
+          {sub_id, acc}
+
+        {sub_id, task_info}, {found_id, acc} ->
+          {found_id, Map.put(acc, sub_id, task_info)}
+      end)
+
+    case subscription_id do
+      nil ->
+        # No matching task found, ignore
+        {:noreply, state}
+
+      _ ->
+        Logger.warning("Preload task crashed",
+          subscription_id: subscription_id,
+          reason: reason
+        )
+
+        # Update request status to failed if it exists
+        new_requests =
+          case Map.get(state.requests, subscription_id) do
+            nil ->
+              state.requests
+
+            request ->
+              Map.put(state.requests, subscription_id, %{
+                request
+                | status: :failed,
+                  progress: Map.put(request.progress, :error, reason)
+              })
+          end
+
+        new_state = %{state | active_tasks: new_active_tasks, requests: new_requests}
+
+        # Try to process next item in queue
+        {:noreply, process_next_in_queue(new_state)}
+    end
   end
 
   # Private functions
@@ -282,19 +346,40 @@ defmodule WandererKills.HistoricalFetcher do
 
   defp start_and_track_preload_task(state, subscription_id, request, rest_queue) do
     # Start processing this request
-    task = start_preload_task(request)
+    case start_preload_task(request) do
+      {:ok, pid} ->
+        # Create monitor reference for the task
+        task_ref = Process.monitor(pid)
 
-    # Update state
-    new_active_tasks = Map.put(state.active_tasks, subscription_id, task.ref)
+        # Update state
+        new_active_tasks = Map.put(state.active_tasks, subscription_id, {pid, task_ref})
 
-    new_requests =
-      Map.put(state.requests, subscription_id, %{
-        request
-        | status: :processing,
-          progress: Map.put(request.progress, :started_at, DateTime.utc_now())
-      })
+        new_requests =
+          Map.put(state.requests, subscription_id, %{
+            request
+            | status: :processing,
+              progress: Map.put(request.progress, :started_at, DateTime.utc_now())
+          })
 
-    %{state | queue: rest_queue, active_tasks: new_active_tasks, requests: new_requests}
+        %{state | queue: rest_queue, active_tasks: new_active_tasks, requests: new_requests}
+
+      {:error, reason} ->
+        # Log error and continue processing queue
+        Logger.error("Failed to start preload task",
+          subscription_id: subscription_id,
+          error: reason
+        )
+
+        # Mark request as failed
+        new_requests =
+          Map.put(state.requests, subscription_id, %{
+            request
+            | status: :failed,
+              progress: Map.put(request.progress, :error, reason)
+          })
+
+        %{state | queue: rest_queue, requests: new_requests}
+    end
   end
 
   defp start_preload_task(request) do
@@ -457,6 +542,9 @@ defmodule WandererKills.HistoricalFetcher do
       kills: kills,
       batch_size: length(kills)
     })
+
+    # Update delivered count
+    update_delivered_count_async(subscription_id, length(kills))
   end
 
   defp send_preload_status(subscription_id, status) do
@@ -504,5 +592,9 @@ defmodule WandererKills.HistoricalFetcher do
 
   defp update_progress_async(subscription_id, system_id, kills_fetched) do
     GenServer.cast(__MODULE__, {:update_progress, subscription_id, system_id, kills_fetched})
+  end
+
+  defp update_delivered_count_async(subscription_id, kills_delivered) do
+    GenServer.cast(__MODULE__, {:update_delivered_count, subscription_id, kills_delivered})
   end
 end

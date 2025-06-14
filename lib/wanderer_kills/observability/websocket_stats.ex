@@ -40,6 +40,7 @@ defmodule WandererKills.Observability.WebSocketStats do
   require Logger
   alias WandererKills.Support.Clock
   alias WandererKills.Observability.LogFormatter
+  alias WandererKills.App.EtsManager
 
   @stats_summary_interval :timer.minutes(5)
 
@@ -277,7 +278,10 @@ defmodule WandererKills.Observability.WebSocketStats do
   def handle_info(:stats_summary, state) do
     # Store stats in ETS for unified status reporter
     stats = build_stats_response(state)
-    :ets.insert(:wanderer_kills_stats, {:websocket_stats, stats})
+
+    if :ets.info(EtsManager.wanderer_kills_stats_table()) != :undefined do
+      :ets.insert(EtsManager.wanderer_kills_stats_table(), {:websocket_stats, stats})
+    end
 
     # Emit telemetry for the summary
     :telemetry.execute(
