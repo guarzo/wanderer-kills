@@ -1,8 +1,8 @@
-defmodule WandererKills.Subscriptions.BroadcasterTest do
+defmodule WandererKills.Subs.Subscriptions.BroadcasterTest do
   use ExUnit.Case, async: false
 
-  alias WandererKills.Subscriptions.Broadcaster
-  alias WandererKills.Support.PubSubTopics
+  alias WandererKills.Subs.Subscriptions.Broadcaster
+  alias WandererKills.Core.Support.PubSubTopics
 
   @pubsub_name WandererKills.PubSub
 

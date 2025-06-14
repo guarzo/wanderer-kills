@@ -2,13 +2,13 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
   use WandererKillsWeb.ConnCase, async: false
   use WandererKills.Test.SharedContexts
 
-  alias WandererKills.SubscriptionManager
+  alias WandererKills.Subs.SubscriptionManager
 
   setup_all do
     # Clear caches and indexes once for all tests (expensive operations)
     WandererKills.TestHelpers.clear_all_caches()
-    WandererKills.Subscriptions.CharacterIndex.clear()
-    WandererKills.Subscriptions.SystemIndex.clear()
+    WandererKills.Subs.Subscriptions.CharacterIndex.clear()
+    WandererKills.Subs.Subscriptions.SystemIndex.clear()
 
     :ok
   end

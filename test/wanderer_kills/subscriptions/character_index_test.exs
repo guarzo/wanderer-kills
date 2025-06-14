@@ -1,7 +1,7 @@
-defmodule WandererKills.Subscriptions.CharacterIndexTest do
+defmodule WandererKills.Subs.Subscriptions.CharacterIndexTest do
   use ExUnit.Case, async: false
 
-  alias WandererKills.Subscriptions.CharacterIndex
+  alias WandererKills.Subs.Subscriptions.CharacterIndex
 
   setup do
     # Ensure clean state

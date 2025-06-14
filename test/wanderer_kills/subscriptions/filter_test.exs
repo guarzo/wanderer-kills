@@ -1,7 +1,7 @@
-defmodule WandererKills.Subscriptions.FilterTest do
+defmodule WandererKills.Subs.Subscriptions.FilterTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Subscriptions.Filter
+  alias WandererKills.Subs.Subscriptions.Filter
 
   describe "matches_subscription?/2" do
     test "matches when system_id matches" do

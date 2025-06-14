@@ -1,9 +1,9 @@
-defmodule WandererKills.Killmails.BatchProcessorTest do
+defmodule WandererKills.Ingest.Killmails.BatchProcessorTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Killmails.BatchProcessor
-  alias WandererKills.Killmails.CharacterCache
-  alias WandererKills.Subscriptions.CharacterIndex
+  alias WandererKills.Ingest.Killmails.BatchProcessor
+  alias WandererKills.Ingest.Killmails.CharacterCache
+  alias WandererKills.Subs.Subscriptions.CharacterIndex
 
   setup do
     # Ensure clean state

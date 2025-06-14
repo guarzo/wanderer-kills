@@ -26,7 +26,7 @@ defmodule WandererKills.Test.HttpHelpers do
   @spec setup_http_mocks() :: :ok
   def setup_http_mocks do
     # Set up default mock for non-existent killmails
-    Mox.stub(WandererKills.Http.Client.Mock, :get_with_rate_limit, fn _url, _opts ->
+    Mox.stub(WandererKills.Ingest.Http.Client.Mock, :get_with_rate_limit, fn _url, _opts ->
       {:error, :not_found}
     end)
 

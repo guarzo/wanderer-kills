@@ -1,7 +1,7 @@
-defmodule WandererKills.ShipTypes.ParserTest do
+defmodule WandererKills.Core.ShipTypes.ParserTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.ShipTypes.Parser
+  alias WandererKills.Core.ShipTypes.Parser
 
   describe "read_file/3" do
     test "handles missing file" do
@@ -18,7 +18,7 @@ defmodule WandererKills.ShipTypes.ParserTest do
       File.write!(file_path, "")
 
       result = Parser.read_file(file_path, parser)
-      assert {:error, %WandererKills.Support.Error{type: :empty_file}} = result
+      assert {:error, %WandererKills.Core.Support.Error{type: :empty_file}} = result
 
       File.rm!(file_path)
     end
@@ -30,7 +30,7 @@ defmodule WandererKills.ShipTypes.ParserTest do
       File.write!(file_path, "invalid\"csv,\"content\nunclosed\"quote")
 
       result = Parser.read_file(file_path, parser)
-      assert {:error, %WandererKills.Support.Error{type: :parse_failure}} = result
+      assert {:error, %WandererKills.Core.Support.Error{type: :parse_failure}} = result
 
       File.rm!(file_path)
     end
@@ -68,16 +68,16 @@ defmodule WandererKills.ShipTypes.ParserTest do
     end
 
     test "handles invalid integers" do
-      assert {:error, %WandererKills.Support.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Core.Support.Error{type: :invalid_integer}} =
                Parser.parse_integer("abc")
 
-      assert {:error, %WandererKills.Support.Error{type: :invalid_integer}} =
+      assert {:error, %WandererKills.Core.Support.Error{type: :invalid_integer}} =
                Parser.parse_integer("12.5")
 
-      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Core.Support.Error{type: :missing_value}} =
                Parser.parse_integer("")
 
-      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Core.Support.Error{type: :missing_value}} =
                Parser.parse_integer(nil)
     end
   end
@@ -90,13 +90,13 @@ defmodule WandererKills.ShipTypes.ParserTest do
     end
 
     test "handles invalid floats" do
-      assert {:error, %WandererKills.Support.Error{type: :invalid_float}} =
+      assert {:error, %WandererKills.Core.Support.Error{type: :invalid_float}} =
                Parser.parse_float("abc")
 
-      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Core.Support.Error{type: :missing_value}} =
                Parser.parse_float("")
 
-      assert {:error, %WandererKills.Support.Error{type: :missing_value}} =
+      assert {:error, %WandererKills.Core.Support.Error{type: :missing_value}} =
                Parser.parse_float(nil)
     end
   end

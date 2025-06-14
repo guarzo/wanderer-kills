@@ -1,12 +1,12 @@
-defmodule WandererKills.Killmails.ZkbClientTest do
+defmodule WandererKills.Ingest.Killmails.ZkbClientTest do
   use ExUnit.Case, async: false
   import Mox
 
   @moduletag :external
 
-  alias WandererKills.Killmails.ZkbClient, as: ZKB
+  alias WandererKills.Ingest.Killmails.ZkbClient, as: ZKB
   alias WandererKills.TestHelpers
-  alias WandererKills.Http.Client.Mock, as: HttpClientMock
+  alias WandererKills.Ingest.Http.Client.Mock, as: HttpClientMock
 
   # Get base URL from config
   @base_url Application.compile_env(:wanderer_kills, :zkb)[:base_url]

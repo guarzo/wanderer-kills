@@ -20,7 +20,7 @@ config :wanderer_kills,
 
   # HTTP client configuration
   http: [
-    client: WandererKills.Http.Client,
+    client: WandererKills.Ingest.Http.Client,
     request_timeout_ms: 10_000,
     default_timeout_ms: 10_000,
     retry: [

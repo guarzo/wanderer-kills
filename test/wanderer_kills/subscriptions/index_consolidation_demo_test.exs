@@ -1,4 +1,4 @@
-defmodule WandererKills.Subscriptions.IndexConsolidationDemoTest do
+defmodule WandererKills.Subs.Subscriptions.IndexConsolidationDemoTest do
   @moduledoc """
   Demonstration test showing the successful consolidation of index patterns.
 
@@ -11,8 +11,8 @@ defmodule WandererKills.Subscriptions.IndexConsolidationDemoTest do
   use ExUnit.Case, async: false
   import IndexTestHelpers
 
-  alias WandererKills.Subscriptions.{CharacterIndex, SystemIndex}
-  alias WandererKills.Observability.{CharacterSubscriptionHealth, SystemSubscriptionHealth}
+  alias WandererKills.Subs.Subscriptions.{CharacterIndex, SystemIndex}
+  alias WandererKills.Core.Observability.{CharacterSubscriptionHealth, SystemSubscriptionHealth}
 
   describe "character index with shared patterns" do
     setup do

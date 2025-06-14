@@ -1,7 +1,7 @@
 defmodule WandererKills.SubscriptionManagerTest do
   use ExUnit.Case, async: false
 
-  alias WandererKills.SubscriptionManager
+  alias WandererKills.Subs.SubscriptionManager
 
   import Mox
 
@@ -15,7 +15,7 @@ defmodule WandererKills.SubscriptionManagerTest do
     Mox.set_mox_from_context(self())
 
     # Mock the HTTP client for webhook tests
-    WandererKills.Http.Client.Mock
+    WandererKills.Ingest.Http.Client.Mock
     |> stub(:post, fn _url, _body, _opts ->
       {:ok, %{status: 200, body: %{"success" => true}}}
     end)

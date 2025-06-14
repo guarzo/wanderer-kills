@@ -1,7 +1,7 @@
-defmodule WandererKills.Subscriptions.SystemIndexTest do
+defmodule WandererKills.Subs.Subscriptions.SystemIndexTest do
   use ExUnit.Case, async: false
 
-  alias WandererKills.Subscriptions.SystemIndex
+  alias WandererKills.Subs.Subscriptions.SystemIndex
 
   setup do
     # Ensure clean state

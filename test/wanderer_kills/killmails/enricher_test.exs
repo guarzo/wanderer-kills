@@ -1,4 +1,4 @@
-defmodule WandererKills.Killmails.EnricherTest do
+defmodule WandererKills.Ingest.Killmails.EnricherTest do
   use ExUnit.Case, async: true
 
   # Sample killmail with enriched data (as it would be after ESI enrichment)

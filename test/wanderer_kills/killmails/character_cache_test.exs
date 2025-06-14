@@ -1,8 +1,8 @@
-defmodule WandererKills.Killmails.CharacterCacheTest do
+defmodule WandererKills.Ingest.Killmails.CharacterCacheTest do
   use ExUnit.Case, async: false
   use WandererKills.Test.SharedContexts
 
-  alias WandererKills.Killmails.CharacterCache
+  alias WandererKills.Ingest.Killmails.CharacterCache
 
   setup do
     # Use the test helpers to properly clear caches

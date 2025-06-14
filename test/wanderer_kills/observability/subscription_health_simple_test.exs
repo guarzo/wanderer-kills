@@ -1,14 +1,14 @@
-defmodule WandererKills.Observability.SubscriptionHealthSimpleTest do
+defmodule WandererKills.Core.Observability.SubscriptionHealthSimpleTest do
   use ExUnit.Case, async: false
 
   # Create test implementation using the unified health check
   defmodule TestCharacterHealth do
-    use WandererKills.Observability.SubscriptionHealth,
-      index_module: WandererKills.Subscriptions.CharacterIndex,
+    use WandererKills.Core.Observability.SubscriptionHealth,
+      index_module: WandererKills.Subs.Subscriptions.CharacterIndex,
       entity_type: :character
   end
 
-  alias WandererKills.Subscriptions.CharacterIndex
+  alias WandererKills.Subs.Subscriptions.CharacterIndex
 
   test "health check module generation works" do
     # Handle already started GenServer

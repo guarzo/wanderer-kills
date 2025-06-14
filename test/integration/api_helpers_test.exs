@@ -4,7 +4,7 @@ defmodule WandererKills.Api.HelpersTest do
   import Plug.Conn
 
   alias WandererKillsWeb.Api.Helpers
-  alias WandererKills.Support.Error
+  alias WandererKills.Core.Support.Error
 
   describe "parse_integer_param/2" do
     test "returns {:ok, integer} for valid integer string" do

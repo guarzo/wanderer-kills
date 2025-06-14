@@ -35,7 +35,7 @@ defmodule WandererKills.MixProject do
         :logger,
         :telemetry_poller
       ],
-      mod: {WandererKills.App.Application, []}
+      mod: {WandererKills.Application, []}
     ]
   end
 
@@ -74,6 +74,7 @@ defmodule WandererKills.MixProject do
       # Development and test tools
       {:credo, "~> 1.7.6", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4.3", only: [:dev], runtime: false},
+      {:boundary, "~> 0.10", runtime: false},
       {:mox, "~> 1.2.0", only: :test},
 
       # Code coverage

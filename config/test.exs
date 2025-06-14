@@ -3,7 +3,7 @@ import Config
 # Configure the application for testing with nested structure
 config :wanderer_kills,
   # Use ETS adapter for tests instead of Cachex
-  cache_adapter: WandererKills.Cache.ETSAdapter,
+  cache_adapter: WandererKills.Core.Cache.ETSAdapter,
   # Service configuration
   services: [
     start_preloader: false,
@@ -21,7 +21,7 @@ config :wanderer_kills,
 
   # HTTP retry configuration
   http: [
-    client: WandererKills.Http.Client.Mock,
+    client: WandererKills.Ingest.Http.Client.Mock,
     request_timeout_ms: 1_000,
     default_timeout_ms: 1_000,
     retry: [
@@ -91,8 +91,8 @@ config :wanderer_kills,
   ],
 
   # Mock clients for testing (legacy flat config for now)
-  zkb_client: WandererKills.Zkb.Client.Mock,
-  esi_client: WandererKills.ESI.Client.Mock,
+  zkb_client: WandererKills.Ingest.Killmails.ZkbClient.Mock,
+  esi_client: WandererKills.Ingest.ESI.Client.Mock,
 
   # Test-specific configurations (legacy)
   start_ets_supervisor: false,

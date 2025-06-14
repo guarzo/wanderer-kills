@@ -9,10 +9,10 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
   use ExUnit.Case, async: false
   use WandererKills.Test.SharedContexts
 
-  alias WandererKills.SubscriptionManager
-  alias WandererKills.Subscriptions.CharacterIndex
-  alias WandererKills.Killmails.{CharacterCache, BatchProcessor}
-  alias WandererKills.Storage.KillmailStore
+  alias WandererKills.Subs.SubscriptionManager
+  alias WandererKills.Subs.Subscriptions.CharacterIndex
+  alias WandererKills.Ingest.Killmails.{CharacterCache, BatchProcessor}
+  alias WandererKills.Core.Storage.KillmailStore
 
   # Helper function to poll for eventual consistency with exponential backoff
   defp assert_eventually(check_fn, timeout \\ 1000) do
@@ -40,7 +40,7 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
     # Clear all state without restarting the application
     WandererKills.TestHelpers.clear_all_caches()
     CharacterIndex.clear()
-    WandererKills.Subscriptions.SystemIndex.clear()
+    WandererKills.Subs.Subscriptions.SystemIndex.clear()
 
     # Skip cache clearing - let it be handled by TestHelpers.clear_all_caches()
     # Individual cache clears can cause race conditions in concurrent tests
@@ -48,7 +48,7 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
     KillmailStore.clear_all()
 
     # Clear all subscriptions to ensure clean state
-    WandererKills.SubscriptionManager.clear_all_subscriptions()
+    WandererKills.Subs.SubscriptionManager.clear_all_subscriptions()
 
     on_exit(fn ->
       CharacterIndex.clear()

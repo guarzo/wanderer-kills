@@ -16,7 +16,7 @@ defmodule WandererKills.Test.CacheHelpers do
   """
   def cleanup_processes do
     # Clear KillStore ETS tables
-    WandererKills.Storage.KillmailStore.clear()
+    WandererKills.Core.Storage.KillmailStore.clear()
 
     # Clear the actual wanderer_cache that's running
     safe_clear_cache(:wanderer_cache)
@@ -235,7 +235,7 @@ defmodule WandererKills.Test.CacheHelpers do
   """
   @spec stop_killmail_store() :: :ok
   def stop_killmail_store do
-    WandererKills.Storage.KillmailStore.clear()
+    WandererKills.Core.Storage.KillmailStore.clear()
     :ok
   end
 end

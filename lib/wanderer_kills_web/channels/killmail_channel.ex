@@ -67,13 +67,12 @@ defmodule WandererKillsWeb.KillmailChannel do
   use WandererKillsWeb, :channel
 
   require Logger
-  alias WandererKills.Preloader
+  alias WandererKills.Subs.Preloader
 
-  alias WandererKills.SubscriptionManager
-  alias WandererKills.Config
-  alias WandererKills.Observability.WebSocketStats
-  alias WandererKills.Support.Error
-  alias WandererKills.Subscriptions.Filter
+  alias WandererKills.Subs.SubscriptionManager
+  alias WandererKills.Core.Observability.WebSocketStats
+  alias WandererKills.Core.Support.Error
+  alias WandererKills.Subs.Subscriptions.Filter
 
   @impl true
   def join("killmails:lobby", %{"systems" => systems} = params, socket) when is_list(systems) do
@@ -326,7 +325,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     # Check if extended preload is requested
     if preload_config["enabled"] != false && map_size(preload_config) > 0 do
       # Request extended historical preload
-      case WandererKills.HistoricalFetcher.request_preload(
+      case WandererKills.Ingest.HistoricalFetcher.request_preload(
              socket.assigns.subscription_id,
              preload_config
            ) do
@@ -387,7 +386,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     filtered_killmails = Filter.filter_killmails(killmails, subscription)
 
     if length(filtered_killmails) > 0 do
-      Logger.debug("🔥 Forwarding real-time kills to WebSocket client",
+      Logger.debug("Forwarding real-time kills to WebSocket client",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         original_count: length(killmails),
@@ -604,7 +603,7 @@ defmodule WandererKillsWeb.KillmailChannel do
         if length(valid_characters) > 0 do
           Phoenix.PubSub.subscribe(
             WandererKills.PubSub,
-            WandererKills.Support.PubSubTopics.all_systems_topic()
+            WandererKills.Core.Support.PubSubTopics.all_systems_topic()
           )
         end
       end
@@ -637,7 +636,11 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp validate_systems(systems) do
-    max_systems = Config.validation(:max_subscribed_systems)
+    max_systems = Application.get_env(:wanderer_kills, :validation, [])
+                 |> Keyword.get(:max_subscribed_systems, 50)
+
+    max_system_id = Application.get_env(:wanderer_kills, :validation, [])
+                    |> Keyword.get(:max_system_id, 32_000_000)
 
     cond do
       length(systems) > max_systems ->
@@ -649,7 +652,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       Enum.all?(systems, &is_integer/1) ->
         valid_systems =
-          Enum.filter(systems, &(&1 > 0 and &1 <= Config.validation(:max_system_id)))
+          Enum.filter(systems, &(&1 > 0 and &1 <= max_system_id))
 
         if length(valid_systems) == length(systems) do
           {:ok, Enum.uniq(valid_systems)}
@@ -742,12 +745,12 @@ defmodule WandererKillsWeb.KillmailChannel do
     Enum.each(systems, fn system_id ->
       Phoenix.PubSub.subscribe(
         WandererKills.PubSub,
-        WandererKills.Support.PubSubTopics.system_topic(system_id)
+        WandererKills.Core.Support.PubSubTopics.system_topic(system_id)
       )
 
       Phoenix.PubSub.subscribe(
         WandererKills.PubSub,
-        WandererKills.Support.PubSubTopics.system_detailed_topic(system_id)
+        WandererKills.Core.Support.PubSubTopics.system_detailed_topic(system_id)
       )
     end)
   end
@@ -756,12 +759,12 @@ defmodule WandererKillsWeb.KillmailChannel do
     Enum.each(systems, fn system_id ->
       Phoenix.PubSub.unsubscribe(
         WandererKills.PubSub,
-        WandererKills.Support.PubSubTopics.system_topic(system_id)
+        WandererKills.Core.Support.PubSubTopics.system_topic(system_id)
       )
 
       Phoenix.PubSub.unsubscribe(
         WandererKills.PubSub,
-        WandererKills.Support.PubSubTopics.system_detailed_topic(system_id)
+        WandererKills.Core.Support.PubSubTopics.system_detailed_topic(system_id)
       )
     end)
   end
@@ -785,7 +788,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     )
 
     # Use SupervisedTask to track WebSocket preload operations
-    WandererKills.Support.SupervisedTask.start_child(
+    WandererKills.Core.Support.SupervisedTask.start_child(
       fn ->
         total_kills_sent =
           systems

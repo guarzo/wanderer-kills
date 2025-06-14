@@ -9,20 +9,20 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
   use ExUnit.Case, async: false
   use WandererKills.Test.SharedContexts
 
-  alias WandererKills.SubscriptionManager
-  alias WandererKills.Storage.KillmailStore
+  alias WandererKills.Subs.SubscriptionManager
+  alias WandererKills.Core.Storage.KillmailStore
 
   setup do
     # Clear all state without restarting the application
     WandererKills.TestHelpers.clear_all_caches()
-    WandererKills.Subscriptions.CharacterIndex.clear()
-    WandererKills.Subscriptions.SystemIndex.clear()
+    WandererKills.Subs.Subscriptions.CharacterIndex.clear()
+    WandererKills.Subs.Subscriptions.SystemIndex.clear()
     # Skip cache clearing - let it be handled by TestHelpers.clear_all_caches()
-    # WandererKills.Killmails.CharacterCache.clear_cache()
+    # WandererKills.Ingest.Killmails.CharacterCache.clear_cache()
     KillmailStore.clear_all()
 
     # Clear all subscriptions to ensure clean state
-    WandererKills.SubscriptionManager.clear_all_subscriptions()
+    WandererKills.Subs.SubscriptionManager.clear_all_subscriptions()
 
     :ok
   end
@@ -98,7 +98,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
       assert Enum.sort(sub["character_ids"]) == Enum.sort([90_379_338, 95_465_499])
 
       # Verify the Filter module correctly identifies matching killmails
-      alias WandererKills.Subscriptions.Filter
+      alias WandererKills.Subs.Subscriptions.Filter
 
       assert Filter.matches_subscription?(killmail_with_victim_match, sub)
       assert Filter.matches_subscription?(killmail_with_attacker_match, sub)
@@ -181,7 +181,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
 
       # Verify filtering
       [sub] = SubscriptionManager.list_subscriptions()
-      alias WandererKills.Subscriptions.Filter
+      alias WandererKills.Subs.Subscriptions.Filter
 
       assert Filter.matches_subscription?(killmail_system_match, sub)
       assert Filter.matches_subscription?(killmail_character_match, sub)
@@ -230,7 +230,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
         )
 
       [sub] = SubscriptionManager.list_subscriptions()
-      alias WandererKills.Subscriptions.Filter
+      alias WandererKills.Subs.Subscriptions.Filter
 
       # Time the filtering operation
       {time, result} =

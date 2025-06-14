@@ -1,12 +1,8 @@
-defmodule WandererKills.Subscriptions.WebhookNotifierTest do
-  use ExUnit.Case, async: false
+defmodule WandererKills.Subs.Subscriptions.WebhookNotifierTest do
+  use WandererKills.TestCase, async: false
 
-  alias WandererKills.Subscriptions.WebhookNotifier
-  alias WandererKills.Support.Error
-
-  import Mox
-
-  setup :verify_on_exit!
+  alias WandererKills.Subs.Subscriptions.WebhookNotifier
+  alias WandererKills.Core.Support.Error
 
   setup do
     subscription = %{
@@ -28,7 +24,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
 
   describe "notify_webhook/4" do
     test "successfully sends webhook notification", %{subscription: subscription, kills: kills} do
-      WandererKills.Http.Client.Mock
+      WandererKills.Ingest.Http.Client.Mock
       |> expect(:post, fn url, body, opts ->
         assert url == "https://example.com/webhook"
         assert body[:type] == "killmail_update"
@@ -55,7 +51,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
     test "handles webhook failure gracefully", %{subscription: subscription} do
       kills = [%{"killmail_id" => 123_456}]
 
-      WandererKills.Http.Client.Mock
+      WandererKills.Ingest.Http.Client.Mock
       |> expect(:post, fn _url, _body, _opts ->
         {:error, Error.http_error(:timeout, "Request timed out", true)}
       end)
@@ -105,7 +101,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
 
   describe "notify_webhook_count/4" do
     test "successfully sends kill count notification", %{subscription: subscription} do
-      WandererKills.Http.Client.Mock
+      WandererKills.Ingest.Http.Client.Mock
       |> expect(:post, fn url, body, opts ->
         assert url == "https://example.com/webhook"
         assert body[:type] == "killmail_count_update"
@@ -130,7 +126,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
     end
 
     test "handles kill count notification failure", %{subscription: subscription} do
-      WandererKills.Http.Client.Mock
+      WandererKills.Ingest.Http.Client.Mock
       |> expect(:post, fn _url, _body, _opts ->
         {:error, Error.http_error(:server_error, "Internal server error", true)}
       end)
@@ -157,7 +153,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
         }
       ]
 
-      WandererKills.Http.Client.Mock
+      WandererKills.Ingest.Http.Client.Mock
       |> expect(:post, fn _url, body, _opts ->
         # Verify payload structure
         assert Map.has_key?(body, :type)
@@ -179,7 +175,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
     end
 
     test "includes timestamp in ISO8601 format", %{subscription: subscription} do
-      WandererKills.Http.Client.Mock
+      WandererKills.Ingest.Http.Client.Mock
       |> expect(:post, fn _url, body, _opts ->
         timestamp = body[:timestamp]
         assert is_binary(timestamp)
@@ -201,7 +197,7 @@ defmodule WandererKills.Subscriptions.WebhookNotifierTest do
 
   describe "HTTP client options" do
     test "uses appropriate timeout for webhook requests", %{subscription: subscription} do
-      WandererKills.Http.Client.Mock
+      WandererKills.Ingest.Http.Client.Mock
       |> expect(:post, fn _url, _body, opts ->
         # Should have a reasonable timeout
         assert opts[:timeout] >= 5000

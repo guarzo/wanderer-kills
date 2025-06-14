@@ -1,9 +1,9 @@
-defmodule WandererKills.Killmails.StoreEventStreamingTest do
+defmodule WandererKills.Ingest.Killmails.StoreEventStreamingTest do
   use WandererKills.TestCase
   use WandererKills.Test.SharedContexts
   use WandererKills.Test.Tags
 
-  alias WandererKills.Storage.KillmailStore
+  alias WandererKills.Core.Storage.KillmailStore
 
   unit_test_tags()
   @moduletag area: :killmail_storage

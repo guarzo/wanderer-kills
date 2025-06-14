@@ -1,0 +1,157 @@
+defmodule WandererKills.Ingest.Killmails.CharacterMatcher do
+  @moduledoc """
+  Utilities for matching characters in killmails against subscription filters.
+
+  This module provides functions to check if a killmail contains specific
+  character IDs either as victims or attackers, supporting the character-based
+  subscription filtering feature.
+
+  ## Performance Characteristics
+
+  - Uses MapSet for O(1) character ID lookups
+  - Short-circuits on victim match before checking attackers
+  - Handles large attacker lists efficiently
+  - Includes telemetry for performance monitoring
+
+  ## Telemetry Events
+
+  Emits `[:wanderer_kills, :character, :match]` events with:
+  - `duration` - Matching duration in native time units
+  - `match_found` - 1 if match found, 0 otherwise
+  - `character_count` - Number of characters being matched against
+
+  ## Usage in Subscriptions
+
+  This module is primarily used by the `WandererKills.Subs.Subscriptions.Filter`
+  module to determine if killmails should be delivered to character-based
+  subscriptions.
+  """
+
+  alias WandererKills.Core.Observability.Telemetry
+
+  @doc """
+  Checks if a killmail contains any of the specified character IDs.
+
+  Returns true if the killmail's victim or any attacker matches one of the
+  provided character IDs.
+
+  ## Parameters
+    - `killmail` - The killmail data structure (map)
+    - `character_ids` - List of character IDs to match against
+
+  ## Returns
+    - `true` if any character ID matches
+    - `false` if no matches found
+
+  ## Examples
+      iex> killmail = %{"victim" => %{"character_id" => 123}, "attackers" => []}
+      iex> CharacterMatcher.killmail_has_characters?(killmail, [123, 456])
+      true
+      
+      iex> killmail = %{"victim" => %{"character_id" => 789}, "attackers" => [%{"character_id" => 123}]}
+      iex> CharacterMatcher.killmail_has_characters?(killmail, [123])
+      true
+  """
+  @spec killmail_has_characters?(map(), list(integer())) :: boolean()
+  def killmail_has_characters?(_killmail, []), do: false
+  def killmail_has_characters?(_killmail, nil), do: false
+
+  def killmail_has_characters?(killmail, character_ids) when is_list(character_ids) do
+    start_time = System.monotonic_time()
+    character_set = MapSet.new(character_ids)
+
+    victim_match = check_victim_match(killmail, character_set)
+
+    result =
+      if victim_match do
+        true
+      else
+        check_attackers_match(killmail, character_set)
+      end
+
+    duration = System.monotonic_time() - start_time
+    Telemetry.character_match(duration, result, length(character_ids))
+
+    result
+  end
+
+  @doc """
+  Extracts all unique character IDs from a killmail.
+
+  Returns a list of all character IDs found in the killmail, including
+  the victim and all attackers. Filters out nil values and returns
+  only unique IDs.
+
+  ## Parameters
+    - `killmail` - The killmail data structure (map)
+
+  ## Returns
+    - List of unique character IDs (integers)
+
+  ## Examples
+      iex> killmail = %{
+      ...>   "victim" => %{"character_id" => 123},
+      ...>   "attackers" => [
+      ...>     %{"character_id" => 456},
+      ...>     %{"character_id" => 789},
+      ...>     %{"character_id" => 123}
+      ...>   ]
+      ...> }
+      iex> CharacterMatcher.extract_character_ids(killmail)
+      [123, 456, 789]
+  """
+  @spec extract_character_ids(map()) :: list(integer())
+  def extract_character_ids(killmail) do
+    victim_id = get_victim_character_id(killmail)
+    attacker_ids = get_attacker_character_ids(killmail)
+
+    [victim_id | attacker_ids]
+    # Remove nil values
+    |> Enum.filter(& &1)
+    |> Enum.uniq()
+    # Sort for consistent output
+    |> Enum.sort()
+  end
+
+  # Private helper functions
+
+  defp check_victim_match(killmail, character_set) do
+    victim_id = get_victim_character_id(killmail)
+    victim_id && MapSet.member?(character_set, victim_id)
+  end
+
+  defp check_attackers_match(killmail, character_set) do
+    killmail
+    |> get_attackers()
+    |> Enum.any?(fn attacker ->
+      character_id = get_character_id(attacker)
+      character_id && MapSet.member?(character_set, character_id)
+    end)
+  end
+
+  defp get_victim_character_id(killmail) do
+    # Handle both string and atom keys
+    victim = killmail["victim"] || killmail[:victim] || %{}
+    get_character_id(victim)
+  end
+
+  defp get_attacker_character_ids(killmail) do
+    killmail
+    |> get_attackers()
+    |> Enum.map(&get_character_id/1)
+    # Remove nil values
+    |> Enum.filter(& &1)
+  end
+
+  defp get_attackers(killmail) do
+    # Handle both string and atom keys
+    killmail["attackers"] || killmail[:attackers] || []
+  end
+
+  defp get_character_id(entity) when is_map(entity) do
+    # Handle both string and atom keys for character_id
+    entity["character_id"] || entity[:character_id]
+  end
+
+  defp get_character_id(_), do: nil
+end

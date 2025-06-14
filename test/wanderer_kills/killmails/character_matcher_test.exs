@@ -1,7 +1,7 @@
-defmodule WandererKills.Killmails.CharacterMatcherTest do
+defmodule WandererKills.Ingest.Killmails.CharacterMatcherTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Killmails.CharacterMatcher
+  alias WandererKills.Ingest.Killmails.CharacterMatcher
 
   # Helper function to build killmail maps with victim and attackers
   defp build_killmail(victim_id, attacker_ids) do

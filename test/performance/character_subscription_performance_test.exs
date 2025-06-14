@@ -9,9 +9,9 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
   use ExUnit.Case, async: false
   use WandererKills.Test.SharedContexts
 
-  alias WandererKills.SubscriptionManager
-  alias WandererKills.Subscriptions.CharacterIndex
-  alias WandererKills.Killmails.{CharacterCache, BatchProcessor, CharacterMatcher}
+  alias WandererKills.Subs.SubscriptionManager
+  alias WandererKills.Subs.Subscriptions.CharacterIndex
+  alias WandererKills.Ingest.Killmails.{CharacterCache, BatchProcessor, CharacterMatcher}
 
   describe "large character list performance" do
     @describetag :performance
