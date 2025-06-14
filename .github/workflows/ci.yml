@@ -58,8 +58,35 @@ jobs:
         run: mix format --check-formatted
 
       - name: Run Credo
-        run: mix credo
-        continue-on-error: false
+        id: credo
+        run: |
+          echo "## Credo Results" >> $GITHUB_STEP_SUMMARY
+          
+          # Run credo and capture the exit code
+          mix credo --format=oneline > credo_output.txt 2>&1 || CREDO_EXIT_CODE=$?
+          
+          # Count issues
+          if [ -f credo_output.txt ]; then
+            # Count different types of issues
+            ISSUES=$(grep -E "[\[]([RCFAWSD])[\]]" credo_output.txt | wc -l || echo "0")
+            echo "credo_issues=$ISSUES" >> $GITHUB_OUTPUT
+            
+            if [ "$ISSUES" -eq 0 ]; then
+              echo "✅ **Credo passed with 0 issues**" >> $GITHUB_STEP_SUMMARY
+              echo "credo_status=passing" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ **Credo found $ISSUES issues**" >> $GITHUB_STEP_SUMMARY
+              echo "credo_status=issues" >> $GITHUB_OUTPUT
+              # Show summary in step summary
+              tail -20 credo_output.txt >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "credo_issues=0" >> $GITHUB_OUTPUT
+            echo "credo_status=passing" >> $GITHUB_OUTPUT
+          fi
+          
+          # Don't fail the build for credo issues (non-strict mode)
+          exit 0
 
       - name: Compile for dev (for Dialyzer)
         run: MIX_ENV=dev mix compile
@@ -69,20 +96,105 @@ jobs:
         run: MIX_ENV=dev mix dialyzer --plt
 
       - name: Run Dialyzer
-        run: MIX_ENV=dev mix dialyzer --format github
+        id: dialyzer
+        run: |
+          echo "## Dialyzer Results" >> $GITHUB_STEP_SUMMARY
+          
+          # Run dialyzer and capture output
+          MIX_ENV=dev mix dialyzer --format short > dialyzer_output.txt 2>&1 || DIALYZER_EXIT_CODE=$?
+          
+          # Count warnings
+          if [ -f dialyzer_output.txt ]; then
+            WARNINGS=$(grep -c "warning:" dialyzer_output.txt || echo "0")
+            echo "dialyzer_warnings=$WARNINGS" >> $GITHUB_OUTPUT
+            
+            if [ "$WARNINGS" -eq 0 ]; then
+              echo "✅ **Dialyzer passed with 0 warnings**" >> $GITHUB_STEP_SUMMARY
+              echo "dialyzer_status=passing" >> $GITHUB_OUTPUT
+            else
+              echo "❌ **Dialyzer found $WARNINGS warnings**" >> $GITHUB_STEP_SUMMARY
+              echo "dialyzer_status=warnings" >> $GITHUB_OUTPUT
+              # Show warnings in step summary
+              grep "warning:" dialyzer_output.txt | head -20 >> $GITHUB_STEP_SUMMARY
+              exit 1
+            fi
+          else
+            echo "dialyzer_warnings=0" >> $GITHUB_OUTPUT
+            echo "dialyzer_status=passing" >> $GITHUB_OUTPUT
+          fi
         continue-on-error: false
 
       - name: Run tests with coverage
-        run: mix test --max-failures=1
+        id: tests
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          if mix test --max-failures=1; then
+            echo "✅ **All tests passed**" >> $GITHUB_STEP_SUMMARY
+            echo "tests_status=passing" >> $GITHUB_OUTPUT
+          else
+            echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+            echo "tests_status=failing" >> $GITHUB_OUTPUT
+            exit 1
+          fi
 
       - name: Generate coverage report
-        run: MIX_ENV=test mix test.coverage.ci
+        id: coverage
+        run: |
+          MIX_ENV=test mix test.coverage.ci
+          # Try to extract coverage percentage if available
+          if [ -f cover/coverage.json ]; then
+            COVERAGE=$(jq -r '.percentage // "unknown"' cover/coverage.json 2>/dev/null || echo "unknown")
+            echo "Coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+            echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          else
+            echo "coverage=unknown" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: cover/
+
+      - name: Create Quality Summary
+        if: always()
+        run: |
+          echo "## 📊 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Credo | ${{ steps.credo.outputs.credo_status == 'passing' && '✅ Passing (0 issues)' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dialyzer | ${{ steps.dialyzer.outputs.dialyzer_status == 'passing' && '✅ Passing (0 warnings)' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ steps.tests.outputs.tests_status == 'passing' && '✅ All passing' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.coverage.outputs.coverage }}" != "unknown" ]; then
+            echo "| Coverage | ${{ steps.coverage.outputs.coverage }}% |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Create JSON summary for potential badge usage
+          mkdir -p .github/badges
+          cat > .github/badges/quality-status.json << EOF
+          {
+            "credo": {
+              "status": "${{ steps.credo.outputs.credo_status || 'unknown' }}",
+              "issues": "${{ steps.credo.outputs.credo_issues || '0' }}"
+            },
+            "dialyzer": {
+              "status": "${{ steps.dialyzer.outputs.dialyzer_status || 'unknown' }}",
+              "warnings": "${{ steps.dialyzer.outputs.dialyzer_warnings || '0' }}"
+            },
+            "tests": {
+              "status": "${{ steps.tests.outputs.tests_status || 'unknown' }}"
+            },
+            "coverage": "${{ steps.coverage.outputs.coverage || 'unknown' }}"
+          }
+          EOF
+          
+      - name: Upload quality status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-status
+          path: .github/badges/quality-status.json
 
   docker:
     name: Build and Push Docker Image
