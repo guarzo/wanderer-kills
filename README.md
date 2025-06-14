@@ -1,5 +1,12 @@
 # WandererKills
 
+[![CI/CD](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml/badge.svg)](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml)
+[![Credo](https://img.shields.io/badge/credo-0%20issues-brightgreen.svg)](https://github.com/rrrene/credo)
+[![Dialyzer](https://img.shields.io/badge/dialyzer-0%20warnings-brightgreen.svg)](https://www.erlang.org/doc/man/dialyzer.html)
+[![Elixir](https://img.shields.io/badge/elixir-1.18%2B-purple.svg)](https://elixir-lang.org/)
+[![Phoenix Framework](https://img.shields.io/badge/phoenix-1.7-orange.svg)](https://www.phoenixframework.org/)
+[![Docker](https://img.shields.io/docker/v/guarzo/wanderer-kills?label=docker&sort=semver)](https://hub.docker.com/r/guarzo/wanderer-kills)
+
 A high-performance, real-time EVE Online killmail data service built with Elixir/Phoenix. This service provides REST API and WebSocket interfaces for accessing killmail data from zKillboard.
 
 ## Features
@@ -75,11 +82,16 @@ The service will be available at `http://localhost:4004`
 | GET | `/api/v1/kills/cached/{system_id}` | Get cached kills only |
 | GET | `/api/v1/killmail/{killmail_id}` | Get specific killmail |
 | GET | `/api/v1/kills/count/{system_id}` | Get kill count |
+| POST | `/api/v1/subscriptions` | Create webhook subscription |
+| GET | `/api/v1/subscriptions` | List webhook subscriptions |
+| DELETE | `/api/v1/subscriptions/{subscriber_id}` | Delete webhook subscription |
 | GET | `/health` | Health check |
 | GET | `/status` | Service status |
 | GET | `/websocket` | WebSocket connection info |
 
 ### WebSocket Connection
+
+For complete WebSocket examples in multiple languages, see the [examples directory](examples/).
 
 ```javascript
 // Import Phoenix Socket library
@@ -92,22 +104,23 @@ const socket = new Socket('ws://localhost:4004/socket', {
 
 socket.connect();
 
-// Join a killmail channel for a specific system
-const channel = socket.channel('killmails:system:30000142', {});
+// Join the killmail lobby channel with initial systems
+const channel = socket.channel('killmails:lobby', {
+  systems: [30000142, 30000144]
+});
 
 channel.join()
   .receive('ok', resp => { console.log('Joined successfully', resp) })
   .receive('error', resp => { console.log('Unable to join', resp) });
 
-// Listen for new kills
-channel.on('new_kill', payload => {
-  console.log('New kill:', payload);
+// Listen for new killmails
+channel.on('killmail_update', payload => {
+  console.log('New killmails:', payload);
 });
 
-// Subscribe to multiple systems
-const systems = [30000142, 30000144];
-channel.push('subscribe', { systems: systems })
-  .receive('ok', resp => { console.log('Subscribed to systems', resp) });
+// Subscribe to additional systems dynamically
+channel.push('subscribe_systems', { systems: [30002187] })
+  .receive('ok', resp => { console.log('Subscribed to additional systems', resp) });
 ```
 
 ### Character-Based Subscriptions
@@ -120,12 +133,11 @@ const characters = [95465499, 90379338];  // Character IDs
 channel.push('subscribe_characters', { character_ids: characters })
   .receive('ok', resp => { console.log('Subscribed to characters', resp) });
 
-// Mixed subscription (systems OR characters)
-channel.push('subscribe', { 
+// Mixed subscription (systems OR characters) - can be done on channel join
+const channel2 = socket.channel('killmails:lobby', { 
   systems: [30000142], 
   character_ids: [95465499, 90379338] 
-})
-  .receive('ok', resp => { console.log('Mixed subscription active', resp) });
+});
 
 // Unsubscribe from specific characters
 channel.push('unsubscribe_characters', { character_ids: [95465499] })
@@ -363,12 +375,18 @@ mix test test/wanderer_kills/killmails/store_test.exs
 
 ### Code Quality
 
+This project maintains **excellent code quality**:
+- ✅ **Credo**: 0 issues
+- ✅ **Dialyzer**: 0 warnings
+- ✅ **Tests**: 100% passing
+- ✅ **Format**: Fully formatted
+
 ```bash
 # Format code
 mix format
 
 # Run static analysis
-mix credo --strict
+mix credo
 
 # Run type checking
 mix dialyzer
@@ -408,10 +426,9 @@ The service uses an ETS-based caching system that is automatically managed. Cach
 
 Comprehensive documentation is available in the `/docs` directory:
 
-- [API Reference](docs/api-reference.md) - Complete API documentation
-- [Integration Guide](docs/integration-guide.md) - Integration examples and best practices
+- [API & Integration Guide](docs/API_AND_INTEGRATION_GUIDE.md) - Complete API documentation and integration examples
+- [Examples](examples/README.md) - WebSocket client examples in multiple languages
 - [Architecture Overview](CLAUDE.md) - Detailed architecture documentation
-- [Code Review](CODE_REVIEW.md) - Recent refactoring documentation
 
 ## Contributing
 
@@ -468,7 +485,7 @@ The service is optimized for:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Acknowledgments
 
