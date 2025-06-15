@@ -8,7 +8,7 @@ defmodule WandererKills.Application do
     1. EtsOwner for WebSocket stats tracking
     2. A Task.Supervisor for background jobs
     3. Phoenix.PubSub for event broadcasting
-    4. SubscriptionManager for subscription handling
+    4. SubscriptionSupervisor and related components for subscription handling
     5. Cachex instance for unified caching
     6. Observability/monitoring processes
     7. Phoenix Endpoint (WandererKillsWeb.Endpoint)
@@ -71,7 +71,6 @@ defmodule WandererKills.Application do
       WandererKills.Subs.Subscriptions.SystemIndex,
       WandererKills.Subs.SubscriptionRegistry,
       WandererKills.Subs.SubscriptionSupervisor,
-      {WandererKills.Subs.SubscriptionManager, [pubsub_name: WandererKills.PubSub]},
       WandererKills.Ingest.RateLimiter,
       WandererKills.Ingest.HistoricalFetcher
     ]

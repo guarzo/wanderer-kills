@@ -7,7 +7,7 @@ defmodule WandererKillsWeb.KillsController do
   """
 
   use Phoenix.Controller, namespace: WandererKillsWeb
-  import WandererKillsWeb.Api.Helpers
+  import WandererKillsWeb.Api.Validators
   require Logger
   alias WandererKills.Core.Client
   alias WandererKills.Core.Support.Error

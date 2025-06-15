@@ -1,6 +1,6 @@
-defmodule WandererKillsWeb.Api.Helpers do
+defmodule WandererKillsWeb.Api.Validators do
   @moduledoc """
-  Helper functions for API controllers.
+  Validation functions for API controllers.
   """
 
   import Plug.Conn

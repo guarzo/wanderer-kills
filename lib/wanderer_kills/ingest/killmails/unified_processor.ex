@@ -7,8 +7,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   the killmail type and processes accordingly.
   """
 
-  import WandererKills.Core.Support.Logger
-
+  require Logger
   alias WandererKills.Core.Support.Error
   alias WandererKills.Ingest.Killmails.Transformations
   alias WandererKills.Ingest.Killmails.Pipeline.{Validator, DataBuilder, ESIFetcher}
@@ -133,14 +132,14 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   defp process_partial(partial, cutoff_time, opts) do
     case {partial["killmail_id"], partial["zkb"]} do
       {id, zkb} when is_integer(id) and is_map(zkb) ->
-        log_debug("Processing partial killmail", killmail_id: id)
+        Logger.debug("Processing partial killmail", killmail_id: id)
 
         case fetch_and_merge_partial(id, zkb, partial) do
           {:ok, merged} ->
             process_full(merged, cutoff_time, opts)
 
           {:error, reason} ->
-            log_error("Failed to fetch full killmail data",
+            Logger.error("Failed to fetch full killmail data",
               killmail_id: id,
               error: reason
             )
@@ -160,7 +159,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   defp process_full(killmail, cutoff_time, opts) do
     killmail_id = Transformations.get_killmail_id(killmail)
 
-    log_debug("Processing full killmail",
+    Logger.debug("Processing full killmail",
       killmail_id: killmail_id,
       store: Keyword.get(opts, :store, true),
       enrich: Keyword.get(opts, :enrich, true),
@@ -181,7 +180,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
     case extract_system_id(killmail_map) do
       {:ok, system_id} ->
         Task.Supervisor.start_child(WandererKills.TaskSupervisor, fn ->
-          log_debug("Storing killmail asynchronously",
+          Logger.debug("Storing killmail asynchronously",
             killmail_id: killmail_map["killmail_id"],
             system_id: system_id
           )
@@ -190,7 +189,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
         end)
 
       {:error, reason} ->
-        log_error("Cannot store killmail without system_id",
+        Logger.error("Cannot store killmail without system_id",
           killmail_id: killmail_map["killmail_id"],
           error: reason
         )
@@ -205,7 +204,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
 
   defp extract_system_id(killmail) do
     killmail_id = get_killmail_id(killmail)
-    log_warning("Killmail missing system_id", killmail_id: killmail_id)
+    Logger.warning("Killmail missing system_id", killmail_id: killmail_id)
     {:error, :missing_system_id}
   end
 
@@ -236,7 +235,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   defp fetch_and_merge_partial(id, zkb, partial) do
     case ESIFetcher.fetch_full_killmail(id, zkb) do
       {:ok, full_data} ->
-        log_debug("ESI data fetched",
+        Logger.debug("ESI data fetched",
           killmail_id: id,
           esi_keys: Map.keys(full_data) |> Enum.sort(),
           has_killmail_time: Map.has_key?(full_data, "killmail_time"),
@@ -246,7 +245,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
         # Normalize field names before merging
         normalized_data = Transformations.normalize_field_names(full_data)
 
-        log_debug("After normalization",
+        Logger.debug("After normalization",
           killmail_id: id,
           normalized_keys: Map.keys(normalized_data) |> Enum.sort(),
           has_kill_time: Map.has_key?(normalized_data, "kill_time")
@@ -269,7 +268,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
             enriched
 
           {:error, reason} ->
-            log_error("Failed to enrich killmails batch",
+            Logger.error("Failed to enrich killmails batch",
               error: reason,
               batch_size: length(validated_killmails)
             )
@@ -297,7 +296,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
 
         {:error, reason} ->
           # Log error but don't fail the entire batch
-          log_error("Failed to convert killmail to struct",
+          Logger.error("Failed to convert killmail to struct",
             killmail_id: killmail["killmail_id"],
             error: reason
           )

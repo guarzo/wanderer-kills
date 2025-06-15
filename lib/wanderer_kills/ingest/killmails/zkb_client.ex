@@ -42,7 +42,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   @behaviour WandererKills.Ingest.Killmails.ZkbClientBehaviour
 
   require Logger
-  import WandererKills.Core.Support.Logger
+  
   alias WandererKills.Core.Support.Error
   alias WandererKills.Ingest.Http.Client
   alias WandererKills.Core.Observability.Telemetry
@@ -65,7 +65,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   """
   @spec fetch_killmail(killmail_id()) :: {:ok, killmail()} | {:error, term()}
   def fetch_killmail(killmail_id) when is_integer(killmail_id) and killmail_id > 0 do
-    log_debug("Fetching killmail from ZKB",
+    Logger.debug("Fetching killmail from ZKB",
       killmail_id: killmail_id,
       operation: :fetch_killmail,
       step: :start
@@ -625,7 +625,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   Validates and logs the format of killmails received from zKillboard API.
   """
   def validate_zkb_format(killmails, system_id) when is_list(killmails) do
-    log_debug("[ZKB] Received killmails",
+    Logger.debug("[ZKB] Received killmails",
       system_id: system_id,
       killmail_count: length(killmails),
       data_source: "zkillboard.com/api"

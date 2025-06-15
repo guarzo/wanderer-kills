@@ -11,7 +11,7 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   use GenServer
   require Logger
 
-  alias WandererKills.Core.Observability.{ApiTracker, WebSocketStats, Monitoring}
+  alias WandererKills.Core.Observability.{ApiTracker, WebSocketStats}
   alias WandererKills.Ingest.RateLimiter
   alias WandererKills.Core.EtsOwner
 
@@ -242,15 +242,9 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   ### Cache
 
   defp collect_cache_metrics do
-    case safe_apply(Monitoring, :get_cache_stats, [:wanderer_cache], :unavailable) do
+    case WandererKills.Core.Cache.stats() do
       {:ok, stats} ->
-        # Get size separately as it's not included in stats
-        size =
-          case Cachex.size(:wanderer_cache) do
-            {:ok, s} -> s
-            _ -> 0
-          end
-
+        size = Map.get(stats, :size, 0)
         hits = Map.get(stats, :hits, 0)
         misses = Map.get(stats, :misses, 0)
         evictions = Map.get(stats, :evictions, 0)

@@ -62,10 +62,9 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
 
   # Compile-time configuration
   @ttl_ms Application.compile_env(:wanderer_kills, [:character_cache, :ttl_ms], :timer.minutes(5))
+  require Logger
   alias WandererKills.Core.Observability.Telemetry
   alias WandererKills.Core.Cache
-
-  import WandererKills.Core.Support.Logger
 
   @cache_name :wanderer_cache
   @namespace "character_extraction"
@@ -77,19 +76,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
 
   # Helper function to get cache stats that works with different adapters
   defp get_cache_stats_internal do
-    adapter = cache_adapter()
-
-    case adapter do
-      Cachex ->
-        Cachex.stats(@cache_name)
-
-      _ ->
-        # For ETS adapter and others, we don't have detailed stats
-        case adapter.size(@cache_name) do
-          {:ok, size} -> {:ok, %{hits: 0, misses: 0, size: size}}
-          error -> error
-        end
-    end
+    WandererKills.Core.Cache.stats()
   end
 
   @doc """
@@ -266,24 +253,15 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
     end
   end
 
-  # Clear only character extraction namespace from Cachex
+  # Clear only character extraction namespace using unified cache API
   defp clear_cachex_namespace do
-    case Cachex.keys(@cache_name) do
-      {:ok, all_keys} ->
-        namespace_keys = Enum.filter(all_keys, &String.starts_with?(&1, @namespace <> ":"))
-
-        # Delete only the character extraction keys using Cache
-        Enum.each(namespace_keys, fn key ->
-          # Extract the ID from the namespaced key 
-          id = String.replace_prefix(key, @namespace <> ":", "")
-          Cache.delete(:character_extraction, id)
-        end)
-
-        log_debug("Cleared #{length(namespace_keys)} character cache entries")
+    case Cache.clear_namespace(:character_extraction) do
+      {:ok, count} ->
+        Logger.debug("Cleared #{count} character cache entries")
         :ok
 
       {:error, reason} ->
-        log_warning("Failed to get cache keys for clearing: #{inspect(reason)}")
+        Logger.warning("Failed to clear character cache namespace: #{inspect(reason)}")
         :ok
     end
   end
@@ -292,11 +270,11 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
   defp clear_generic_cache(adapter) do
     case adapter.clear(@cache_name) do
       {:ok, _count} ->
-        log_debug("Cleared entire cache (using non-Cachex adapter)")
+        Logger.debug("Cleared entire cache (using non-Cachex adapter)")
         :ok
 
       {:error, _} ->
-        log_warning("Failed to clear character cache")
+        Logger.warning("Failed to clear character cache")
         :ok
     end
   end
@@ -386,7 +364,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
     if total > 50 do
       hit_rate = if total > 0, do: Float.round(hit_count / total * 100, 1), else: 0.0
 
-      log_info("📈 Character cache batch performance",
+      Logger.info("📈 Character cache batch performance",
         total_killmails: total,
         cache_hits: hit_count,
         cache_misses: miss_count,

@@ -44,7 +44,6 @@ defmodule WandererKills.Ingest.Http.Client do
   """
 
   require Logger
-  import WandererKills.Core.Support.Logger
   alias WandererKills.Core.Support.{Error, Retry}
   alias WandererKills.Core.Observability.Telemetry
 
@@ -418,7 +417,7 @@ defmodule WandererKills.Ingest.Http.Client do
     operation = Keyword.get(opts, :operation, :http_request)
     request_opts = build_request_opts(opts)
 
-    log_debug("Starting HTTP request",
+    Logger.debug("Starting HTTP request", 
       url: url,
       service: service,
       operation: operation
@@ -426,7 +425,7 @@ defmodule WandererKills.Ingest.Http.Client do
 
     case get_with_rate_limit(url, request_opts) do
       {:ok, response} ->
-        log_debug("HTTP request successful",
+        Logger.debug("HTTP request successful",
           url: url,
           service: service,
           operation: operation,
@@ -436,7 +435,7 @@ defmodule WandererKills.Ingest.Http.Client do
         {:ok, response}
 
       {:error, reason} ->
-        log_error("HTTP request failed",
+        Logger.error("HTTP request failed",
           url: url,
           service: service,
           operation: operation,

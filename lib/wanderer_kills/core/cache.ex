@@ -245,6 +245,119 @@ defmodule WandererKills.Core.Cache do
   end
 
   # ============================================================================
+  # Monitoring & Statistics Operations
+  # ============================================================================
+
+  @doc """
+  Get cache size (total number of entries).
+  """
+  @spec size() :: {:ok, non_neg_integer()} | error()
+  def size do
+    case cache_adapter().size(@cache_name) do
+      {:ok, size} -> {:ok, size}
+      {:error, reason} ->
+        Logger.error("Cache size check failed", error: reason)
+        {:error, Error.cache_error(:size_failed, "Failed to get cache size", %{reason: reason})}
+    end
+  end
+
+  @doc """
+  Get cache statistics including hit/miss rates.
+  """
+  @spec stats() :: {:ok, map()} | error()
+  def stats do
+    adapter = cache_adapter()
+    
+    if to_string(adapter) == "Elixir.Cachex" do
+      case adapter.stats(@cache_name) do
+        {:ok, stats} -> {:ok, stats}
+        {:error, reason} ->
+          Logger.error("Cache stats retrieval failed", error: reason)
+          {:error, Error.cache_error(:stats_failed, "Failed to get cache stats", %{reason: reason})}
+      end
+    else
+      # For ETS adapter and others, provide basic stats
+      case size() do
+        {:ok, size_val} -> {:ok, %{hits: 0, misses: 0, size: size_val, hit_rate: 0.0, miss_rate: 0.0}}
+        error -> error
+      end
+    end
+  end
+
+  @doc """
+  Get all keys for a specific namespace.
+  Useful for namespace clearing and debugging.
+  """
+  @spec keys(namespace()) :: {:ok, [String.t()]} | error()
+  def keys(namespace) when is_atom(namespace) do
+    config = @namespace_config[namespace]
+    prefix = config.prefix
+    adapter = cache_adapter()
+    
+    if to_string(adapter) == "Elixir.Cachex" do
+      case adapter.keys(@cache_name) do
+        {:ok, all_keys} -> 
+          namespace_keys = Enum.filter(all_keys, &String.starts_with?(&1, "#{prefix}:"))
+          {:ok, namespace_keys}
+        {:error, reason} ->
+          Logger.error("Cache keys retrieval failed", namespace: namespace, error: reason)
+          {:error, Error.cache_error(:keys_failed, "Failed to get cache keys", %{reason: reason})}
+      end
+    else
+      # For ETS adapter and others, return empty list (not implemented)
+      {:ok, []}
+    end
+  end
+
+  @doc """
+  Clear all entries for a specific namespace.
+  """
+  @spec clear_namespace(namespace()) :: {:ok, integer()} | error()
+  def clear_namespace(namespace) when is_atom(namespace) do
+    case keys(namespace) do
+      {:ok, keys} ->
+        results = Enum.map(keys, &cache_adapter().del(@cache_name, &1))
+        success_count = Enum.count(results, fn 
+          {:ok, _} -> true
+          _ -> false 
+        end)
+        {:ok, success_count}
+
+      error -> error
+    end
+  end
+
+  @doc """
+  Get detailed cache health information including size and statistics.
+  """
+  @spec health() :: {:ok, map()} | error()
+  def health do
+    with {:ok, size} <- size(),
+         {:ok, stats} <- stats() do
+      health_info = %{
+        name: @cache_name,
+        healthy: true,
+        status: "ok",
+        size: size,
+        hit_rate: Map.get(stats, :hit_rate, 0.0),
+        miss_rate: Map.get(stats, :miss_rate, 0.0),
+        hits: Map.get(stats, :hits, 0),
+        misses: Map.get(stats, :misses, 0)
+      }
+      {:ok, health_info}
+    else
+      {:error, _} -> 
+        health_info = %{
+          name: @cache_name,
+          healthy: false,
+          status: "error",
+          size: 0
+        }
+        {:ok, health_info}
+    end
+  end
+
+  # ============================================================================
   # Private Functions
   # ============================================================================
 

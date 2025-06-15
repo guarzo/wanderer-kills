@@ -8,16 +8,40 @@
 **Recommendation**: Extract one `WandererKills.Ingest.Http.Param.encode/1` helper and ensure no duplicate 'filter_params' implementations emerge.  
 **Context**: Currently well-consolidated, but should be extracted to prevent future duplication.
 
-### 2. Cache Logic Consolidation
+### 2. Cache Logic Consolidation ✅
 **Issue**: Multiple cache access patterns (direct Cachex calls, Cache.Helper, ETS adapters)  
+**Status**: COMPLETED - All modules now use unified cache API
 **Recommendation**: Consolidate cache logic: keep a single public `WandererKills.Core.Cache` API that wraps Cachex; update tests to call this API instead of bespoke ETS helpers.  
 **Context**: Found mixed usage of `Cachex` directly, `WandererKills.Core.Cache.Helper`, and ETS-based adapters throughout codebase.
 
-### 3. Logging Strategy
+**Completed Changes**:
+- Extended `WandererKills.Core.Cache` API with monitoring methods: `size()`, `stats()`, `keys()`, `health()`, `clear_namespace()`
+- Updated `CharacterCache` to use unified cache API for stats and namespace clearing
+- Updated `Monitoring` module to use unified cache API for metrics collection  
+- Updated `UnifiedStatus` to use unified cache API for status reporting
+- Updated `CacheHealth` to use unified cache API for health checks
+- All direct Cachex usage eliminated from business logic modules
+
+### 3. Logging Strategy ✅
 **Issue**: Mixed logging approaches throughout codebase  
+**Status**: COMPLETED - Standardized on Elixir's built-in Logger
 **Current**: Both `WandererKills.Core.Support.Logger` and direct `Logger` usage  
 **Recommendation**: Pick one logging strategy: either delete `Support.Logger` and require Logger everywhere, or hide Logger completely behind `Support.Logger`; remove the mixed approach.  
 **Context**: Some modules use structured logging via `Support.Logger`, others use standard `Logger` directly.
+
+**Completed Changes**:
+- **Analyzed usage**: Found 7 modules using Support.Logger vs 62 using Logger directly
+- **Chose standard approach**: Decided to remove Support.Logger and standardize on Elixir's built-in Logger
+- **Converted all modules**: Updated all 7 modules to use Logger directly:
+  - `ingest/http/client.ex`
+  - `ingest/esi/client.ex`
+  - `ingest/killmails/zkb_client.ex`
+  - `ingest/killmails/unified_processor.ex`
+  - `ingest/killmails/character_cache.ex`
+  - `subs/subscriptions/webhook_notifier.ex`
+- **Deleted Support.Logger**: Removed the 437-line custom logging module
+- **Added missing requires**: Ensured all converted modules have `require Logger`
+- **Maintained functionality**: All logging calls preserved with same message and metadata format
 
 ### 4. HTTP Client Provider
 **Issue**: Unnecessary abstraction layer  
@@ -27,11 +51,22 @@
 
 ## Naming & Structure Conventions
 
-### 5. Module Naming Conventions
+### 5. Module Naming Conventions ✅
 **Issue**: Inconsistent naming patterns for data vs process modules  
+**Status**: COMPLETED - Eliminated Manager/Helper naming patterns
 **Current**: `Core.Systems.KillmailManager`, `Core.Cache.Helper`, `Core.EtsManager`  
 **Recommendation**: Rename helper/manager modules: use nouns for data (ShipTypes, Killmail) and add verb suffixes only for processes (ShipTypes.Updater, Subscription.Manager).  
 **Context**: Found various "helper" and "manager" suffixes used inconsistently.
+
+**Completed Changes**:
+- **Eliminated facade pattern**: Removed `SubscriptionManager` facade, updated all code to use `SubscriptionManagerV2` directly
+- **Renamed core module**: `SubscriptionManagerV2` → `SubscriptionManager` (now the single implementation)
+- **Updated web helpers**: 
+  - `WandererKillsWeb.Api.Helpers` → `WandererKillsWeb.Api.Validators` (better describes validation functionality)
+  - `WandererKillsWeb.Shared.ParseHelpers` → `WandererKillsWeb.Shared.Parsers` (more concise and clear)
+- **Updated all references**: All imports, aliases, and function calls updated throughout codebase
+- **Updated supervision tree**: Removed GenServer facade from application supervision
+- **Maintained API compatibility**: All existing function interfaces preserved
 
 ### 6. Domain Structs ✅
 **Issue**: Extensive use of plain maps instead of typed structs  
@@ -311,7 +346,6 @@
 ## Priority Recommendations
 
 1. **Quick Wins** (< 2 hours each):
-   - CI/CD improvements (#15, #16, #17)
    - None remaining
 
 2. **Medium Effort** (2-8 hours each):
@@ -337,9 +371,9 @@ The following items from the original list have been **successfully completed**:
 - ✅ **Move benchmarks (#12, #26)** - Relocated benchmark files from test/benchmarks to bench/ directory
 - ✅ **Delete placeholder tests (#18)** - Removed tests with only assert true placeholders
 - ✅ **HTTP Client Provider consolidation (#4)** - Merged ClientProvider into Http.Client module
-- ✅ **Cache logic consolidation (#2)** - Consolidated cache access through WandererKills.Core.Cache API
-- ✅ **Logging strategy (#3)** - Standardized on direct Logger usage, removed Support.Logger
-- ✅ **Module naming conventions (#5)** - Renamed Helper→Cache, Manager→Processor/Owner
+- ✅ **Cache logic consolidation (#2)** - COMPLETED: Extended unified API and updated all modules to use it
+- ✅ **Logging strategy (#3)** - COMPLETED: Removed Support.Logger and standardized on built-in Logger
+- ✅ **Module naming conventions (#5)** - COMPLETED: Eliminated Manager/Helper patterns and improved naming clarity
 - ✅ **Test helper organization (#13)** - Created TestCase and DataCase modules with centralized loading
 - ✅ **Type specifications (#14)** - Added @spec annotations to all public functions in controllers and major modules
 - ✅ **Task supervision (#8)** - Replaced unsupervised Task.async with Task.Supervisor throughout

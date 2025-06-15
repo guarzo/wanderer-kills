@@ -88,7 +88,7 @@ defmodule WandererKillsWeb.SubscriptionController do
   """
   @spec stats(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def stats(conn, _params) do
-    stats = SubscriptionManager.get_stats()
+    {:ok, stats} = SubscriptionManager.get_stats()
 
     conn
     |> json(%{

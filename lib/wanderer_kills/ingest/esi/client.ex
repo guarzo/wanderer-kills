@@ -19,7 +19,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   @behaviour WandererKills.Ingest.ESI.ClientBehaviour
 
   require Logger
-  import WandererKills.Core.Support.Logger
+  
   alias WandererKills.Core.Cache
   alias WandererKills.Core.Support.Error
 
@@ -177,7 +177,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   Updates ship groups by fetching fresh data from ESI.
   """
   def update_ship_groups(group_ids \\ @ship_group_ids) when is_list(group_ids) do
-    log_info("Updating ship groups from ESI", group_ids: group_ids)
+    Logger.info("Updating ship groups from ESI", group_ids: group_ids)
 
     results =
       group_ids
@@ -189,14 +189,14 @@ defmodule WandererKills.Ingest.ESI.Client do
     errors = Enum.filter(results, &match?({:error, _}, &1))
 
     if length(errors) > 0 do
-      log_error("Failed to update some ship groups",
+      Logger.error("Failed to update some ship groups",
         error_count: length(errors),
         total_groups: length(group_ids)
       )
 
       {:error, {:partial_failure, errors}}
     else
-      log_info("Successfully updated all ship groups")
+      Logger.info("Successfully updated all ship groups")
       :ok
     end
   end
@@ -205,14 +205,14 @@ defmodule WandererKills.Ingest.ESI.Client do
   Fetches types for specific groups and returns parsed ship data.
   """
   def fetch_ship_types_for_groups(group_ids \\ @ship_group_ids) when is_list(group_ids) do
-    log_info("Fetching ship types for groups", group_ids: group_ids)
+    Logger.info("Fetching ship types for groups", group_ids: group_ids)
 
     with {:ok, groups} <- fetch_groups(group_ids),
          {:ok, ship_types} <- extract_and_fetch_types(groups) do
       {:ok, ship_types}
     else
       {:error, reason} ->
-        log_error("Failed to fetch ship types", error: reason)
+        Logger.error("Failed to fetch ship types", error: reason)
         {:error, reason}
     end
   end
@@ -238,7 +238,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   # ============================================================================
 
   defp fetch_groups(group_ids) do
-    log_debug("Fetching groups from ESI", group_ids: group_ids)
+    Logger.debug("Fetching groups from ESI", group_ids: group_ids)
 
     results =
       group_ids
@@ -251,7 +251,7 @@ defmodule WandererKills.Ingest.ESI.Client do
     successes = Enum.filter(results, &match?({:ok, _}, &1))
 
     if length(errors) > 0 do
-      log_error("Failed to fetch some groups",
+      Logger.error("Failed to fetch some groups",
         error_count: length(errors),
         success_count: length(successes)
       )
@@ -264,14 +264,14 @@ defmodule WandererKills.Ingest.ESI.Client do
   end
 
   defp extract_and_fetch_types(groups) do
-    log_debug("Extracting type IDs from groups")
+    Logger.debug("Extracting type IDs from groups")
 
     type_ids =
       groups
       |> Enum.flat_map(fn group -> Map.get(group, "types", []) end)
       |> Enum.uniq()
 
-    log_debug("Fetching types", type_count: length(type_ids))
+    Logger.debug("Fetching types", type_count: length(type_ids))
 
     results =
       type_ids
@@ -284,7 +284,7 @@ defmodule WandererKills.Ingest.ESI.Client do
     successes = Enum.filter(results, &match?({:ok, _}, &1))
 
     if length(errors) > 0 do
-      log_error("Failed to fetch some types",
+      Logger.error("Failed to fetch some types",
         error_count: length(errors),
         success_count: length(successes)
       )
@@ -310,7 +310,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   end
 
   defp handle_http_response({:error, reason}, {entity_type, entity_id}, _success_handler) do
-    log_error("Failed to fetch entity from ESI",
+    Logger.error("Failed to fetch entity from ESI",
       entity_type: entity_type,
       entity_id: entity_id,
       error: reason
@@ -374,7 +374,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   defp fetch_killmail_from_api(killmail_id, killmail_hash) do
     url = "#{esi_base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
 
-    log_debug("Fetching killmail from ESI",
+    Logger.debug("Fetching killmail from ESI",
       killmail_id: killmail_id,
       killmail_hash: String.slice(killmail_hash, 0, 8) <> "..."
     )

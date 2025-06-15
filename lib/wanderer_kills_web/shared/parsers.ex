@@ -1,6 +1,6 @@
-defmodule WandererKillsWeb.Shared.ParseHelpers do
+defmodule WandererKillsWeb.Shared.Parsers do
   @moduledoc """
-  Shared helper functions for parsing operations across web modules.
+  Shared parsing functions across web modules.
   """
 
   @doc """

@@ -7,13 +7,13 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
   # Helper to create a valid Killmail struct from test data
   defp create_test_killmail(attrs) do
     base_attrs = %{
-      "killmail_id" => attrs["killmail_id"] || 123456789,
+      "killmail_id" => attrs["killmail_id"] || 123_456_789,
       "kill_time" => attrs["kill_time"] || "2024-01-01T12:00:00Z",
-      "system_id" => attrs["solar_system_id"] || attrs["system_id"] || 30000142,
+      "system_id" => attrs["solar_system_id"] || attrs["system_id"] || 30_000_142,
       "victim" => attrs["victim"] || %{"character_id" => 999, "damage_taken" => 100},
       "attackers" => attrs["attackers"] || []
     }
-    
+
     {:ok, killmail} = Killmail.new(base_attrs)
     killmail
   end

@@ -5,8 +5,8 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
   This module is responsible for sending killmail updates to
   subscriber webhooks via HTTP POST requests.
   """
-
-  import WandererKills.Core.Support.Logger
+  
+  require Logger
   alias WandererKills.Ingest.Http.Client
 
   @webhook_timeout 10_000
@@ -31,7 +31,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
       :ok ->
         payload = build_webhook_payload(system_id, kills)
 
-        log_info("🔔 Sending webhook notification",
+        Logger.info("🔔 Sending webhook notification",
           subscription_id: subscription_id,
           url: webhook_url,
           system_id: system_id,
@@ -40,7 +40,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
 
         case send_webhook_request(webhook_url, payload) do
           {:ok, _response} ->
-            log_info("✅ Webhook notification sent successfully",
+            Logger.info("✅ Webhook notification sent successfully",
               subscription_id: subscription_id,
               url: webhook_url
             )
@@ -48,7 +48,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
             :ok
 
           {:error, reason} ->
-            log_error("❌ Failed to send webhook notification",
+            Logger.error("❌ Failed to send webhook notification",
               subscription_id: subscription_id,
               url: webhook_url,
               error: inspect(reason)
@@ -58,7 +58,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
         end
 
       {:error, reason} ->
-        log_warning("Invalid webhook URL",
+        Logger.warning("Invalid webhook URL",
           subscription_id: subscription_id,
           url: webhook_url,
           reason: reason
@@ -89,7 +89,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
       :ok ->
         payload = build_count_payload(system_id, count)
 
-        log_info("📊 Sending webhook count notification",
+        Logger.info("📊 Sending webhook count notification",
           subscription_id: subscription_id,
           url: webhook_url,
           system_id: system_id,
@@ -98,7 +98,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
 
         case send_webhook_request(webhook_url, payload) do
           {:ok, _response} ->
-            log_info("✅ Webhook count notification sent successfully",
+            Logger.info("✅ Webhook count notification sent successfully",
               subscription_id: subscription_id,
               url: webhook_url
             )
@@ -106,7 +106,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
             :ok
 
           {:error, reason} ->
-            log_error("❌ Failed to send webhook count notification",
+            Logger.error("❌ Failed to send webhook count notification",
               subscription_id: subscription_id,
               url: webhook_url,
               error: inspect(reason)
@@ -116,7 +116,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
         end
 
       {:error, reason} ->
-        log_warning("Invalid webhook URL for count notification",
+        Logger.warning("Invalid webhook URL for count notification",
           subscription_id: subscription_id,
           url: webhook_url,
           reason: reason

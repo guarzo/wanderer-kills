@@ -223,13 +223,10 @@ defmodule WandererKills.Core.Observability.Monitoring do
   @spec measure_cache_operations() :: :ok
   def measure_cache_operations do
     cache_metrics =
-      Enum.map(@cache_names, fn cache_name ->
-        case Cachex.size(cache_name) do
-          {:ok, size} -> size
-          _ -> 0
-        end
-      end)
-      |> Enum.sum()
+      case WandererKills.Core.Cache.size() do
+        {:ok, size} -> size
+        _ -> 0
+      end
 
     :telemetry.execute(
       [:wanderer_kills, :system, :cache_operations],
@@ -455,9 +452,9 @@ defmodule WandererKills.Core.Observability.Monitoring do
 
   @spec build_cache_health_check(atom()) :: map()
   defp build_cache_health_check(cache_name) do
-    case Cachex.size(cache_name) do
-      {:ok, _size} ->
-        %{name: cache_name, healthy: true, status: "ok"}
+    case WandererKills.Core.Cache.health() do
+      {:ok, health} ->
+        Map.put(health, :name, cache_name)
 
       {:error, reason} ->
         Logger.error(
@@ -477,14 +474,9 @@ defmodule WandererKills.Core.Observability.Monitoring do
 
   @spec build_cache_metrics(atom()) :: map()
   defp build_cache_metrics(cache_name) do
-    case Cachex.stats(cache_name) do
+    case WandererKills.Core.Cache.stats() do
       {:ok, stats} ->
-        # Get size separately as it's not included in stats
-        size =
-          case Cachex.size(cache_name) do
-            {:ok, s} -> s
-            _ -> 0
-          end
+        size = Map.get(stats, :size, 0)
 
         %{
           name: cache_name,
@@ -506,21 +498,9 @@ defmodule WandererKills.Core.Observability.Monitoring do
   end
 
   @spec get_cache_stats_internal(atom()) :: {:ok, map()} | {:error, term()}
-  defp get_cache_stats_internal(cache_name) do
-    case Cachex.stats(cache_name) do
-      {:ok, stats} ->
-        # Add size to stats since Cachex doesn't include it
-        size =
-          case Cachex.size(cache_name) do
-            {:ok, s} -> s
-            _ -> 0
-          end
-
-        {:ok, Map.put(stats, :size, size)}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+  defp get_cache_stats_internal(_cache_name) do
+    # Use unified cache API which already includes size in stats
+    WandererKills.Core.Cache.stats()
   end
 
   @spec get_system_info() :: map()

@@ -69,14 +69,9 @@ defmodule WandererKills.Core.Observability.CacheHealth do
 
   @spec check_cache_health(atom()) :: %{healthy: boolean(), name: atom(), status: String.t()}
   defp check_cache_health(cache_name) do
-    case Cachex.size(cache_name) do
-      {:ok, size} ->
-        %{
-          healthy: true,
-          name: cache_name,
-          status: "ok",
-          size: size
-        }
+    case WandererKills.Core.Cache.health() do
+      {:ok, health} ->
+        Map.put(health, :name, cache_name)
 
       {:error, reason} ->
         %{
@@ -103,17 +98,10 @@ defmodule WandererKills.Core.Observability.CacheHealth do
     base_metrics = %{name: cache_name}
 
     try do
-      case Cachex.stats(cache_name) do
+      case WandererKills.Core.Cache.stats() do
         {:ok, stats} ->
-          # Get size separately as it's not included in stats
-          size =
-            case Cachex.size(cache_name) do
-              {:ok, s} -> s
-              _ -> 0
-            end
-
           Map.merge(base_metrics, %{
-            size: size,
+            size: Map.get(stats, :size, 0),
             hit_rate: Map.get(stats, :hit_rate, 0.0),
             miss_rate: Map.get(stats, :miss_rate, 0.0),
             eviction_count: Map.get(stats, :eviction_count, 0),

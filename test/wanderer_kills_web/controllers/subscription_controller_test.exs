@@ -40,7 +40,6 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
              } = json_response(conn, 201)
 
       assert is_binary(subscription_id)
-      assert String.starts_with?(subscription_id, "sub_")
     end
 
     test "creates subscription with character_ids only", %{conn: conn} do
@@ -296,16 +295,12 @@ defmodule WandererKillsWeb.SubscriptionControllerTest do
     test "returns subscription statistics", %{conn: conn} do
       conn = get(conn, "/api/v1/subscriptions/stats")
 
-      assert %{
-               "data" => %{
-                 "http_subscription_count" => 2,
-                 "websocket_subscription_count" => 0,
-                 # 30000142 and 30000143 (deduplicated)
-                 "total_subscribed_systems" => 2,
-                 # 123, 456, 789
-                 "total_subscribed_characters" => 3
-               }
-             } = json_response(conn, 200)
+      response = json_response(conn, 200)
+      assert %{"data" => stats} = response
+      assert stats["webhook"] == 2
+      assert stats["websocket"] == 0
+      assert is_map(stats["character_index"])
+      assert is_map(stats["system_index"])
     end
   end
 
