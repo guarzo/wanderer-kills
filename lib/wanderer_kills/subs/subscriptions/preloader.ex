@@ -61,7 +61,7 @@ defmodule WandererKills.Subs.Subscriptions.Preloader do
       "callback_url" => callback_url
     } = subscription
 
-    Logger.info("🔄 Starting kill preload for new subscription",
+    Logger.info("[INFO] Starting kill preload for new subscription",
       subscription_id: subscription_id,
       subscriber_id: subscriber_id,
       system_count: length(system_ids),
@@ -88,14 +88,14 @@ defmodule WandererKills.Subs.Subscriptions.Preloader do
 
     total_kills = results |> Enum.map(fn {_, kills} -> length(kills) end) |> Enum.sum()
 
-    Logger.info("✅ Completed kill preload",
+    Logger.info("[INFO] Completed kill preload",
       subscription_id: subscription_id,
       systems_with_kills: length(results),
       total_kills: total_kills
     )
   rescue
     error in [ArgumentError, KeyError] ->
-      Logger.error("❌ Failed to preload kills for subscription - invalid data",
+      Logger.error("[ERROR] Failed to preload kills for subscription - invalid data",
         subscription_id: subscription["id"],
         error_type: error.__struct__,
         error: Exception.message(error)
@@ -104,7 +104,7 @@ defmodule WandererKills.Subs.Subscriptions.Preloader do
     error ->
       stacktrace = __STACKTRACE__
 
-      Logger.error("❌ Failed to preload kills for subscription - unexpected error",
+      Logger.error("[ERROR] Failed to preload kills for subscription - unexpected error",
         subscription_id: subscription["id"],
         error_type: error.__struct__,
         error: Exception.format(:error, error, stacktrace)
@@ -115,7 +115,7 @@ defmodule WandererKills.Subs.Subscriptions.Preloader do
     kills = Preloader.preload_kills_for_system(system_id, limit, since_hours)
 
     if length(kills) > 0 do
-      Logger.debug("📦 Preloaded kills for system",
+      Logger.debug("[DEBUG] Preloaded kills for system",
         system_id: system_id,
         kill_count: length(kills)
       )

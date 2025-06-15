@@ -113,7 +113,7 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
 
     # Log performance warning for large filtering operations
     if killmail_count > 100 and (character_count > 50 or system_count > 50) do
-      Logger.warning("⚠️ Large filtering operation detected",
+      Logger.warning("[WARNING] Large filtering operation detected",
         killmail_count: killmail_count,
         character_count: character_count,
         system_count: system_count,
@@ -128,7 +128,7 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
 
     # Log slow filtering operations
     if duration_ms > 100 do
-      Logger.info("🐌 Slow filtering detected",
+      Logger.info("[INFO] Slow filtering detected",
         duration_ms: duration_ms,
         killmail_count: killmail_count,
         character_count: character_count,

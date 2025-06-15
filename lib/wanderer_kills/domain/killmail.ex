@@ -184,7 +184,6 @@ defmodule WandererKills.Domain.Killmail do
   defp validate_required_fields(%__MODULE__{} = killmail) do
     errors = []
     errors = if is_nil(killmail.killmail_id), do: [:missing_killmail_id | errors], else: errors
-    errors = if is_nil(killmail.kill_time), do: [:missing_kill_time | errors], else: errors
     errors = if is_nil(killmail.system_id), do: [:missing_system_id | errors], else: errors
 
     case errors do

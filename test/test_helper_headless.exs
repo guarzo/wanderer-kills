@@ -47,14 +47,25 @@ defmodule WandererKills.HeadlessTestCase do
   end
 
   setup do
+    # Set up unique test ID for ETS table isolation
+    test_id = System.unique_integer([:positive])
+    Process.put(:test_unique_id, test_id)
+
     # Clear any existing processes and caches if helper is available
-    if Code.ensure_loaded?(WandererKills.TestHelpers) do
-      WandererKills.TestHelpers.clear_all_caches()
+    if Code.ensure_loaded?(WandererKills.Test.CacheHelpers) do
+      WandererKills.Test.CacheHelpers.clear_all_caches()
     end
+
+    # Clean up unique test tables on exit
+    on_exit(fn ->
+      if Code.ensure_loaded?(WandererKills.Test.EtsHelpers) do
+        WandererKills.Test.EtsHelpers.cleanup_test_tables(test_id)
+      end
+    end)
 
     :ok
   end
 end
 
-# Configure ExUnit to run tests sequentially for stability
-ExUnit.configure(parallel: false)
+# Configure ExUnit for parallel execution with proper test isolation
+ExUnit.configure(parallel: true, max_cases: System.schedulers_online())

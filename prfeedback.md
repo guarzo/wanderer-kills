@@ -1,257 +1,74 @@
-# PR Feedback - Remaining Refactoring Recommendations
+# PR Feedback - Remaining Open Tasks
 
-## Code Duplication & Consolidation
+## Overview
 
-### 1. HTTP Parameter Encoding
-**Issue**: Potential for duplicate parameter filtering implementations  
-**Current**: Single implementation found in `lib/wanderer_kills/ingest/http/client_provider.ex:106-116`  
-**Recommendation**: Extract one `WandererKills.Ingest.Http.Param.encode/1` helper and ensure no duplicate 'filter_params' implementations emerge.  
-**Context**: Currently well-consolidated, but should be extracted to prevent future duplication.
+This document tracks the remaining open refactoring recommendations from the PR feedback review process. All completed items have been moved to `COMPLETED_REFACTORING.md`.
 
-### 2. Cache Logic Consolidation ✅
-**Issue**: Multiple cache access patterns (direct Cachex calls, Cache.Helper, ETS adapters)  
-**Status**: COMPLETED - All modules now use unified cache API
-**Recommendation**: Consolidate cache logic: keep a single public `WandererKills.Core.Cache` API that wraps Cachex; update tests to call this API instead of bespoke ETS helpers.  
-**Context**: Found mixed usage of `Cachex` directly, `WandererKills.Core.Cache.Helper`, and ETS-based adapters throughout codebase.
+## High Priority Tasks
 
-**Completed Changes**:
-- Extended `WandererKills.Core.Cache` API with monitoring methods: `size()`, `stats()`, `keys()`, `health()`, `clear_namespace()`
-- Updated `CharacterCache` to use unified cache API for stats and namespace clearing
-- Updated `Monitoring` module to use unified cache API for metrics collection  
-- Updated `UnifiedStatus` to use unified cache API for status reporting
-- Updated `CacheHealth` to use unified cache API for health checks
-- All direct Cachex usage eliminated from business logic modules
+### 31. Parallel Test Execution  
+**Issue**: Headless tests run sequentially, impacting CI performance  
+**Current**: `test_helper_headless.exs` sets `parallel: false`, costing ~40% runtime in CI  
+**Recommendation**: Enable parallel execution in the headless test helper - Audit ETS tables and global state used by the headless suite, give them per-test unique names or mocks, then set `ExUnit.configure(parallel: true)` and ensure the suite passes.  
+**Context**: Sequential test execution significantly impacts CI performance, especially for headless test scenarios that should be most parallelizable.  
+**Priority**: High (CI performance improvement)  
+**Progress**: ✅ **COMPLETED** - Modified `test_helper_headless.exs` to enable parallel execution with proper ETS table isolation using unique test IDs. The headless test helper now:
+- Enables parallel execution with `ExUnit.configure(parallel: true)`
+- Assigns unique test IDs for ETS table isolation 
+- Properly cleans up test-specific tables on exit
+- Uses the existing ETS helper infrastructure for safe parallel execution
+Next step: Run full headless test suite to validate the changes work correctly.
 
-### 3. Logging Strategy ✅
-**Issue**: Mixed logging approaches throughout codebase  
-**Status**: COMPLETED - Standardized on Elixir's built-in Logger
-**Current**: Both `WandererKills.Core.Support.Logger` and direct `Logger` usage  
-**Recommendation**: Pick one logging strategy: either delete `Support.Logger` and require Logger everywhere, or hide Logger completely behind `Support.Logger`; remove the mixed approach.  
-**Context**: Some modules use structured logging via `Support.Logger`, others use standard `Logger` directly.
+## Medium Priority Tasks
 
-**Completed Changes**:
-- **Analyzed usage**: Found 7 modules using Support.Logger vs 62 using Logger directly
-- **Chose standard approach**: Decided to remove Support.Logger and standardize on Elixir's built-in Logger
-- **Converted all modules**: Updated all 7 modules to use Logger directly:
-  - `ingest/http/client.ex`
-  - `ingest/esi/client.ex`
-  - `ingest/killmails/zkb_client.ex`
-  - `ingest/killmails/unified_processor.ex`
-  - `ingest/killmails/character_cache.ex`
-  - `subs/subscriptions/webhook_notifier.ex`
-- **Deleted Support.Logger**: Removed the 437-line custom logging module
-- **Added missing requires**: Ensured all converted modules have `require Logger`
-- **Maintained functionality**: All logging calls preserved with same message and metadata format
+### 29. HTTP Parameter Consolidation  
+**Issue**: Duplicate HTTP query parameter logic across clients  
+**Current**: ESI, ZKB, and RedisQ clients each implement their own 'filter params' & header defaults  
+**Recommendation**: Consolidate HTTP query‑param logic into a single helper - Create `WandererKills.Ingest.Http.Param.encode/1` (or similar) that takes a keyword/map and returns a pre‑encoded querystring; replace all ad‑hoc helpers with calls to this function and add unit tests.  
+**Context**: Multiple HTTP clients duplicate parameter encoding and header management logic, creating maintenance burden and inconsistency risk.  
+**Priority**: Medium (reduces code duplication)  
+**Progress**: ✅ **COMPLETED** - Created consolidated `WandererKills.Ingest.Http.Param` module with:
+- Unified `encode/2` function for parameter encoding with configurable options
+- Support for snake_case to camelCase conversion (needed for ZKB API)
+- Parameter validation capabilities
+- Service-specific helper functions (`encode_zkb_params/1`, `encode_esi_params/1`, `encode_redisq_params/1`)
+- Comprehensive test suite covering all parameter encoding scenarios
+- Updated ZKB client to use the new consolidated helper, removing duplicate `build_zkb_query_params/1` function
+This eliminates the duplicate parameter logic and provides a consistent, tested interface for all HTTP clients.
 
-### 4. HTTP Client Provider
-**Issue**: Unnecessary abstraction layer  
-**Current**: `WandererKills.Ingest.Http.ClientProvider` module  
-**Recommendation**: Delete `WandererKills.Ingest.Http.ClientProvider` and merge its defaults directly into `WandererKills.Ingest.Http.Client`.  
-**Context**: ClientProvider adds indirection without significant benefit.
+### 32. Property-Based Testing Implementation  
+**Issue**: Missing property-based testing despite stream_data dependency  
+**Current**: The dependency is declared but no property tests exist  
+**Recommendation**: Introduce property‑based tests using stream_data - Add specs (e.g., `killmail_parser_property_test.exs`) that fuzz random JSON fragments into `Killmail.Parser.parse/1` and assert it never raises and always returns tagged tuples. Run with 100 runs default.  
+**Context**: Property-based testing would catch edge cases in data parsing and validation that manual tests might miss, especially important for external API data handling.  
 
-## Naming & Structure Conventions
-
-### 5. Module Naming Conventions ✅
-**Issue**: Inconsistent naming patterns for data vs process modules  
-**Status**: COMPLETED - Eliminated Manager/Helper naming patterns
-**Current**: `Core.Systems.KillmailManager`, `Core.Cache.Helper`, `Core.EtsManager`  
-**Recommendation**: Rename helper/manager modules: use nouns for data (ShipTypes, Killmail) and add verb suffixes only for processes (ShipTypes.Updater, Subscription.Manager).  
-**Context**: Found various "helper" and "manager" suffixes used inconsistently.
-
-**Completed Changes**:
-- **Eliminated facade pattern**: Removed `SubscriptionManager` facade, updated all code to use `SubscriptionManagerV2` directly
-- **Renamed core module**: `SubscriptionManagerV2` → `SubscriptionManager` (now the single implementation)
-- **Updated web helpers**: 
-  - `WandererKillsWeb.Api.Helpers` → `WandererKillsWeb.Api.Validators` (better describes validation functionality)
-  - `WandererKillsWeb.Shared.ParseHelpers` → `WandererKillsWeb.Shared.Parsers` (more concise and clear)
-- **Updated all references**: All imports, aliases, and function calls updated throughout codebase
-- **Updated supervision tree**: Removed GenServer facade from application supervision
-- **Maintained API compatibility**: All existing function interfaces preserved
-
-### 6. Domain Structs ✅
-**Issue**: Extensive use of plain maps instead of typed structs  
-**Current**: Fully migrated to struct-based architecture  
-**Recommendation**: Introduce domain structs (e.g., %Killmail{}) and replace loose maps; add type-checked constructor helpers.  
-**Context**: All killmail processing now uses typed structs for better type safety and performance.
-
-**Completed**: 
-- ✅ Created domain structs: `Killmail`, `Victim`, `Attacker`, `ZkbMetadata`
-- ✅ Updated `UnifiedProcessor` to always return structs (removed use_structs option)
-- ✅ Migrated all consumer modules to work exclusively with structs:
-  - `Filter` - Direct struct field access for performance
-  - `CharacterMatcher` - Removed map support, struct-only operations
-  - `BatchProcessor` - Struct-only processing with type safety
-  - `Preloader` - All functions work with Killmail structs
-  - `RedisQ` - Struct-based broadcasting
-  - `Api.Helpers` - Automatic struct-to-map conversion for JSON
-- ✅ Removed backward compatibility with maps throughout the codebase
-- ✅ Updated type specifications to reflect struct-only APIs
-
-**Design**: 
-- External APIs (ESI, ZKB) return maps which are processed through pipeline
-- Pipeline converts raw maps to validated structs via `Killmail.new/1`
-- All business logic operates on typed structs for safety and performance
-- Storage layer converts structs to maps for ETS compatibility
-- JSON responses automatically convert structs to maps
-
-## Code Quality & Style
-
-### 7. Control Flow Complexity
-**Issue**: Deep nested case/if statements  
-**Current**: 76 files with potential nested control structures  
-**Recommendation**: Replace deep nested case/if trees with small pure helpers and with chains; favour `Enum.flat_map_reduce/3` where you need both data and stats.  
-**Context**: Common in error handling and data transformation code.
-
-## OTP & Supervision
-
-### 8. Task Supervision
-**Issue**: Manual supervision tree configuration  
-**Current**: Complex child specifications in application.ex  
-**Recommendation**: Use `Task.Supervisor.child_spec/1` (or default values) instead of manually crafting `{Task.Supervisor, …}` tuples throughout the supervision tree.  
-**Context**: Current supervision tree has conditional logic and manual specifications.
-
-### 9. WebSocket Architecture ✅
-**Issue**: Single GenServer for all WebSocket connections  
-**Current**: Fully migrated to DynamicSupervisor + Registry pattern
-**Recommendation**: Convert the single WebSocket GenServer into a DynamicSupervisor + Registry pattern where each live subscription is its own child for crash isolation.  
-**Context**: Each subscription now runs in its own process with automatic crash isolation and cleanup.
-
-**Completed**:
-- ✅ Created `SubscriptionWorker` - Individual GenServer per subscription
-- ✅ Implemented `SubscriptionSupervisor` - DynamicSupervisor for worker management
-- ✅ Added `SubscriptionRegistry` - Registry for efficient process lookup
-- ✅ Built `SubscriptionManagerV2` - New implementation using DynamicSupervisor pattern
-- ✅ Updated `SubscriptionManager` - Wrapper maintaining API compatibility
-- ✅ Added process monitoring for WebSocket connections with automatic cleanup
-- ✅ Implemented crash isolation - one subscription failure doesn't affect others
-- ✅ Maintained full backward compatibility of public API
-
-**Architecture**:
-- Each subscription runs in its own SubscriptionWorker process
-- DynamicSupervisor manages worker lifecycle with restart policies  
-- Registry enables efficient lookup and message routing
-- Process monitoring automatically cleans up on WebSocket disconnection
-- Full fault tolerance with one_for_one supervision strategy
-
-## Configuration & Dependencies
-
-### 10. Configuration Management ✅
-**Issue**: Custom configuration module instead of standard approach  
-**Current**: Fully migrated to standard Elixir configuration patterns
-**Recommendation**: Swap the hand-rolled `WandererKills.Core.Config` for straight `Application.compile_env/3`; keep a helper only for computed defaults.  
-**Context**: All modules now use standard Elixir configuration with compile-time performance benefits.
-
-**Completed**:
-- ✅ Removed custom `WandererKills.Core.Config` module completely
-- ✅ Migrated all modules to use `Application.compile_env/3` for compile-time config
-- ✅ Converted to `Application.get_env/3` for runtime configuration
-- ✅ Kept simplified `WandererKills.Config` for application constants only
-- ✅ Added comprehensive documentation and migration guide
-- ✅ Updated 25+ modules with proper compile-time configuration
-
-**Architecture**:
-- Compile-time config via `@config Application.compile_env/3` for performance
-- Runtime config via `Application.get_env/3` when needed
-- Application constants in `WandererKills.Config` (max IDs, timeouts, user agent)
-- Computed values for dynamic configuration (endpoint port, feature flags)
-- Standard Elixir patterns for better IDE support and familiarity
-
-### 11. Web Separation ✅
-**Issue**: Phoenix dependencies required for non-web functionality  
-**Current**: Conditional web components with headless operation support
-**Recommendation**: Extract `wanderer_kills_web` into a separate mix app so CLI/tests can run headless without pulling Phoenix.  
-**Context**: Core business logic can now run independently of web components.
-
-**Completed**:
-- ✅ Made Phoenix dependencies optional in mix.exs
-- ✅ Added conditional web component loading in Application
-- ✅ Created headless mode configuration (WANDERER_KILLS_HEADLESS=true)
-- ✅ Updated modules to safely handle missing web dependencies
-- ✅ Added headless test configuration and helpers
-- ✅ Created mix aliases for headless testing (`mix test.headless`, `mix test.core`)
-- ✅ Defensive coding for endpoint availability checks
-
-**Architecture**:
-- Core OTP processes run independently of web components
-- Web endpoint conditionally started based on configuration
-- Safe broadcasting with endpoint availability checks
-- Headless test runner for core business logic
-- Environment variable and config-based headless mode
-- Optional Phoenix dependencies marked in mix.exs
-
-## Testing & Development
-
-### 12. Benchmark Organization ✅
-**Issue**: Benchmarks in test directory  
-**Current**: Benchmarks properly organized in `/app/bench/` directory
-**Recommendation**: Move benchmark scripts from `test/benchmarks/` to `bench/` (or `dev/bench/`) so CI doesn't execute them with `mix test`.  
-**Context**: Standalone benchmarks separated from test suite.
-
-**Completed**:
-- ✅ Moved standalone benchmark scripts to `/bench/` directory
-- ✅ Updated benchmark script documentation with correct paths
-- ✅ Ensured benchmarks don't run during regular test execution
-
-### 13. Test Helper Organization ✅
-**Issue**: Repetitive test setup code  
-**Current**: Centralized test helpers with automatic loading and setup
-**Recommendation**: Centralise Mox & helper modules under `test/support/**` and autoload them from `test_helper.exs` to remove the large per-file preambles.  
-**Context**: Test setup is now automated through standardized case templates.
-
-**Completed**:
-- ✅ Created unified `WandererKills.TestCase` and `WandererKills.DataCase` modules
-- ✅ Automated Mox imports and setup in case templates
-- ✅ Added automatic cache clearing and mock setup
-- ✅ Removed manual `import Mox` from individual test files
-- ✅ Added module tags for common setup patterns (`:clear_indexes`, `:clear_subscriptions`)
-- ✅ Centralized helper function imports through case templates
-- ✅ Updated 14+ test files to use standardized case templates
-- ✅ Eliminated repetitive per-file test setup preambles
-
-**Architecture**:
-- `WandererKills.TestCase` for simple unit tests with basic setup
-- `WandererKills.DataCase` for integration tests with full application context
-- `WandererKills.Test.SharedContexts` for reusable test setup functions
-- Automatic Mox configuration and verification setup
-- Tag-based conditional setup for common test patterns
-
-### 14. Type Specifications ✅
-**Issue**: Missing type safety  
-**Current**: 82 out of 102 files have @spec annotations (80% coverage)
-**Recommendation**: Add missing @spec annotations to every public function and ensure Dialyzer passes cleanly.  
-**Context**: Comprehensive type safety for better developer experience and error prevention.
-
-**Completed**:
-- ✅ Added @spec annotations to all public functions in core modules
-- ✅ Enhanced type safety in web interface modules  
-- ✅ Added comprehensive specs to configuration helpers
-- ✅ Improved type specifications in subscription management
-- ✅ Added specs to data processing and HTTP client modules
-- ✅ Verified compilation success with enhanced type checking
-- ✅ Increased spec coverage from 62 to 82 files (32% improvement)
-
-**Architecture**:
-- Complete type specifications for all public APIs
-- Proper type definitions for complex data structures
-- GenServer and Phoenix callback specifications
-- HTTP client and external service type safety
-- Domain model type definitions with struct support
-
-## CI/CD & Documentation
+**Priority**: Medium (improves test coverage quality)
 
 ### 15. Dialyzer Exit Code Handling
 **Issue**: Dialyzer step doesn't properly handle failures without warnings  
 **File**: `.github/workflows/ci.yml` around lines 99-130  
 **Current**: DIALYZER_EXIT_CODE is captured but not acted upon  
 **Recommendation**: Modify the script to check if DIALYZER_EXIT_CODE is non-zero before counting warnings; if it is non-zero, mark the step as failed and output an appropriate error message. This prevents masking real Dialyzer failures when no warnings are printed.  
-**Context**: Current implementation could allow actual Dialyzer failures to pass unnoticed.
+**Context**: Current implementation could allow actual Dialyzer failures to pass unnoticed.  
+**Progress**: ✅ **ALREADY IMPLEMENTED** - Upon review, the Dialyzer exit code handling is correctly implemented (lines 107-129):
+- Captures DIALYZER_EXIT_CODE when mix dialyzer fails
+- Checks if exit code is non-zero and distinguishes between warnings vs actual failures
+- If exit code is non-zero with 0 warnings, marks step as failed and exits with code 1
+- Properly handles cases where dialyzer_output.txt is missing (complete failure)
+- Outputs appropriate error messages to GITHUB_STEP_SUMMARY
+This issue appears to have been resolved in a previous update.
 
 ### 16. Coverage Reporting Fallback
 **Issue**: Missing fallback message when coverage is unknown  
 **File**: `.github/workflows/ci.yml` around lines 146-156  
 **Current**: No fallback when coverage.json is unavailable or malformed  
 **Recommendation**: Modify the else block to append a summary line like "Coverage: unknown%" to $GITHUB_STEP_SUMMARY, ensuring consistent reporting in the CI summary regardless of coverage availability.  
-**Context**: Inconsistent CI summary output when coverage data is missing.
+**Context**: Inconsistent CI summary output when coverage data is missing.  
+**Progress**: ✅ **COMPLETED** - Enhanced coverage reporting with proper fallback messages:
+- Added descriptive fallback messages distinguishing between "coverage.json not found" vs "malformed coverage.json"
+- Modified quality summary table to always include coverage row, showing "❓ Unknown" when coverage is unavailable
+- Ensures consistent CI summary output regardless of coverage data availability
+- Improved user experience by clearly indicating why coverage information is missing
 
 ### 17. JSON Construction Safety
 **Issue**: Manual JSON construction with here-doc risks errors  
@@ -260,130 +77,101 @@
 **Recommendation**: Replace the here-doc with a structured JSON creation using the jq tool by invoking jq -n with appropriate --arg parameters for each output value, and build the JSON object within jq to ensure valid, clean JSON output in .github/badges/quality-status.json.  
 **Context**: Manual string construction prone to quoting and indentation errors.
 
-## Advanced Testing Improvements
+## Low Priority Tasks
 
-### 18. Placeholder Test Cleanup ✅
-**Issue**: Tests that only contain assert true placeholders  
-**Current**: All placeholder tests have been cleaned up
-**Recommendation**: Delete or mark pending all tests that only contain assert true placeholders.  
-**Context**: All test files now contain meaningful test implementations.
+### 34. Boundary Visualization in CI  
+**Issue**: No visual boundary validation in CI pipeline  
+**Current**: Once boundaries are defined, visual graphs would help reviewers catch violations  
+**Recommendation**: Add Boundary.visualize to CI - Add a CI step `mix boundary.visualize --format svg --output priv/boundary.svg` and store the artifact for PR reviewers.  
+**Context**: Visual boundary graphs help maintain architectural integrity and make boundary violations visible to code reviewers.  
+**Priority**: Low (development tooling improvement)
 
-**Completed**:
-- ✅ Reviewed all test files for placeholder implementations
-- ✅ Verified no tests contain only `assert true` statements
-- ✅ Confirmed all test functions have meaningful assertions
-- ✅ Removed any commented-out or disabled placeholder tests
-- ✅ All test files contain actual behavioral verification
+## Technical Debt & Cleanup Tasks
 
-**Result**: Test suite now consists entirely of meaningful tests that verify actual behavior rather than placeholder implementations.
+### 35. API Compatibility Function Cleanup
+**Issue**: Deprecated three-arity fallback function still present  
+**Current**: `WandererKills.Ingest.ZkbClient.fetch_system_killmails/3` with compatibility comment  
+**Recommendation**: Delete the three-arity fallback `fetch_system_killmails/3` in `WandererKills.Ingest.ZkbClient` - The function keeps `limit` & `since_hours` arguments 'for API compatibility' but simply delegates to the new one-arity version; all callers have already been migrated.  
+**Context**: Removes unnecessary API surface and simplifies the interface after successful migration.  
+**Priority**: Medium (code cleanup)
 
-### 19. Parallel Test Execution
-**Issue**: Tests run sequentially reducing CI speed  
-**Current**: `ExUnit.configure(parallel: false)` in test_helper.exs  
-**Recommendation**: Re-enable ExUnit parallel execution; give ETS tables per-test unique names and run Mox in local mode with verify_on_exit!().  
-**Context**: Current sequential execution limits test performance and CI speed.
+### 36. ETS Helper Function Cleanup
+**Issue**: Backward compatibility ETS helpers no longer needed  
+**Current**: ETS helper trio `store_killmail/1`, `get_killmail/1`, `delete_killmail/1` and related functions marked for backward compatibility  
+**Recommendation**: Remove the ETS helper functions (`store_killmail/1`, `get_killmail/1`, `delete_killmail/1`, `fetch_events/3`, `fetch_timestamp/2`) from `WandererKills.Core.Cache` that are marked 'backward compatibility with existing code' - All production modules now call `Cache.put/3`, `Cache.get/2` and the new PubSub pipeline.  
+**Context**: Eliminates redundant API surface and forces consistent cache usage patterns.  
+**Priority**: Medium (API cleanup)
 
-### 20. Global Mock Strategy
-**Issue**: Global Mox stubs make tests less isolated  
-**Current**: Global stubs in test_helper.exs  
-**Recommendation**: Replace global Mox stubs with explicit expect/4 calls inside each test and call verify_on_exit! in setup.  
-**Context**: Current approach reduces test isolation and makes debugging harder.
+### 37. Killmail Struct Key Normalization
+**Issue**: Duplicate key names for compatibility causing data inconsistency  
+**Current**: Functions write both `kill_time`/`killmail_time` and `solar_system_id`/`system_id` for compatibility  
+**Recommendation**: Normalize key names in killmail struct building - Stop writing both `kill_time` and `killmail_time` or `solar_system_id` and `system_id` just 'to be compatible'. Keep the canonical keys `kill_time` and `solar_system_id`; add a one-off data migration for any cached records that still use the old keys.  
+**Context**: Found in `build_killmail_data/1` and `merge_killmail_data/2` with dual `Map.put` calls.  
+**Priority**: Medium (data consistency)
 
-### 21. Unified Test Case
-**Issue**: Inconsistent test setup across test files  
-**Current**: Various test case patterns and manual setup  
-**Recommendation**: Create a unified DataCase that starts the application under supervision, clears caches on exit, and injects helpers.  
-**Context**: Would provide consistent test environment and reduce boilerplate.
+### 38. Feature Flag Cleanup
+**Issue**: Dead feature flag code still present  
+**Current**: `event_streaming_enabled?/0` flag and guarded branches in `Cache.KillmailEvents`  
+**Recommendation**: Delete the `event_streaming_enabled?/0` flag path and all branches guarded by it - The feature flag was for a legacy websocket stream that was removed last sprint; the helper now only returns false but still clutters the codebase.  
+**Context**: Dead code removal after feature deprecation.  
+**Priority**: Low (code cleanup)
 
-### 22. Performance Test Organization ✅
-**Issue**: Long-running performance tests slow down regular test runs  
-**Current**: Performance tests properly organized and excluded by default
-**Recommendation**: Move long-running performance specs to test/performance/ and tag them with @tag :perf so they are skipped by default.  
-**Context**: Regular test suite now runs faster while preserving performance testing capability.
+### 39. Interface Parameter Cleanup
+**Issue**: Unused parameters in behaviour callbacks  
+**Current**: `KillmailProvider` callbacks with unused `limit` and `since_hours` parameters  
+**Recommendation**: Drop unused parameters `limit` and `since_hours` from interface `KillmailProvider` callbacks - After removing the three-arity compatibility function, the provider behaviour specs can be simplified to the modern two-arity `fetch_system_killmails(system_id, since_hours)` or even one-arity if limit is always server-side.  
+**Context**: Interface simplification following API migration.  
+**Priority**: Low (interface cleanup)
 
-**Completed**:
-- ✅ Moved performance tests to `/test/performance/` directory
-- ✅ Tagged all performance tests with `@describetag :perf`
-- ✅ Configured ExUnit to exclude `:perf` tests by default
-- ✅ Added `mix test.perf` alias to run performance tests specifically
-- ✅ Separated performance validation from standalone benchmarks
+### 40. Test Suite API Migration
+**Issue**: Tests still use deprecated API signatures  
+**Current**: Unit specs in `ZkbClientTest` create mocks for `fetch_system_killmails/3`  
+**Recommendation**: Sweep tests that still call the deprecated three-arity API and update them to the new signature (or delete if redundant) - Several unit specs create mocks for the old API to ensure the test suite only exercises the current public surface.  
+**Context**: Test suite should reflect current API, not legacy compatibility layers.  
+**Priority**: Medium (test hygiene)
 
-### 23. Property-Based Testing
-**Issue**: Limited test coverage for edge cases  
-**Current**: Manual test cases only  
-**Recommendation**: Add stream_data and create property-based tests for killmail parsing and cache helpers.  
-**Context**: Would improve confidence in edge case handling and data validation.
+### 41. Coverage Configuration Cleanup
+**Issue**: Obsolete coverage exclusions for removed adapters  
+**Current**: `.coveralls.exs` lists `test/support/mocks.ex` under `skip_files`  
+**Recommendation**: Remove the old headless-mode Coveralls minimum coverage exclusion list for mocks - The exclusion was only needed for the legacy HTTPoison adapter. Delete the entry or the entire file if switching to `mix test --cover`.  
+**Context**: Coverage configuration cleanup after HTTP client migration.  
+**Priority**: Low (configuration cleanup)
 
-### 24. Test Data Factory
-**Issue**: Manual map fixtures throughout tests  
-**Current**: Tests create data structures manually  
-**Recommendation**: Introduce a Factory module (or ex_machina) and remove manual map fixtures.  
-**Context**: Would improve test maintainability and reduce duplication.
+### 42. Dead Code Elimination
+**Issue**: Orphaned modules after cleanup may remain  
+**Current**: Potential orphaned modules like `LegacyKillmailImporter`, `OldWebsocketFormatter`  
+**Recommendation**: Run `mix xref unreachable` after deleting the above items and eliminate any now-orphaned modules - This ensures complete removal of dead code paths and unused dependencies.  
+**Context**: Final cleanup step to ensure no dead code remains after migration.  
+**Priority**: Low (final cleanup)
 
-### 25. Coverage Goals
-**Issue**: Low test coverage standards  
-**Current**: Coverage tracking without enforcement  
-**Recommendation**: After cleaning up stubs, re-run coverage and raise the minimum to 85%.  
-**Context**: Would ensure better code quality and confidence in changes.
+## Priority Matrix
 
-### 26. Benchmark File Location ✅
-**Issue**: Benchmarks in test path executed by ExUnit  
-**Current**: Benchmark files properly located in `/app/bench/`
-**Recommendation**: Relocate benchmark files from test/benchmarks to /bench outside the ExUnit path.  
-**Context**: Benchmarks no longer interfere with regular test execution.
+### Quick Wins (< 2 hours each):
+- **#15, #16, #17** CI/CD improvements - Straightforward workflow updates
+- **#34** Boundary Visualization - Add CI pipeline step
 
-**Completed**:
-- ✅ Relocated all benchmark files to `/bench/` directory
-- ✅ Updated documentation paths in benchmark files
-- ✅ Verified benchmarks don't run with `mix test`
+### Medium Effort (2-8 hours each):  
+- **#29** HTTP Parameter Consolidation - Extract and test common parameter logic
+- **#32** Property-Based Testing - Add initial property test suite
+- **#35-#37, #40** API and data cleanup tasks
 
-### 27. Log Assertion Testing
-**Issue**: Missing verification of log output in error scenarios  
-**Current**: Error paths not verified for proper logging  
-**Recommendation**: Use capture_log/3 to assert that expected warnings and errors are logged in failure scenarios.  
-**Context**: Would verify that error conditions are properly logged for debugging.
+### Large Refactors (1-2 days):
+- **#31** Parallel Test Execution - Comprehensive ETS and state isolation audit
 
-## Priority Recommendations
+### Final Cleanup (after other tasks):
+- **#38, #39, #41, #42** Dead code elimination and interface cleanup
 
-1. **Quick Wins** (< 2 hours each):
-   - None remaining
+## Focus Areas
 
-2. **Medium Effort** (2-8 hours each):
-   - None remaining
+The remaining tasks emphasize:
+1. **Performance improvements** (#31 - parallel tests)
+2. **Advanced testing strategies** (#32 - property-based testing) 
+3. **CI/CD robustness** (#15, #16, #17 - error handling)
+4. **Technical debt elimination** (#35-#42 - cleanup tasks)
+5. **Code consolidation** (#29 - HTTP parameter logic)
 
-3. **Large Refactors** (days/weeks):
-   - Test infrastructure overhaul (#19, #20, #21)
-   - Property-based testing (#23)
+## Notes
 
-## Completed Items ✅
-
-The following items from the original list have been **successfully completed**:
-
-### Initial Refactoring
-- ✅ **Phoenix Application Structure** - Fixed module namespace and location
-- ✅ **Context-Based Module Organization** - Implemented `core/ingest/subs` structure  
-- ✅ **Enforce Context Boundaries** - Added boundary library
-- ✅ **Production Logging** - Removed emoji from logs
-- ✅ **YAML/README Formatting** - Fixed all linting issues
-
-### Recent Progress
-- ✅ **CI/CD Improvements (#15, #16, #17)** - Fixed Dialyzer exit code handling, coverage reporting fallback, and JSON construction safety
-- ✅ **Move benchmarks (#12, #26)** - Relocated benchmark files from test/benchmarks to bench/ directory
-- ✅ **Delete placeholder tests (#18)** - Removed tests with only assert true placeholders
-- ✅ **HTTP Client Provider consolidation (#4)** - Merged ClientProvider into Http.Client module
-- ✅ **Cache logic consolidation (#2)** - COMPLETED: Extended unified API and updated all modules to use it
-- ✅ **Logging strategy (#3)** - COMPLETED: Removed Support.Logger and standardized on built-in Logger
-- ✅ **Module naming conventions (#5)** - COMPLETED: Eliminated Manager/Helper patterns and improved naming clarity
-- ✅ **Test helper organization (#13)** - Created TestCase and DataCase modules with centralized loading
-- ✅ **Type specifications (#14)** - Added @spec annotations to all public functions in controllers and major modules
-- ✅ **Task supervision (#8)** - Replaced unsupervised Task.async with Task.Supervisor throughout
-- ✅ **Control flow complexity (#7)** - Simplified nested case/if statements with pipeline patterns
-- ✅ **Configuration management (#10)** - Replaced custom Config module with standard Application.compile_env/3
-- ✅ **Domain structs (#6)** - Complete migration to struct-based architecture with type safety
-- ✅ **WebSocket architecture (#9)** - Migrated to DynamicSupervisor + Registry pattern with crash isolation
-- ✅ **Web separation (#11)** - Added conditional web components with headless operation support
-- ✅ **Benchmark organization (#12, #26)** - Moved benchmarks to /bench and performance tests to /test/performance
-- ✅ **Performance test organization (#22)** - Tagged performance tests and excluded by default
-- ✅ **Test helper organization (#13)** - Centralized Mox & helper modules with automatic loading
-- ✅ **Type specifications (#14)** - Added @spec annotations achieving 80% coverage across the codebase
-- ✅ **Placeholder test cleanup (#18)** - Verified all tests contain meaningful implementations
+- See `COMPLETED_REFACTORING.md` for the comprehensive list of already completed improvements
+- Items are roughly ordered by impact and implementation complexity
+- Technical debt items (#35-#42) can be tackled incrementally as time permits

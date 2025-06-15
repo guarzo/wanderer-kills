@@ -32,19 +32,27 @@ defmodule WandererKills.Test.HttpHelpers do
     Mox.stub(WandererKills.Ingest.Http.Client.Mock, :get_with_rate_limit, fn _url, _opts ->
       {:error, :not_found}
     end)
-    
+
     Mox.stub(WandererKills.Ingest.Killmails.ZkbClient.Mock, :fetch_killmail, fn _id ->
       {:error, :not_found}
     end)
-    
-    Mox.stub(WandererKills.Ingest.Killmails.ZkbClient.Mock, :fetch_system_killmails, fn _system_id, _options ->
-      {:ok, []}
-    end)
-    
-    Mox.stub(WandererKills.Ingest.Killmails.ZkbClient.Mock, :get_system_killmail_count, fn _system_id ->
-      {:ok, 0}
-    end)
-    
+
+    Mox.stub(
+      WandererKills.Ingest.Killmails.ZkbClient.Mock,
+      :fetch_system_killmails,
+      fn _system_id, _options ->
+        {:ok, []}
+      end
+    )
+
+    Mox.stub(
+      WandererKills.Ingest.Killmails.ZkbClient.Mock,
+      :get_system_killmail_count,
+      fn _system_id ->
+        {:ok, 0}
+      end
+    )
+
     :ok
   end
 

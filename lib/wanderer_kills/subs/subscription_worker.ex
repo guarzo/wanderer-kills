@@ -159,7 +159,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
       socket_monitor_ref: socket_monitor_ref
     }
 
-    Logger.info("📝 Subscription worker started",
+    Logger.info("[INFO] Subscription worker started",
       subscription_id: subscription_id,
       type: type,
       subscriber_id: subscription["subscriber_id"],
@@ -183,7 +183,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
     new_state = %{state | subscription: new_subscription}
 
-    Logger.debug("📝 Subscription updated",
+    Logger.debug("[DEBUG] Subscription updated",
       subscription_id: state.subscription_id,
       changes: updates
     )
@@ -221,7 +221,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
           Broadcaster.broadcast_killmail_update(system_id, matching_kills)
       end
 
-      Logger.debug("📡 Delivered killmails to subscription",
+      Logger.debug("[DEBUG] Delivered killmails to subscription",
         subscription_id: state.subscription_id,
         type: state.type,
         system_id: system_id,
@@ -234,7 +234,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{socket_monitor_ref: ref} = state) do
-    Logger.info("🔌 WebSocket process terminated, stopping subscription worker",
+    Logger.info("[INFO] WebSocket process terminated, stopping subscription worker",
       subscription_id: state.subscription_id,
       reason: inspect(reason)
     )
@@ -245,7 +245,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
   @impl true
   def handle_info(msg, state) do
-    Logger.warning("📝 Subscription worker received unexpected message",
+    Logger.warning("[WARNING] Subscription worker received unexpected message",
       subscription_id: state.subscription_id,
       message: inspect(msg)
     )
@@ -255,7 +255,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
   @impl true
   def terminate(reason, state) do
-    Logger.info("📝 Subscription worker terminating",
+    Logger.info("[INFO] Subscription worker terminating",
       subscription_id: state.subscription_id,
       reason: inspect(reason)
     )

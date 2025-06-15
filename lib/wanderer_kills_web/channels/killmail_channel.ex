@@ -106,7 +106,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       initial_systems_count: 0
     })
 
-    Logger.debug("🔌 Client connected and joined killmail channel",
+    Logger.debug("[DEBUG] Client connected and joined killmail channel",
       user_id: socket.assigns.user_id,
       client_identifier: socket.assigns[:client_identifier],
       subscription_id: subscription_id,
@@ -149,7 +149,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           socket = assign(socket, :subscribed_systems, all_systems)
 
-          Logger.debug("📡 Client subscribed to systems",
+          Logger.debug("[DEBUG] Client subscribed to systems",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             new_systems_count: MapSet.size(new_systems),
@@ -192,7 +192,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           socket = assign(socket, :subscribed_systems, remaining_systems)
 
-          Logger.debug("📡 Client unsubscribed from systems",
+          Logger.debug("[DEBUG] Client unsubscribed from systems",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             removed_systems_count: MapSet.size(systems_to_remove),
@@ -236,7 +236,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           socket = assign(socket, :subscribed_characters, all_characters)
 
-          Logger.debug("📡 Client subscribed to characters",
+          Logger.debug("[DEBUG] Client subscribed to characters",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             new_characters_count: MapSet.size(new_characters),
@@ -282,7 +282,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           socket = assign(socket, :subscribed_characters, remaining_characters)
 
-          Logger.debug("📡 Client unsubscribed from characters",
+          Logger.debug("[DEBUG] Client unsubscribed from characters",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             removed_characters_count: MapSet.size(characters_to_remove),
@@ -316,7 +316,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Handle preload after join completes
   @impl true
   def handle_info({:after_join, systems, preload_config}, socket) do
-    Logger.debug("📡 Starting preload after join completed",
+    Logger.debug("[DEBUG] Starting preload after join completed",
       user_id: socket.assigns.user_id,
       subscription_id: socket.assigns.subscription_id,
       systems_count: length(systems)
@@ -330,14 +330,14 @@ defmodule WandererKillsWeb.KillmailChannel do
              preload_config
            ) do
         :ok ->
-          Logger.info("📚 Extended preload requested",
+          Logger.info("[INFO] Extended preload requested",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             config: preload_config
           )
 
         {:error, reason} ->
-          Logger.error("❌ Failed to request extended preload",
+          Logger.error("[ERROR] Failed to request extended preload",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
             error: reason
@@ -356,7 +356,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   # Handle legacy after_join without preload config
   def handle_info({:after_join, systems}, socket) do
-    Logger.debug("📡 Starting preload after join completed",
+    Logger.debug("[DEBUG] Starting preload after join completed",
       user_id: socket.assigns.user_id,
       subscription_id: socket.assigns.subscription_id,
       systems_count: length(systems)
@@ -419,7 +419,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       ) do
     # Only send if we're subscribed to this system
     if MapSet.member?(socket.assigns.subscribed_systems, system_id) do
-      Logger.debug("📊 Forwarding kill count update to WebSocket client",
+      Logger.debug("[DEBUG] Forwarding kill count update to WebSocket client",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         count: count,
@@ -489,7 +489,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   # Handle any unmatched PubSub messages
   def handle_info(message, socket) do
-    Logger.debug("📨 Unhandled PubSub message",
+    Logger.debug("[DEBUG] Unhandled PubSub message",
       user_id: socket.assigns.user_id,
       message: inspect(message) |> String.slice(0, 200)
     )
@@ -528,7 +528,7 @@ defmodule WandererKillsWeb.KillmailChannel do
             DateTime.diff(DateTime.utc_now(), connected_at, :second)
         end
 
-      Logger.info("🚪 Client disconnected from killmail channel",
+      Logger.info("[INFO] Client disconnected from killmail channel",
         user_id: socket.assigns.user_id,
         subscription_id: subscription_id,
         subscribed_systems_count: MapSet.size(socket.assigns.subscribed_systems || MapSet.new()),
@@ -537,7 +537,7 @@ defmodule WandererKillsWeb.KillmailChannel do
         socket_transport: socket.transport
       )
     else
-      Logger.info("🚪 Client disconnected (no active subscription)",
+      Logger.info("[INFO] Client disconnected (no active subscription)",
         user_id: socket.assigns[:user_id] || "unknown",
         disconnect_reason: reason,
         socket_transport: socket.transport
@@ -585,7 +585,7 @@ defmodule WandererKillsWeb.KillmailChannel do
         "killmails:#{subscription_id}"
       )
 
-      Logger.debug("🔌 Client connected and joined killmail channel",
+      Logger.debug("[DEBUG] Client connected and joined killmail channel",
         user_id: socket.assigns.user_id,
         client_identifier: socket.assigns[:client_identifier],
         subscription_id: subscription_id,
@@ -623,7 +623,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       {:ok, response, socket}
     else
       {:error, reason} ->
-        Logger.warning("❌ Failed to join killmail channel",
+        Logger.warning("[WARNING] Failed to join killmail channel",
           user_id: socket.assigns.user_id,
           reason: reason,
           peer_data: socket.assigns.peer_data,
@@ -780,7 +780,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     current_systems = MapSet.size(socket.assigns.subscribed_systems)
     current_characters = MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
 
-    Logger.info("📦 Starting preload for WebSocket client",
+    Logger.info("[INFO] Starting preload for WebSocket client",
       user_id: user_id,
       subscription_id: subscription_id,
       systems_to_preload: length(systems),
@@ -799,7 +799,7 @@ defmodule WandererKillsWeb.KillmailChannel do
           end)
           |> Enum.sum()
 
-        Logger.info("📦 Preload completed for WebSocket client",
+        Logger.info("[INFO] Preload completed for WebSocket client",
           user_id: user_id,
           subscription_id: subscription_id,
           total_systems: length(systems),
@@ -825,7 +825,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp preload_system_kills_for_websocket(socket, system_id, limit) do
-    Logger.debug("📦 Starting preload for system",
+    Logger.debug("[DEBUG] Starting preload for system",
       user_id: socket.assigns.user_id,
       system_id: system_id,
       limit: limit
@@ -834,7 +834,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     # Use the shared preloader
     kills = Preloader.preload_kills_for_system(system_id, limit, 24)
 
-    Logger.debug("📦 Got kills from preload function",
+    Logger.debug("[DEBUG] Got kills from preload function",
       user_id: socket.assigns.user_id,
       system_id: system_id,
       kills_count: length(kills)
@@ -852,7 +852,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       kill_times = Preloader.extract_kill_times(kills)
       enriched_count = Preloader.count_enriched_kills(kills)
 
-      Logger.debug("📦 Sending preload kills to WebSocket client",
+      Logger.debug("[DEBUG] Sending preload kills to WebSocket client",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         killmail_count: length(kills),
@@ -870,7 +870,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       sample_kills = Enum.take(kills, 2)
 
       Enum.each(sample_kills, fn kill ->
-        Logger.debug("📦 Sample killmail being sent",
+        Logger.debug("[DEBUG] Sample killmail being sent",
           killmail_id: kill["killmail_id"],
           system_id: system_id,
           has_victim: Map.has_key?(kill, "victim"),
@@ -898,7 +898,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       length(kills)
     else
-      Logger.debug("📦 No kills available for preload",
+      Logger.debug("[DEBUG] No kills available for preload",
         user_id: socket.assigns.user_id,
         system_id: system_id,
         reason: "no_kills_found"
@@ -913,7 +913,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   @doc """
   Get websocket statistics - delegated to WebSocketStats GenServer
   """
-  @spec get_stats() :: map()
+  @spec get_stats() :: {:ok, map()} | {:error, term()}
   def get_stats do
     WebSocketStats.get_stats()
   end

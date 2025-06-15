@@ -321,7 +321,7 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
 
   # Private functions
 
-  defp extract_characters_from_killmail_cached(killmail) do
+  defp extract_characters_from_killmail_cached(%Killmail{} = killmail) do
     try do
       MapSet.new(CharacterCache.extract_characters_cached(killmail))
     rescue
@@ -364,7 +364,7 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
     if invalid_count > 0 do
       require Logger
 
-      Logger.warning("⚠️ Skipping killmails without valid killmail_id in batch processing",
+      Logger.warning("Skipping killmails without valid killmail_id in batch processing",
         invalid_count: invalid_count,
         total_count: length(killmails)
       )

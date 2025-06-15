@@ -468,10 +468,10 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   defp format_status_report(m, mins) do
     """
     ═══════════════════════════════════════════════════════════════════════
-                     📊 WANDERER KILLS STATUS (#{format_duration(mins)})
+                     [STATUS] WANDERER KILLS STATUS (#{format_duration(mins)})
     ═══════════════════════════════════════════════════════════════════════
 
-    🌐 API Performance
+    [API] API Performance
     ─────────────────────────────────────────────────────────────────────
       zkillboard    #{format_metric(m.api.zkillboard.requests_per_minute, "rpm", 8)} │ #{format_metric(format_number(m.api.zkillboard.total_requests), "total", 12)} │ #{format_metric(m.api.zkillboard.error_rate, "% err", 10)}
                     Latency: #{format_latency_line(m.api.zkillboard)}
@@ -481,7 +481,7 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
 
       Rate Limits   ZKB: #{format_rate_limit(m.rate_limits.zkillboard)}  │  ESI: #{format_rate_limit(m.rate_limits.esi)}
 
-    🔄 Processing Pipeline
+    [PROCESSING] Processing Pipeline
     ─────────────────────────────────────────────────────────────────────
       RedisQ        #{format_metric(format_number(m.processing.redisq_received), "received", 12)} │ #{format_metric(m.processing.redisq_systems, "systems", 10)} │ Last: #{format_duration_short(m.processing.redisq_last_killmail_ago_seconds)} ago
                     #{format_metric(m.processing.redisq_older, "old", 12)} │ #{format_metric(m.processing.redisq_skipped, "skipped", 10)} │ Error rate: #{m.processing.redisq_error_rate}%
@@ -489,13 +489,13 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
       Parser        #{format_metric(format_number(m.processing.parser_stored), "stored", 12)} │ #{format_metric(m.processing.parser_failed, "failed", 10)} │ Success: #{m.processing.parser_success_rate}%
                     Skip: #{m.processing.parser_skipped} │ Process lag: #{m.processing.processing_lag_seconds}s
 
-    🌐 WebSocket & Delivery
+    [WEBSOCKET] WebSocket & Delivery
     ─────────────────────────────────────────────────────────────────────
       Connections   #{format_metric(m.websocket.connections_active, "active", 8)} / #{format_metric(m.websocket.connections_total, "total")}
       Subscriptions #{format_metric(m.websocket.subscriptions_active, "active", 8)} │ #{format_metric(m.websocket.subscriptions_systems, "systems", 10)} │ #{format_metric(m.websocket.subscriptions_characters, "characters")}
       Kills Sent    #{format_metric(format_number(m.websocket.kills_sent_total), "total", 8)} │ #{format_metric(m.websocket.kills_sent_realtime, "real-time", 12)} │ #{format_metric(m.websocket.kills_sent_preload, "preload")}
 
-    💾 Storage & Cache
+    [STORAGE] Storage & Cache
     ─────────────────────────────────────────────────────────────────────
       Killmails     #{format_metric(format_number(m.storage.killmails_count), "entries", 12)} │ #{format_metric(m.storage.systems_count, "systems", 10)} │ ~#{m.storage.memory_mb} MB
 
@@ -503,13 +503,13 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
                     Hit rate: #{m.cache.hit_rate}% │ Efficiency: #{m.cache.cache_efficiency}% │ Evictions: #{m.cache.eviction_rate}%
                     Operations: #{m.cache.operations_per_minute}/min │ Total: #{format_number(m.cache.operations_total)}
 
-    📦 Preload & Webhooks
+    [PRELOAD] Preload & Webhooks
     ─────────────────────────────────────────────────────────────────────
       Tasks         #{format_metric(m.preload.active_tasks, "active", 8)} │ #{format_metric(m.preload.completed_tasks, "completed", 12)} │ #{format_metric(m.preload.failed_tasks, "failed")}
       Delivery      #{format_metric(format_number(m.preload.total_delivered), "kills", 8)} │ #{format_metric(m.preload.total_subscriptions, "subs", 12)} │ #{format_metric(m.preload.active_webhooks, "webhooks")}
       Webhooks      #{format_metric(m.preload.webhooks_sent, "sent", 8)} │ #{format_metric(m.preload.webhooks_failed, "failed", 12)} │ Success: #{m.preload.webhook_success_rate}%
 
-    🖥  System Resources
+    [SYSTEM] System Resources
     ─────────────────────────────────────────────────────────────────────
       Memory        Total: #{format_metric(m.system.memory_mb, "MB", 8)} │ Binary: #{m.system.memory_binary_mb} MB │ Process: #{m.system.memory_processes_mb} MB │ ETS: #{m.system.memory_ets_mb} MB
       Processes     #{format_metric(format_number(m.system.process_count), "procs", 8)} │ #{format_metric(m.system.port_count, "ports", 8)} │ GC runs: #{format_number(m.system.gc_runs)}
@@ -539,9 +539,9 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
 
     color =
       cond do
-        utilization > 80 -> "🔴"
-        utilization > 50 -> "🟡"
-        true -> "🟢"
+        utilization > 80 -> "HIGH"
+        utilization > 50 -> "MED"
+        true -> "LOW"
       end
 
     "#{color} #{avail}/#{cap}"

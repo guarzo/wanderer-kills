@@ -48,4 +48,16 @@ defmodule WandererKills.Core.Cache.Behaviour do
   Returns {:ok, size}, {:error, reason} on error.
   """
   @callback size(cache_name()) :: {:ok, non_neg_integer()} | {:error, term()}
+
+  @doc """
+  Get cache statistics including hit/miss rates.
+  Returns {:ok, stats_map}, {:error, reason} on error.
+  """
+  @callback stats(cache_name()) :: {:ok, map()} | {:error, term()}
+
+  @doc """
+  Get all keys in the cache.
+  Returns {:ok, keys_list}, {:error, reason} on error.
+  """
+  @callback keys(cache_name()) :: {:ok, [key()]} | {:error, term()}
 end

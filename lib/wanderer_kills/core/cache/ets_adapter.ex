@@ -163,6 +163,36 @@ defmodule WandererKills.Core.Cache.ETSAdapter do
       {:error, error}
   end
 
+  @impl true
+  def stats(cache_name) do
+    case :ets.info(cache_name) do
+      :undefined ->
+        {:ok, %{hits: 0, misses: 0, size: 0, hit_rate: 0.0, miss_rate: 0.0}}
+
+      _ ->
+        size = :ets.info(cache_name, :size) || 0
+        {:ok, %{hits: 0, misses: 0, size: size, hit_rate: 0.0, miss_rate: 0.0}}
+    end
+  rescue
+    error ->
+      {:error, error}
+  end
+
+  @impl true
+  def keys(cache_name) do
+    case :ets.info(cache_name) do
+      :undefined ->
+        {:ok, []}
+
+      _ ->
+        keys = :ets.foldl(fn {key, _, _}, acc -> [key | acc] end, [], cache_name)
+        {:ok, keys}
+    end
+  rescue
+    error ->
+      {:error, error}
+  end
+
   # Private helper functions
 
   defp create_table(cache_name) do

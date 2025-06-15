@@ -88,7 +88,7 @@ defmodule WandererKillsWeb.SubscriptionController do
   """
   @spec stats(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def stats(conn, _params) do
-    {:ok, stats} = SubscriptionManager.get_stats()
+    stats = SubscriptionManager.get_stats()
 
     conn
     |> json(%{
@@ -113,16 +113,11 @@ defmodule WandererKillsWeb.SubscriptionController do
           }
         })
 
-      {:error, reason} ->
-        message =
-          case reason do
-            %Error{} -> Error.to_string(reason)
-            binary when is_binary(binary) -> binary
-            _ -> inspect(reason)
-          end
+      {:error, :partial_failure} ->
+        message = "Some subscriptions could not be removed"
 
         # Ensure details field is JSON-serializable
-        details = serialize_error_details(reason)
+        details = serialize_error_details(:partial_failure)
 
         conn
         |> put_status(:bad_request)

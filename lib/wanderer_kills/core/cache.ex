@@ -254,7 +254,9 @@ defmodule WandererKills.Core.Cache do
   @spec size() :: {:ok, non_neg_integer()} | error()
   def size do
     case cache_adapter().size(@cache_name) do
-      {:ok, size} -> {:ok, size}
+      {:ok, size} ->
+        {:ok, size}
+
       {:error, reason} ->
         Logger.error("Cache size check failed", error: reason)
         {:error, Error.cache_error(:size_failed, "Failed to get cache size", %{reason: reason})}
@@ -267,19 +269,26 @@ defmodule WandererKills.Core.Cache do
   @spec stats() :: {:ok, map()} | error()
   def stats do
     adapter = cache_adapter()
-    
+
     if to_string(adapter) == "Elixir.Cachex" do
       case adapter.stats(@cache_name) do
-        {:ok, stats} -> {:ok, stats}
+        {:ok, stats} ->
+          {:ok, stats}
+
         {:error, reason} ->
           Logger.error("Cache stats retrieval failed", error: reason)
-          {:error, Error.cache_error(:stats_failed, "Failed to get cache stats", %{reason: reason})}
+
+          {:error,
+           Error.cache_error(:stats_failed, "Failed to get cache stats", %{reason: reason})}
       end
     else
       # For ETS adapter and others, provide basic stats
       case size() do
-        {:ok, size_val} -> {:ok, %{hits: 0, misses: 0, size: size_val, hit_rate: 0.0, miss_rate: 0.0}}
-        error -> error
+        {:ok, size_val} ->
+          {:ok, %{hits: 0, misses: 0, size: size_val, hit_rate: 0.0, miss_rate: 0.0}}
+
+        error ->
+          error
       end
     end
   end
@@ -293,12 +302,13 @@ defmodule WandererKills.Core.Cache do
     config = @namespace_config[namespace]
     prefix = config.prefix
     adapter = cache_adapter()
-    
+
     if to_string(adapter) == "Elixir.Cachex" do
       case adapter.keys(@cache_name) do
-        {:ok, all_keys} -> 
+        {:ok, all_keys} ->
           namespace_keys = Enum.filter(all_keys, &String.starts_with?(&1, "#{prefix}:"))
           {:ok, namespace_keys}
+
         {:error, reason} ->
           Logger.error("Cache keys retrieval failed", namespace: namespace, error: reason)
           {:error, Error.cache_error(:keys_failed, "Failed to get cache keys", %{reason: reason})}
@@ -317,13 +327,17 @@ defmodule WandererKills.Core.Cache do
     case keys(namespace) do
       {:ok, keys} ->
         results = Enum.map(keys, &cache_adapter().del(@cache_name, &1))
-        success_count = Enum.count(results, fn 
-          {:ok, _} -> true
-          _ -> false 
-        end)
+
+        success_count =
+          Enum.count(results, fn
+            {:ok, _} -> true
+            _ -> false
+          end)
+
         {:ok, success_count}
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -344,15 +358,17 @@ defmodule WandererKills.Core.Cache do
         hits: Map.get(stats, :hits, 0),
         misses: Map.get(stats, :misses, 0)
       }
+
       {:ok, health_info}
     else
-      {:error, _} -> 
+      {:error, _} ->
         health_info = %{
           name: @cache_name,
           healthy: false,
           status: "error",
           size: 0
         }
+
         {:ok, health_info}
     end
   end

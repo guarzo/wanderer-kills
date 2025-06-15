@@ -35,7 +35,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
 
     case DynamicSupervisor.start_child(__MODULE__, child_spec) do
       {:ok, pid} = result ->
-        Logger.debug("🚀 Started subscription worker",
+        Logger.debug("[DEBUG] Started subscription worker",
           subscription_id: subscription["id"],
           pid: inspect(pid)
         )
@@ -43,7 +43,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
         result
 
       {:error, {:already_started, pid}} ->
-        Logger.debug("🔄 Subscription worker already running",
+        Logger.debug("[DEBUG] Subscription worker already running",
           subscription_id: subscription["id"],
           pid: inspect(pid)
         )
@@ -51,7 +51,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
         {:ok, pid}
 
       {:error, reason} = error ->
-        Logger.error("❌ Failed to start subscription worker",
+        Logger.error("[ERROR] Failed to start subscription worker",
           subscription_id: subscription["id"],
           error: inspect(reason)
         )
@@ -69,7 +69,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
       {:ok, pid} ->
         DynamicSupervisor.terminate_child(__MODULE__, pid)
 
-        Logger.debug("🛑 Stopped subscription worker",
+        Logger.debug("[DEBUG] Stopped subscription worker",
           subscription_id: subscription_id,
           pid: inspect(pid)
         )
@@ -77,7 +77,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
         :ok
 
       :error ->
-        Logger.debug("🤷 Subscription worker not found",
+        Logger.debug("[DEBUG] Subscription worker not found",
           subscription_id: subscription_id
         )
 
@@ -144,7 +144,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
 
   @impl true
   def init(_init_args) do
-    Logger.info("🏗️ SubscriptionSupervisor starting")
+    Logger.info("[INFO] SubscriptionSupervisor starting")
 
     DynamicSupervisor.init(
       strategy: :one_for_one,

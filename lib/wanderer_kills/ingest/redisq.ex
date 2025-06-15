@@ -503,25 +503,18 @@ defmodule WandererKills.Ingest.RedisQ do
   # Broadcast killmail update to PubSub subscribers using enriched killmail
   defp broadcast_killmail_update_enriched(%Killmail{} = killmail) do
     system_id = killmail.system_id
-    killmail_id = killmail.killmail_id
 
-    if system_id do
-      # Track system activity for statistics
-      send(self(), {:track_system, system_id})
+    # Track system activity for statistics
+    send(self(), {:track_system, system_id})
 
-      # Broadcast detailed kill update - convert to map for compatibility
-      killmail_map = Killmail.to_map(killmail)
+    # Broadcast detailed kill update - convert to map for compatibility
+    killmail_map = Killmail.to_map(killmail)
 
-      WandererKills.Subs.SubscriptionManager.broadcast_killmail_update_async(system_id, [
-        killmail_map
-      ])
+    WandererKills.Subs.SubscriptionManager.broadcast_killmail_update_async(system_id, [
+      killmail_map
+    ])
 
-      # Also broadcast kill count update (increment by 1)
-      WandererKills.Subs.SubscriptionManager.broadcast_killmail_count_update_async(system_id, 1)
-    else
-      Logger.warning("[RedisQ] Cannot broadcast killmail update - missing system_id",
-        killmail_id: killmail_id
-      )
-    end
+    # Also broadcast kill count update (increment by 1)
+    WandererKills.Subs.SubscriptionManager.broadcast_killmail_count_update_async(system_id, 1)
   end
 end

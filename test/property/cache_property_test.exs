@@ -10,7 +10,8 @@ defmodule WandererKills.Core.CachePropertyTest do
   alias WandererKills.Core.Cache
 
   describe "cache operation properties" do
-    property "cache put and get operations maintain consistency" do
+    @tag :property
+    test "cache put and get operations maintain consistency" do
       check all(
               key <- WandererKills.Test.SimpleGenerators.cache_key(),
               value <- WandererKills.Test.SimpleGenerators.cache_value(),
@@ -38,7 +39,8 @@ defmodule WandererKills.Core.CachePropertyTest do
       end
     end
 
-    property "cache operations work" do
+    @tag :property
+    test "cache operations work" do
       check all(_ <- constant(:ok), max_runs: 10) do
         WandererKills.TestHelpers.clear_all_caches()
 

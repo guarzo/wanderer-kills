@@ -19,7 +19,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   @behaviour WandererKills.Ingest.ESI.ClientBehaviour
 
   require Logger
-  
+
   alias WandererKills.Core.Cache
   alias WandererKills.Core.Support.Error
 

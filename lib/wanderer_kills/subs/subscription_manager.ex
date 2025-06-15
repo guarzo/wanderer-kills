@@ -82,7 +82,7 @@ defmodule WandererKills.Subs.SubscriptionManager do
 
         case SubscriptionSupervisor.start_subscription(subscription) do
           {:ok, _pid} ->
-            Logger.info("📝 New subscription created via add_subscription",
+            Logger.info("[INFO] New subscription created via add_subscription",
               subscription_id: subscription_id,
               subscriber_id: attrs["subscriber_id"],
               type: type,
@@ -93,7 +93,7 @@ defmodule WandererKills.Subs.SubscriptionManager do
             {:ok, subscription_id}
 
           {:error, reason} ->
-            Logger.error("❌ Failed to create subscription",
+            Logger.error("[ERROR] Failed to create subscription",
               subscription_id: subscription_id,
               error: inspect(reason)
             )
@@ -133,7 +133,7 @@ defmodule WandererKills.Subs.SubscriptionManager do
 
     # Check if all were successful
     if Enum.all?(results, &(&1 == :ok)) do
-      Logger.info("🗑️ Unsubscribed subscriber",
+      Logger.info("[INFO] Unsubscribed subscriber",
         subscriber_id: subscriber_id,
         subscriptions_removed: length(subscriptions_to_remove)
       )
@@ -142,7 +142,7 @@ defmodule WandererKills.Subs.SubscriptionManager do
     else
       failed_count = Enum.count(results, &(&1 != :ok))
 
-      Logger.warning("⚠️ Partial unsubscribe failure",
+      Logger.warning("[WARNING] Partial unsubscribe failure",
         subscriber_id: subscriber_id,
         failed_count: failed_count,
         total_count: length(subscriptions_to_remove)
@@ -159,21 +159,13 @@ defmodule WandererKills.Subs.SubscriptionManager do
   def remove_subscription(subscription_id) do
     case SubscriptionSupervisor.stop_subscription(subscription_id) do
       :ok ->
-        Logger.info("🗑️ Removed subscription", subscription_id: subscription_id)
+        Logger.info("[INFO] Removed subscription", subscription_id: subscription_id)
         :ok
 
       {:error, :not_found} ->
-        Logger.debug("🤷 Subscription not found for removal", subscription_id: subscription_id)
+        Logger.debug("[DEBUG] Subscription not found for removal", subscription_id: subscription_id)
         # Already gone, that's fine
         :ok
-
-      {:error, reason} ->
-        Logger.error("❌ Failed to remove subscription",
-          subscription_id: subscription_id,
-          error: inspect(reason)
-        )
-
-        {:error, reason}
     end
   end
 
@@ -216,10 +208,15 @@ defmodule WandererKills.Subs.SubscriptionManager do
     all_character_ids =
       kills
       |> Enum.flat_map(fn killmail ->
-        [
-          killmail.victim && killmail.victim.character_id
-          | Enum.map(killmail.attackers, & &1.character_id)
-        ]
+        victim = Map.get(killmail, :victim) || Map.get(killmail, "victim")
+        attackers = Map.get(killmail, :attackers) || Map.get(killmail, "attackers") || []
+        
+        victim_id = if victim, do: Map.get(victim, :character_id) || Map.get(victim, "character_id")
+        attacker_ids = Enum.map(attackers, fn attacker ->
+          Map.get(attacker, :character_id) || Map.get(attacker, "character_id")
+        end)
+        
+        [victim_id | attacker_ids]
       end)
       |> Enum.filter(& &1)
       |> Enum.uniq()
@@ -241,7 +238,7 @@ defmodule WandererKills.Subs.SubscriptionManager do
       SubscriptionWorker.handle_killmail_update(subscription_id, system_id, kills)
     end)
 
-    Logger.debug("📡 Broadcast killmail update",
+    Logger.debug("[DEBUG] Broadcast killmail update",
       system_id: system_id,
       killmail_count: length(kills),
       subscription_count: length(all_subscriptions)
@@ -284,14 +281,14 @@ defmodule WandererKills.Subs.SubscriptionManager do
   def clear_all_subscriptions do
     # Get all subscriptions and remove them one by one
     subscriptions = list_subscriptions()
-    
+
     Enum.each(subscriptions, fn subscription ->
       case Map.get(subscription, "id") || Map.get(subscription, :id) do
         nil -> :ok
         id -> remove_subscription(id)
       end
     end)
-    
+
     :ok
   end
 

@@ -10,7 +10,8 @@ defmodule WandererKills.Domain.KillmailPropertyTest do
   alias WandererKills.Domain.Killmail
 
   describe "killmail parsing properties" do
-    property "killmail conversion is consistent" do
+    @tag :property
+    test "killmail conversion is consistent" do
       check all(killmail_data <- WandererKills.Test.SimpleGenerators.simple_killmail()) do
         case Killmail.new(killmail_data) do
           {:ok, killmail} ->
@@ -28,7 +29,8 @@ defmodule WandererKills.Domain.KillmailPropertyTest do
       end
     end
 
-    property "killmail IDs are preserved correctly" do
+    @tag :property
+    test "killmail IDs are preserved correctly" do
       check all(
               killmail_id <- positive_integer(),
               max_runs: 20

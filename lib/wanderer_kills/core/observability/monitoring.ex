@@ -455,13 +455,6 @@ defmodule WandererKills.Core.Observability.Monitoring do
     case WandererKills.Core.Cache.health() do
       {:ok, health} ->
         Map.put(health, :name, cache_name)
-
-      {:error, reason} ->
-        Logger.error(
-          "[Monitoring] Cache health check failed for #{cache_name}: #{inspect(reason)}"
-        )
-
-        %{name: cache_name, healthy: false, status: "error", reason: inspect(reason)}
     end
   rescue
     error ->

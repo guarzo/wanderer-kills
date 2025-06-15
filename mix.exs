@@ -7,6 +7,7 @@ defmodule WandererKills.MixProject do
       version: "0.1.3",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
+      compilers: Mix.compilers() ++ [:boundary],
       deps: deps(),
       description:
         "A standalone service for retrieving and caching EVE Online killmails from zKillboard",
@@ -24,6 +25,15 @@ defmodule WandererKills.MixProject do
         "coveralls.html": :test,
         "coveralls.json": :test,
         "coveralls.xml": :test
+      ],
+
+      # Boundary configuration
+      boundary: [
+        default: [
+          check: [
+            apps: [:wanderer_kills, :wanderer_kills_web]
+          ]
+        ]
       ]
     ]
   end

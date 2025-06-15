@@ -175,10 +175,14 @@ jobs:
           # Try to extract coverage percentage if available
           if [ -f cover/coverage.json ]; then
             COVERAGE=$(jq -r '.percentage // "unknown"' cover/coverage.json 2>/dev/null || echo "unknown")
-            echo "Coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+            if [ "$COVERAGE" = "unknown" ]; then
+              echo "Coverage: unknown (malformed coverage.json)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
           else
-            echo "Coverage: unknown%" >> $GITHUB_STEP_SUMMARY
+            echo "Coverage: unknown (coverage.json not found)" >> $GITHUB_STEP_SUMMARY
             echo "coverage=unknown" >> $GITHUB_OUTPUT
           fi
 
@@ -199,7 +203,9 @@ jobs:
           echo "| Dialyzer | ${{ steps.dialyzer.outputs.dialyzer_status == 'passing' && '✅ Passing (0 warnings)' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests | ${{ steps.tests.outputs.tests_status == 'passing' && '✅ All passing' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.coverage.outputs.coverage }}" != "unknown" ]; then
-            echo "| Coverage | ${{ steps.coverage.outputs.coverage }}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| Coverage | ✅ ${{ steps.coverage.outputs.coverage }}% |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Coverage | ❓ Unknown |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Create JSON summary for potential badge usage

@@ -65,7 +65,7 @@ defmodule WandererKills.Application do
   defp core_children do
     [
       WandererKills.Core.EtsOwner,
-      {Task.Supervisor, name: WandererKills.TaskSupervisor},
+      Task.Supervisor.child_spec(name: WandererKills.TaskSupervisor),
       {Phoenix.PubSub, name: WandererKills.PubSub},
       WandererKills.Subs.Subscriptions.CharacterIndex,
       WandererKills.Subs.Subscriptions.SystemIndex,

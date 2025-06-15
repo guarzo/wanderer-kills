@@ -315,7 +315,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
     if entity_count > 20 do
       require Logger
 
-      Logger.info("📊 Adding subscription with large #{entity_type_string} list",
+      Logger.info("[INFO] Adding subscription with large #{entity_type_string} list",
         subscription_id: subscription_id,
         entity_count: entity_count
       )

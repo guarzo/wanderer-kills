@@ -30,7 +30,7 @@ defmodule WandererKills.Core.Observability.SubscriptionHealthTest do
 
     # Give the system a moment to stabilize
     Process.sleep(10)
-    
+
     :ok
   end
 

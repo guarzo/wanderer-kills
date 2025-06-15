@@ -417,7 +417,7 @@ defmodule WandererKills.Ingest.Http.Client do
     operation = Keyword.get(opts, :operation, :http_request)
     request_opts = build_request_opts(opts)
 
-    Logger.debug("Starting HTTP request", 
+    Logger.debug("Starting HTTP request",
       url: url,
       service: service,
       operation: operation

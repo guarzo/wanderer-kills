@@ -72,14 +72,6 @@ defmodule WandererKills.Core.Observability.CacheHealth do
     case WandererKills.Core.Cache.health() do
       {:ok, health} ->
         Map.put(health, :name, cache_name)
-
-      {:error, reason} ->
-        %{
-          healthy: false,
-          name: cache_name,
-          status: "error",
-          error: inspect(reason)
-        }
     end
   rescue
     error ->
