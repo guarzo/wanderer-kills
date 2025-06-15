@@ -65,11 +65,12 @@ defmodule WandererKills.Domain.Converter do
   @spec maps_to_killmails([map()]) :: {:ok, [Killmail.t()]} | {:error, term()}
   def maps_to_killmails(killmail_maps) when is_list(killmail_maps) do
     results = Enum.map(killmail_maps, &map_to_killmail/1)
-    
-    failed = Enum.filter(results, fn
-      {:error, _} -> true
-      _ -> false
-    end)
+
+    failed =
+      Enum.filter(results, fn
+        {:error, _} -> true
+        _ -> false
+      end)
 
     if Enum.empty?(failed) do
       killmails = Enum.map(results, fn {:ok, km} -> km end)
@@ -107,6 +108,7 @@ defmodule WandererKills.Domain.Converter do
   """
   @spec safe_convert(map() | Killmail.t()) :: Killmail.t() | map()
   def safe_convert(%Killmail{} = killmail), do: killmail
+
   def safe_convert(map) when is_map(map) do
     case map_to_killmail(map) do
       {:ok, killmail} -> killmail
@@ -135,6 +137,7 @@ defmodule WandererKills.Domain.Converter do
   def get_field(%Killmail{} = killmail, field) when is_atom(field) do
     Map.get(killmail, field)
   end
+
   def get_field(map, field) when is_map(map) and is_atom(field) do
     # Try both string and atom keys
     Map.get(map, to_string(field)) || Map.get(map, field)
@@ -170,6 +173,7 @@ defmodule WandererKills.Domain.Converter do
   def update_with_enriched_data(%Killmail{} = killmail, enriched_data) do
     Killmail.update_with_enriched_data(killmail, enriched_data)
   end
+
   def update_with_enriched_data(killmail_map, enriched_data) when is_map(killmail_map) do
     # For maps, merge the enriched data
     Map.merge(killmail_map, enriched_data)

@@ -2,6 +2,21 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
   use ExUnit.Case, async: true
 
   alias WandererKills.Subs.Subscriptions.Filter
+  alias WandererKills.Domain.Killmail
+
+  # Helper to create a valid Killmail struct from test data
+  defp create_test_killmail(attrs) do
+    base_attrs = %{
+      "killmail_id" => attrs["killmail_id"] || 123456789,
+      "kill_time" => attrs["kill_time"] || "2024-01-01T12:00:00Z",
+      "system_id" => attrs["solar_system_id"] || attrs["system_id"] || 30000142,
+      "victim" => attrs["victim"] || %{"character_id" => 999, "damage_taken" => 100},
+      "attackers" => attrs["attackers"] || []
+    }
+    
+    {:ok, killmail} = Killmail.new(base_attrs)
+    killmail
+  end
 
   describe "matches_subscription?/2" do
     test "matches when system_id matches" do
@@ -10,10 +25,10 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => []
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_142,
-        "victim" => %{"character_id" => 999}
-      }
+        "victim" => %{"character_id" => 999, "damage_taken" => 100}
+      })
 
       assert Filter.matches_subscription?(killmail, subscription)
     end
@@ -24,11 +39,11 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => [123, 456]
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_999,
-        "victim" => %{"character_id" => 123},
+        "victim" => %{"character_id" => 123, "damage_taken" => 100},
         "attackers" => []
-      }
+      })
 
       assert Filter.matches_subscription?(killmail, subscription)
     end
@@ -39,13 +54,13 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => [123, 456]
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_999,
-        "victim" => %{"character_id" => 999},
+        "victim" => %{"character_id" => 999, "damage_taken" => 100},
         "attackers" => [
           %{"character_id" => 456}
         ]
-      }
+      })
 
       assert Filter.matches_subscription?(killmail, subscription)
     end
@@ -56,10 +71,10 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => [123]
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_142,
-        "victim" => %{"character_id" => 123}
-      }
+        "victim" => %{"character_id" => 123, "damage_taken" => 100}
+      })
 
       assert Filter.matches_subscription?(killmail, subscription)
     end
@@ -70,11 +85,11 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => [123]
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_999,
-        "victim" => %{"character_id" => 999},
+        "victim" => %{"character_id" => 999, "damage_taken" => 100},
         "attackers" => []
-      }
+      })
 
       refute Filter.matches_subscription?(killmail, subscription)
     end
@@ -85,11 +100,11 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => [123, 456]
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_142,
-        "victim" => %{"character_id" => 999},
+        "victim" => %{"character_id" => 999, "damage_taken" => 100},
         "attackers" => [%{"character_id" => 888}]
-      }
+      })
 
       # Should match because system matches, even though character doesn't
       assert Filter.matches_subscription?(killmail, subscription)
@@ -101,10 +116,10 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => []
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "system_id" => 30_000_142,
-        "victim" => %{"character_id" => 999}
-      }
+        "victim" => %{"character_id" => 999, "damage_taken" => 100}
+      })
 
       assert Filter.matches_subscription?(killmail, subscription)
     end
@@ -115,10 +130,10 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => [123]
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_142,
-        "victim" => %{"character_id" => 123}
-      }
+        "victim" => %{"character_id" => 123, "damage_taken" => 100}
+      })
 
       assert Filter.matches_subscription?(killmail, subscription)
     end
@@ -129,10 +144,10 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => nil
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_142,
-        "victim" => %{"character_id" => 123}
-      }
+        "victim" => %{"character_id" => 123, "damage_taken" => 100}
+      })
 
       assert Filter.matches_subscription?(killmail, subscription)
     end
@@ -143,10 +158,10 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
         "character_ids" => []
       }
 
-      killmail = %{
+      killmail = create_test_killmail(%{
         "solar_system_id" => 30_000_142,
-        "victim" => %{"character_id" => 123}
-      }
+        "victim" => %{"character_id" => 123, "damage_taken" => 100}
+      })
 
       # Empty lists should mean "match everything" - wildcard subscription
       assert Filter.matches_subscription?(killmail, subscription)
@@ -161,9 +176,9 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
       }
 
       killmails = [
-        %{"solar_system_id" => 30_000_142, "killmail_id" => 1},
-        %{"solar_system_id" => 30_000_143, "killmail_id" => 2},
-        %{"solar_system_id" => 30_000_142, "killmail_id" => 3}
+        create_test_killmail(%{"solar_system_id" => 30_000_142, "killmail_id" => 1}),
+        create_test_killmail(%{"solar_system_id" => 30_000_143, "killmail_id" => 2}),
+        create_test_killmail(%{"solar_system_id" => 30_000_142, "killmail_id" => 3})
       ]
 
       filtered = Filter.filter_killmails(killmails, subscription)
@@ -172,7 +187,7 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
       # Sort results to ensure order-independent comparison
       solar_system_ids =
         filtered
-        |> Enum.map(& &1["solar_system_id"])
+        |> Enum.map(& &1.system_id)
         |> Enum.sort()
 
       assert solar_system_ids == [30_000_142, 30_000_142]
@@ -185,27 +200,27 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
       }
 
       killmails = [
-        %{
+        create_test_killmail(%{
           "solar_system_id" => 30_000_142,
-          "victim" => %{"character_id" => 123},
+          "victim" => %{"character_id" => 123, "damage_taken" => 100},
           "killmail_id" => 1
-        },
-        %{
+        }),
+        create_test_killmail(%{
           "solar_system_id" => 30_000_143,
-          "victim" => %{"character_id" => 456},
+          "victim" => %{"character_id" => 456, "damage_taken" => 100},
           "killmail_id" => 2
-        },
-        %{
+        }),
+        create_test_killmail(%{
           "solar_system_id" => 30_000_144,
-          "victim" => %{"character_id" => 789},
+          "victim" => %{"character_id" => 789, "damage_taken" => 100},
           "attackers" => [%{"character_id" => 123}],
           "killmail_id" => 3
-        }
+        })
       ]
 
       filtered = Filter.filter_killmails(killmails, subscription)
       assert length(filtered) == 2
-      assert Enum.map(filtered, & &1["killmail_id"]) == [1, 3]
+      assert Enum.map(filtered, & &1.killmail_id) == [1, 3]
     end
 
     test "returns empty list when no matches" do
@@ -215,8 +230,8 @@ defmodule WandererKills.Subs.Subscriptions.FilterTest do
       }
 
       killmails = [
-        %{"solar_system_id" => 30_000_142, "killmail_id" => 1},
-        %{"solar_system_id" => 30_000_143, "killmail_id" => 2}
+        create_test_killmail(%{"solar_system_id" => 30_000_142, "killmail_id" => 1}),
+        create_test_killmail(%{"solar_system_id" => 30_000_143, "killmail_id" => 2})
       ]
 
       filtered = Filter.filter_killmails(killmails, subscription)

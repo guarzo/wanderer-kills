@@ -1,18 +1,13 @@
 defmodule WandererKills.SubscriptionManagerTest do
-  use ExUnit.Case, async: false
+  use WandererKills.DataCase, async: false
+
+  @moduletag :clear_subscriptions
 
   alias WandererKills.Subs.SubscriptionManager
-
-  import Mox
-
-  setup :verify_on_exit!
 
   setup do
     # The application should have started all necessary processes
     # We don't need to manually manage TaskSupervisor, PubSub, or SubscriptionManager
-
-    # Allow mocks to work in async tasks
-    Mox.set_mox_from_context(self())
 
     # Mock the HTTP client for webhook tests
     WandererKills.Ingest.Http.Client.Mock

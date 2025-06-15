@@ -77,10 +77,10 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
         SubscriptionManager.add_subscription(subscription_attrs, :websocket)
 
       # Verify subscription is stored
-      stats = SubscriptionManager.get_stats()
-      assert stats.websocket_subscription_count == 1
-      assert stats.total_subscribed_characters == 2
-      assert stats.total_subscribed_systems == 1
+      {:ok, stats} = SubscriptionManager.get_stats()
+      assert stats.websocket == 1
+      assert stats.character_index.total_character_entries == 2
+      assert stats.system_index.total_system_entries == 1
 
       # Verify character index is updated
       char_subs_1 = CharacterIndex.find_subscriptions_for_entity(95_465_499)
@@ -169,9 +169,9 @@ defmodule WandererKills.Integration.CharacterSubscriptionIntegrationTest do
       end)
 
       # Verify stats are updated
-      final_stats = SubscriptionManager.get_stats()
-      assert final_stats.websocket_subscription_count == 0
-      assert final_stats.total_subscribed_characters == 0
+      {:ok, final_stats} = SubscriptionManager.get_stats()
+      assert final_stats.websocket == 0
+      assert final_stats.character_index.total_character_entries == 0
     end
 
     test "multiple subscriptions with overlapping characters" do

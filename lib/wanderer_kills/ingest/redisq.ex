@@ -22,10 +22,18 @@ defmodule WandererKills.Ingest.RedisQ do
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 
   # Compile-time configuration
-  @redisq_base_url Application.compile_env(:wanderer_kills, [:redisq, :base_url], "https://zkillredisq.stream/listen.php")
+  @redisq_base_url Application.compile_env(
+                     :wanderer_kills,
+                     [:redisq, :base_url],
+                     "https://zkillredisq.stream/listen.php"
+                   )
   @fast_interval_ms Application.compile_env(:wanderer_kills, [:redisq, :fast_interval_ms], 1_000)
   @idle_interval_ms Application.compile_env(:wanderer_kills, [:redisq, :idle_interval_ms], 5_000)
-  @initial_backoff_ms Application.compile_env(:wanderer_kills, [:redisq, :initial_backoff_ms], 1_000)
+  @initial_backoff_ms Application.compile_env(
+                        :wanderer_kills,
+                        [:redisq, :initial_backoff_ms],
+                        1_000
+                      )
   @max_backoff_ms Application.compile_env(:wanderer_kills, [:redisq, :max_backoff_ms], 30_000)
   @backoff_factor Application.compile_env(:wanderer_kills, [:redisq, :backoff_factor], 2)
   @task_timeout_ms Application.compile_env(:wanderer_kills, [:redisq, :task_timeout_ms], 10_000)
@@ -42,6 +50,7 @@ defmodule WandererKills.Ingest.RedisQ do
   @doc """
   Gets the base URL for RedisQ API calls.
   """
+  @spec base_url() :: String.t()
   def base_url do
     @redisq_base_url
   end
@@ -49,6 +58,7 @@ defmodule WandererKills.Ingest.RedisQ do
   @doc """
   Starts the RedisQ worker as a GenServer.
   """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     Logger.info("[RedisQ] Starting RedisQ worker")
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -62,6 +72,8 @@ defmodule WandererKills.Ingest.RedisQ do
     - `{:ok, :kill_skipped}`
     - `{:error, reason}`
   """
+  @spec poll_and_process(keyword()) ::
+          {:ok, :kill_received | :no_kills | :kill_older | :kill_skipped} | {:error, term()}
   def poll_and_process(opts \\ []) do
     GenServer.call(__MODULE__, {:poll_and_process, opts})
   end
@@ -69,6 +81,7 @@ defmodule WandererKills.Ingest.RedisQ do
   @doc """
   Gets current RedisQ statistics.
   """
+  @spec get_stats() :: map()
   def get_stats do
     GenServer.call(__MODULE__, :get_stats)
   end
@@ -76,6 +89,7 @@ defmodule WandererKills.Ingest.RedisQ do
   @doc """
   Starts listening to RedisQ killmail stream.
   """
+  @spec start_listening() :: :ok | {:error, term()}
   def start_listening do
     url = "#{base_url()}?queueID=wanderer-kills"
 
@@ -497,6 +511,7 @@ defmodule WandererKills.Ingest.RedisQ do
 
       # Broadcast detailed kill update - convert to map for compatibility
       killmail_map = Killmail.to_map(killmail)
+
       WandererKills.Subs.SubscriptionManager.broadcast_killmail_update_async(system_id, [
         killmail_map
       ])

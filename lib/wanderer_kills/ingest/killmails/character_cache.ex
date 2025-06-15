@@ -60,7 +60,6 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
       stats = CharacterCache.get_cache_stats()
   """
 
-  alias WandererKills.Ingest.Killmails.CharacterMatcher
   # Compile-time configuration
   @ttl_ms Application.compile_env(:wanderer_kills, [:character_cache, :ttl_ms], :timer.minutes(5))
   alias WandererKills.Core.Observability.Telemetry
@@ -104,12 +103,12 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
   """
   @spec extract_characters_cached(map()) :: [integer()]
   def extract_characters_cached(killmail) when is_map(killmail) do
-    killmail_id = killmail["killmail_id"]
+    killmail_id = killmail["killmail_id"] || killmail[:killmail_id]
 
     case killmail_id do
       nil ->
-        # No killmail_id, can't cache
-        CharacterMatcher.extract_character_ids(killmail)
+        # No killmail_id, can't cache - extract directly from map
+        extract_character_ids_from_map(killmail)
 
       id ->
         case Cache.get(:character_extraction, id) do
@@ -121,11 +120,29 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
             Telemetry.character_cache(:miss, id, %{killmail_id: id})
 
             # Extract and cache
-            characters = CharacterMatcher.extract_character_ids(killmail)
+            characters = extract_character_ids_from_map(killmail)
             Cache.put(:character_extraction, id, characters)
             characters
         end
     end
+  end
+
+  # Helper function to extract character IDs directly from a map
+  # This is used when we have raw killmail data that hasn't been converted to a struct yet
+  defp extract_character_ids_from_map(killmail) when is_map(killmail) do
+    victim_id = get_in(killmail, ["victim", "character_id"]) || get_in(killmail, [:victim, :character_id])
+    
+    attacker_ids = 
+      (killmail["attackers"] || killmail[:attackers] || [])
+      |> Enum.map(fn attacker ->
+        attacker["character_id"] || attacker[:character_id]
+      end)
+      |> Enum.filter(& &1)
+    
+    [victim_id | attacker_ids]
+    |> Enum.filter(& &1)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   @doc """
@@ -150,7 +167,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
       uncached_results =
         without_ids
         |> Enum.map(fn km ->
-          {System.unique_integer(), CharacterMatcher.extract_character_ids(km)}
+          {System.unique_integer(), extract_character_ids_from_map(km)}
         end)
         |> Map.new()
 
@@ -167,7 +184,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
     killmails
     |> Enum.map(fn killmail ->
       id = killmail["killmail_id"] || System.unique_integer()
-      characters = CharacterMatcher.extract_character_ids(killmail)
+      characters = extract_character_ids_from_map(killmail)
       {id, characters}
     end)
     |> Map.new()
@@ -186,7 +203,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
       id = killmail["killmail_id"]
 
       if !Cache.exists?(:character_extraction, id) do
-        characters = CharacterMatcher.extract_character_ids(killmail)
+        characters = extract_character_ids_from_map(killmail)
         Cache.put(:character_extraction, id, characters)
       end
     end)
@@ -338,7 +355,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
         WandererKills.TaskSupervisor,
         uncached,
         fn {id, km} ->
-          characters = CharacterMatcher.extract_character_ids(km)
+          characters = extract_character_ids_from_map(km)
           put_in_cache(id, characters)
           {id, characters}
         end,

@@ -11,6 +11,34 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
 
   alias WandererKills.Subs.SubscriptionManager
   alias WandererKills.Core.Storage.KillmailStore
+  alias WandererKills.Domain.Killmail
+
+  # Helper to create test killmail structs
+  defp create_test_killmail(attrs) do
+    base_attrs = %{
+      "killmail_id" => attrs["killmail_id"] || 123456789,
+      "kill_time" => attrs["kill_time"] || "2024-01-01T12:00:00Z",
+      "system_id" => attrs["solar_system_id"] || attrs["system_id"] || 30000142,
+      "victim" => ensure_valid_victim(attrs["victim"]),
+      "attackers" => ensure_valid_attackers(attrs["attackers"] || [])
+    }
+    
+    {:ok, killmail} = Killmail.new(base_attrs)
+    killmail
+  end
+
+  defp ensure_valid_victim(victim) when is_map(victim) do
+    victim
+    |> Map.put_new("damage_taken", 100)
+  end
+
+  defp ensure_valid_attackers(attackers) when is_list(attackers) do
+    Enum.map(attackers, fn attacker ->
+      attacker
+      |> Map.put_new("damage_done", 100)
+      |> Map.put_new("final_blow", false)
+    end)
+  end
 
   setup do
     # Clear all state without restarting the application
@@ -41,7 +69,7 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
       assert is_binary(subscription_id)
 
       # Create test killmails
-      killmail_with_victim_match = %{
+      killmail_with_victim_match = create_test_killmail(%{
         "killmail_id" => 123_456,
         "solar_system_id" => 30_000_999,
         "kill_time" => "2024-01-01T12:00:00Z",
@@ -53,9 +81,8 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
         },
         "attackers" => [
           %{"character_id" => 111_111, "ship_type_id" => 621}
-        ],
-        "zkb" => %{"totalValue" => 10_000_000}
-      }
+        ]
+      })
 
       killmail_with_attacker_match = %{
         "killmail_id" => 123_457,

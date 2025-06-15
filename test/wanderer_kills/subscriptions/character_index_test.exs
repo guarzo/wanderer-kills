@@ -1,18 +1,9 @@
 defmodule WandererKills.Subs.Subscriptions.CharacterIndexTest do
-  use ExUnit.Case, async: false
+  use WandererKills.DataCase, async: false
+
+  @moduletag :clear_indexes
 
   alias WandererKills.Subs.Subscriptions.CharacterIndex
-
-  setup do
-    # Ensure clean state
-    CharacterIndex.clear()
-
-    on_exit(fn ->
-      CharacterIndex.clear()
-    end)
-
-    :ok
-  end
 
   describe "add_subscription/2" do
     test "adds subscription with single character" do

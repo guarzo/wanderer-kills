@@ -17,32 +17,21 @@ defmodule WandererKills.Core.Observability.SubscriptionHealthTest do
   alias WandererKills.Subs.Subscriptions.{CharacterIndex, SystemIndex}
 
   setup do
-    # Handle already started GenServers
-    char_pid =
-      case CharacterIndex.start_link([]) do
-        {:ok, pid} ->
-          on_exit(fn -> GenServer.stop(pid) end)
-          pid
+    # Clear both indexes if they're available
+    # In parallel tests, the indexes might not be immediately available
+    try do
+      CharacterIndex.clear()
+      SystemIndex.clear()
+    rescue
+      _ -> :ok
+    catch
+      :exit, _ -> :ok
+    end
 
-        {:error, {:already_started, pid}} ->
-          pid
-      end
-
-    sys_pid =
-      case SystemIndex.start_link([]) do
-        {:ok, pid} ->
-          on_exit(fn -> GenServer.stop(pid) end)
-          pid
-
-        {:error, {:already_started, pid}} ->
-          pid
-      end
-
-    # Clear both indexes
-    CharacterIndex.clear()
-    SystemIndex.clear()
-
-    %{char_pid: char_pid, sys_pid: sys_pid}
+    # Give the system a moment to stabilize
+    Process.sleep(10)
+    
+    :ok
   end
 
   describe "unified health check behaviour" do

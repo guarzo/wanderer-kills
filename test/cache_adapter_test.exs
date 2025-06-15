@@ -1,7 +1,5 @@
 defmodule WandererKills.CacheAdapterTest do
-  use ExUnit.Case, async: false
-
-  alias WandererKills.Core.Cache
+  use WandererKills.TestCase, async: false
 
   test "basic cache operations work" do
     # Put a value

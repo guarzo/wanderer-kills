@@ -14,7 +14,7 @@ defmodule WandererKills.Performance.CharacterSubscriptionPerformanceTest do
   alias WandererKills.Ingest.Killmails.{CharacterCache, BatchProcessor, CharacterMatcher}
 
   describe "large character list performance" do
-    @describetag :performance
+    @describetag :perf
 
     setup do
       # Ensure cache is available without clearing it

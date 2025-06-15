@@ -45,9 +45,9 @@ defmodule WandererKills.MixProject do
 
   defp deps do
     [
-      # Phoenix framework
-      {:phoenix, "~> 1.7.14"},
-      {:plug_cowboy, "~> 2.7"},
+      # Phoenix framework (optional - can be excluded for headless operation)
+      {:phoenix, "~> 1.7.14", optional: true},
+      {:plug_cowboy, "~> 2.7", optional: true},
 
       # JSON parsing
       {:jason, "~> 1.4"},
@@ -78,7 +78,10 @@ defmodule WandererKills.MixProject do
       {:mox, "~> 1.2.0", only: :test},
 
       # Code coverage
-      {:excoveralls, "~> 0.18", only: :test}
+      {:excoveralls, "~> 0.18", only: :test},
+
+      # Property-based testing
+      {:stream_data, "~> 0.6", only: [:test, :dev]}
     ]
   end
 
@@ -98,7 +101,12 @@ defmodule WandererKills.MixProject do
         "dialyzer"
       ],
       "test.coverage": ["coveralls.html"],
-      "test.coverage.ci": ["coveralls.json"]
+      "test.coverage.ci": ["coveralls.json"],
+      "test.headless": [
+        "test --config config/test_headless.exs --require test/test_helper_headless.exs"
+      ],
+      "test.core": ["test.headless test/wanderer_kills/"],
+      "test.perf": ["test --include perf test/performance/"]
     ]
   end
 end

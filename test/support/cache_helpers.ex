@@ -21,6 +21,12 @@ defmodule WandererKills.Test.CacheHelpers do
     # Clear the actual wanderer_cache that's running
     safe_clear_cache(:wanderer_cache)
 
+    # Clean up any test-specific ETS tables if we have a test ID
+    case Process.get(:test_unique_id) do
+      nil -> :ok
+      test_id -> WandererKills.Test.EtsHelpers.cleanup_test_tables(test_id)
+    end
+
     :ok
   end
 

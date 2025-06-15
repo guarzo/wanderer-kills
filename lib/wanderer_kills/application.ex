@@ -35,27 +35,8 @@ defmodule WandererKills.Application do
 
     # 3) Build children list
     children =
-      ([
-         WandererKills.Core.EtsOwner,
-         {Task.Supervisor, name: WandererKills.TaskSupervisor},
-         {Phoenix.PubSub, name: WandererKills.PubSub},
-         WandererKills.Subs.Subscriptions.CharacterIndex,
-         WandererKills.Subs.Subscriptions.SystemIndex,
-         {WandererKills.Subs.SubscriptionManager, [pubsub_name: WandererKills.PubSub]},
-         WandererKills.Ingest.RateLimiter,
-         WandererKills.Ingest.HistoricalFetcher
-       ] ++
-         cache_children() ++
-         [
-           WandererKills.Core.Observability.ApiTracker,
-           WandererKills.Core.Observability.Metrics,
-           WandererKills.Core.Observability.Monitoring,
-           WandererKills.Core.Observability.TelemetryMetrics,
-           WandererKills.Core.Observability.WebSocketStats,
-           WandererKills.Core.Observability.UnifiedStatus,
-           WandererKillsWeb.Endpoint,
-           {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
-         ])
+      (core_children() ++ cache_children() ++ observability_children())
+      |> maybe_web_components()
       |> maybe_redisq()
 
     # 4) Start the supervisor
@@ -78,6 +59,35 @@ defmodule WandererKills.Application do
         Logger.error("[Application] Supervisor failed to start: #{inspect(error)}")
         error
     end
+  end
+
+  # Core OTP processes that don't depend on web functionality
+  defp core_children do
+    [
+      WandererKills.Core.EtsOwner,
+      {Task.Supervisor, name: WandererKills.TaskSupervisor},
+      {Phoenix.PubSub, name: WandererKills.PubSub},
+      WandererKills.Subs.Subscriptions.CharacterIndex,
+      WandererKills.Subs.Subscriptions.SystemIndex,
+      WandererKills.Subs.SubscriptionRegistry,
+      WandererKills.Subs.SubscriptionSupervisor,
+      {WandererKills.Subs.SubscriptionManager, [pubsub_name: WandererKills.PubSub]},
+      WandererKills.Ingest.RateLimiter,
+      WandererKills.Ingest.HistoricalFetcher
+    ]
+  end
+
+  # Observability and monitoring processes
+  defp observability_children do
+    [
+      WandererKills.Core.Observability.ApiTracker,
+      WandererKills.Core.Observability.Metrics,
+      WandererKills.Core.Observability.Monitoring,
+      WandererKills.Core.Observability.TelemetryMetrics,
+      WandererKills.Core.Observability.WebSocketStats,
+      WandererKills.Core.Observability.UnifiedStatus,
+      {:telemetry_poller, measurements: telemetry_measurements(), period: :timer.seconds(10)}
+    ]
   end
 
   # Create a single Cachex instance with namespace support
@@ -112,11 +122,29 @@ defmodule WandererKills.Application do
     ]
   end
 
+  # Conditionally include web components based on configuration
+  defp maybe_web_components(children) do
+    if start_web_components?() do
+      children ++ [WandererKillsWeb.Endpoint]
+    else
+      children
+    end
+  end
+
   defp maybe_redisq(children) do
     if Config.start_redisq?() do
       children ++ [WandererKills.Ingest.RedisQ]
     else
       children
+    end
+  end
+
+  # Check if web components should start
+  # Can be disabled by setting WANDERER_KILLS_HEADLESS=true or :wanderer_kills, :headless = true
+  defp start_web_components? do
+    case System.get_env("WANDERER_KILLS_HEADLESS") do
+      "true" -> false
+      _ -> !Application.get_env(:wanderer_kills, :headless, false)
     end
   end
 

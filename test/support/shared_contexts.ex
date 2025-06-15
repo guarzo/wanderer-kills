@@ -134,6 +134,30 @@ defmodule WandererKills.Test.SharedContexts do
   end
 
   @doc """
+  Sets up unique ETS tables for parallel testing.
+
+  Creates test-specific ETS table names to avoid conflicts
+  between parallel test runs.
+
+  Returns:
+  - `%{test_id: unique_id}` - Unique test identifier
+  """
+  def with_unique_tables(_context \\ %{}) do
+    unique_id = System.unique_integer([:positive])
+    test_pid = self()
+
+    # Store the unique ID in the process dictionary for easy access
+    Process.put(:test_unique_id, unique_id)
+
+    on_exit(fn ->
+      # Clean up any test-specific tables when test exits
+      cleanup_unique_tables(unique_id)
+    end)
+
+    %{test_id: unique_id, test_pid: test_pid}
+  end
+
+  @doc """
   Comprehensive test setup combining common requirements.
 
   This function sets up:
@@ -167,8 +191,8 @@ defmodule WandererKills.Test.SharedContexts do
     setup_default_esi_stubs()
 
     %{
-      http_mock: WandererKills.Http.ClientMock,
-      esi_mock: WandererKills.ESI.ClientMock
+      http_mock: WandererKills.Ingest.Http.Client.Mock,
+      esi_mock: EsiClientMock
     }
   end
 
@@ -237,13 +261,49 @@ defmodule WandererKills.Test.SharedContexts do
   end
 
   @doc """
+  Sets up a supervised GenServer with a unique name for parallel testing.
+
+  Options:
+  - `:module` - The GenServer module to start
+  - `:name` - Base name for the server (will be made unique)
+  - `:args` - Arguments to pass to start_link
+
+  Returns:
+  - `%{server: pid, server_name: unique_name}` - The GenServer PID and unique name
+  """
+  def with_unique_supervised_server(context) do
+    module = context[:module] || raise "Must specify :module"
+    base_name = context[:name] || module
+    args = context[:args] || []
+
+    # Create unique name for this test
+    test_id = WandererKills.Test.EtsHelpers.get_test_id()
+    unique_name = :"#{base_name}_test_#{test_id}"
+
+    # Add the unique name to the args if it's a keyword list
+    final_args =
+      case args do
+        [_ | _] = keyword_args when is_list(keyword_args) ->
+          Keyword.put(keyword_args, :name, unique_name)
+
+        _ ->
+          [name: unique_name] ++ List.wrap(args)
+      end
+
+    {:ok, pid} = start_supervised({module, final_args})
+
+    %{server: pid, server_name: unique_name}
+  end
+
+  @doc """
   Sets up Phoenix PubSub for testing.
 
   Returns:
   - `%{pubsub: pubsub_name}` - The PubSub instance name
   """
   def with_pubsub(_context \\ %{}) do
-    pubsub_name = Module.safe_concat([TestPubSub, System.unique_integer()])
+    test_id = WandererKills.Test.EtsHelpers.get_test_id()
+    pubsub_name = :"TestPubSub_#{test_id}"
 
     {:ok, _pid} =
       Phoenix.PubSub.Supervisor.start_link(
@@ -354,14 +414,8 @@ defmodule WandererKills.Test.SharedContexts do
   # Private HTTP mocking helper functions
 
   defp setup_default_http_stubs do
-    # These are basic stubs that can be overridden in specific tests
-    # They prevent errors when HTTP calls are made but not expected
-
-    # Stub the HTTP client mock to return not_found for any request
-    Mox.stub(WandererKills.Ingest.Http.Client.Mock, :get_with_rate_limit, fn _url, _opts ->
-      {:error, :not_found}
-    end)
-
+    # No longer setting up global stubs for better test isolation
+    # Tests should use explicit expectations with WandererKills.Test.HttpHelpers.expect_http_* functions
     :ok
   end
 
@@ -380,6 +434,30 @@ defmodule WandererKills.Test.SharedContexts do
   defp setup_http_expectations(_zkb_response) do
     # Set up ZKB HTTP expectations
     # This would configure the HTTP mock to return the specified response
+    :ok
+  end
+
+  # Cleans up test-specific ETS tables by unique ID.
+  defp cleanup_unique_tables(unique_id) do
+    # Generate the table names that would have been created for this test
+    test_table_names = [
+      :"killmails_#{unique_id}",
+      :"system_killmails_#{unique_id}",
+      :"system_kill_counts_#{unique_id}",
+      :"system_fetch_timestamps_#{unique_id}",
+      :"killmail_events_#{unique_id}",
+      :"client_offsets_#{unique_id}",
+      :"counters_#{unique_id}"
+    ]
+
+    # Delete each table if it exists
+    Enum.each(test_table_names, fn table_name ->
+      case :ets.info(table_name) do
+        :undefined -> :ok
+        _ -> :ets.delete(table_name)
+      end
+    end)
+
     :ok
   end
 end

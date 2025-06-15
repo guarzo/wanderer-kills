@@ -57,7 +57,8 @@ defmodule WandererKills.Ingest.Killmails.CharacterMatcher do
   def killmail_has_characters?(_killmail, []), do: false
   def killmail_has_characters?(_killmail, nil), do: false
 
-  def killmail_has_characters?(%Killmail{} = killmail, character_ids) when is_list(character_ids) do
+  def killmail_has_characters?(%Killmail{} = killmail, character_ids)
+      when is_list(character_ids) do
     # Use struct fields directly for better performance
     start_time = System.monotonic_time()
     character_set = MapSet.new(character_ids)
@@ -108,11 +109,10 @@ defmodule WandererKills.Ingest.Killmails.CharacterMatcher do
   def extract_character_ids(%Killmail{} = killmail) do
     victim_id = killmail.victim && killmail.victim.character_id
     attacker_ids = Enum.map(killmail.attackers, & &1.character_id)
-    
+
     [victim_id | attacker_ids]
     |> Enum.filter(& &1)
     |> Enum.uniq()
     |> Enum.sort()
   end
-
 end

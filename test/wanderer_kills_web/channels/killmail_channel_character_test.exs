@@ -31,11 +31,25 @@ defmodule WandererKillsWeb.KillmailChannelCharacterTest do
   setup do
     # Clear caches and indexes
     WandererKills.TestHelpers.clear_all_caches()
-    WandererKills.Subs.Subscriptions.CharacterIndex.clear()
-    WandererKills.Subs.Subscriptions.SystemIndex.clear()
+    
+    # Try to clear indexes if they're available
+    try do
+      WandererKills.Subs.Subscriptions.CharacterIndex.clear()
+      WandererKills.Subs.Subscriptions.SystemIndex.clear()
+    rescue
+      _ -> :ok
+    catch
+      :exit, _ -> :ok
+    end
 
     # Clear all subscriptions
-    WandererKills.Subs.SubscriptionManager.clear_all_subscriptions()
+    try do
+      WandererKills.Subs.SubscriptionManager.clear_all_subscriptions()
+    rescue
+      _ -> :ok
+    catch
+      :exit, _ -> :ok
+    end
 
     # Create a socket with unique user_id for each test
     unique_user_id = "test_user_#{System.unique_integer([:positive])}"

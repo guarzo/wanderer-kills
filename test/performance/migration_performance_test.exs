@@ -43,6 +43,7 @@ defmodule MigrationPerformanceTest do
   end
 
   describe "character index performance" do
+    @describetag :perf
     test "bulk subscription addition performance" do
       {time, _result} =
         :timer.tc(fn ->
@@ -135,6 +136,7 @@ defmodule MigrationPerformanceTest do
   end
 
   describe "system index performance" do
+    @describetag :perf
     test "bulk subscription addition performance" do
       {time, _result} =
         :timer.tc(fn ->
@@ -202,6 +204,7 @@ defmodule MigrationPerformanceTest do
   end
 
   describe "memory efficiency" do
+    @describetag :perf
     test "memory usage is reasonable" do
       # Add substantial test data
       for i <- 1..500 do

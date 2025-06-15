@@ -21,6 +21,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
   """
   @spec build_killmail_data(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
   def build_killmail_data(%Killmail{} = killmail), do: {:ok, killmail}
+
   def build_killmail_data(killmail) do
     # Use the original string time, not the parsed DateTime
     kill_time = killmail["kill_time"] || killmail["killmail_time"]
@@ -61,6 +62,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
       {:error, _} -> {:error, Error.killmail_error(:merge_failed, "Failed to merge zkb data")}
     end
   end
+
   def merge_killmail_data(%{"killmail_id" => id} = esi_data, %{"zkb" => zkb})
       when is_integer(id) and is_map(zkb) do
     case Transformations.get_killmail_time(esi_data) do

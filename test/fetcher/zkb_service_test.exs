@@ -1,21 +1,15 @@
 defmodule WandererKills.Ingest.Killmails.ZkbClientTest do
-  use ExUnit.Case, async: false
-  import Mox
+  use WandererKills.DataCase, async: false
 
   @moduletag :external
 
   alias WandererKills.Ingest.Killmails.ZkbClient, as: ZKB
-  alias WandererKills.TestHelpers
   alias WandererKills.Ingest.Http.Client.Mock, as: HttpClientMock
 
   # Get base URL from config
   @base_url Application.compile_env(:wanderer_kills, :zkb)[:base_url]
 
-  setup :verify_on_exit!
-
   setup do
-    TestHelpers.clear_all_caches()
-
     # Configure the HTTP client to use the mock
     Application.put_env(:wanderer_kills, :http_client, HttpClientMock)
 

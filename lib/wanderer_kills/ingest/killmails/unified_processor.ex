@@ -52,13 +52,17 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   end
 
   # Pattern match for partial killmails (zkb data but no victim/attackers)
-  defp determine_and_process_killmail(%{"zkb" => _zkb} = killmail, cutoff_time, opts) 
+  defp determine_and_process_killmail(%{"zkb" => _zkb} = killmail, cutoff_time, opts)
        when not is_map_key(killmail, "victim") and not is_map_key(killmail, "attackers") do
     process_partial(killmail, cutoff_time, opts)
   end
 
   # Pattern match for full killmails (has victim and attackers)
-  defp determine_and_process_killmail(%{"victim" => _, "attackers" => _} = killmail, cutoff_time, opts) 
+  defp determine_and_process_killmail(
+         %{"victim" => _, "attackers" => _} = killmail,
+         cutoff_time,
+         opts
+       )
        when is_map_key(killmail, "system_id") or is_map_key(killmail, "solar_system_id") do
     process_full(killmail, cutoff_time, opts)
   end
@@ -126,7 +130,6 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
 
   # Private functions
 
-
   defp process_partial(partial, cutoff_time, opts) do
     case {partial["killmail_id"], partial["zkb"]} do
       {id, zkb} when is_integer(id) and is_map(zkb) ->
@@ -174,7 +177,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   defp store_killmail_async(killmail) do
     # Convert struct to map for storage if needed
     killmail_map = ensure_map(killmail)
-    
+
     case extract_system_id(killmail_map) do
       {:ok, system_id} ->
         Task.Supervisor.start_child(WandererKills.TaskSupervisor, fn ->
@@ -289,13 +292,16 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   defp convert_to_structs(killmails) do
     Enum.map(killmails, fn killmail ->
       case Killmail.new(killmail) do
-        {:ok, struct} -> struct
-        {:error, reason} -> 
+        {:ok, struct} ->
+          struct
+
+        {:error, reason} ->
           # Log error but don't fail the entire batch
-          log_error("Failed to convert killmail to struct", 
+          log_error("Failed to convert killmail to struct",
             killmail_id: killmail["killmail_id"],
             error: reason
           )
+
           raise "Failed to convert killmail #{killmail["killmail_id"]} to struct: #{inspect(reason)}"
       end
     end)

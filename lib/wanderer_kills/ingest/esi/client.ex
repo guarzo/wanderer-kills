@@ -28,7 +28,11 @@ defmodule WandererKills.Ingest.ESI.Client do
 
   # Compile-time configuration
   @esi_concurrency Application.compile_env(:wanderer_kills, [:esi, :batch_concurrency], 10)
-  @esi_base_url Application.compile_env(:wanderer_kills, [:esi, :base_url], "https://esi.evetech.net/latest")
+  @esi_base_url Application.compile_env(
+                  :wanderer_kills,
+                  [:esi, :base_url],
+                  "https://esi.evetech.net/latest"
+                )
   @esi_timeout_ms Application.compile_env(:wanderer_kills, [:esi, :request_timeout_ms], 30_000)
 
   # ============================================================================
@@ -341,7 +345,8 @@ defmodule WandererKills.Ingest.ESI.Client do
      })}
   end
 
-  defp handle_killmail_response({:error, %{status: status}}, killmail_id, killmail_hash) when status >= 500 do
+  defp handle_killmail_response({:error, %{status: status}}, killmail_id, killmail_hash)
+       when status >= 500 do
     {:error,
      Error.esi_error(:server_error, "ESI server error", true, %{
        killmail_id: killmail_id,
@@ -484,7 +489,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   end
 
   defp esi_base_url, do: @esi_base_url
-  
+
   defp http_client do
     Application.get_env(:wanderer_kills, :http, [])[:client] || WandererKills.Ingest.Http.Client
   end

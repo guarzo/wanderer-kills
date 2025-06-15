@@ -12,7 +12,11 @@ defmodule WandererKills.Core.Systems.KillmailProcessor do
 
   # Compile-time configuration with sensible defaults
   @cutoff_hours Application.compile_env(:wanderer_kills, [:killmail_manager, :cutoff_hours], 24)
-  @max_concurrency Application.compile_env(:wanderer_kills, [:killmail_manager, :max_concurrency], 10)
+  @max_concurrency Application.compile_env(
+                     :wanderer_kills,
+                     [:killmail_manager, :max_concurrency],
+                     10
+                   )
 
   @doc """
   Process and cache killmails for a specific system.

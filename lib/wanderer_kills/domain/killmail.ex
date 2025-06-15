@@ -115,8 +115,9 @@ defmodule WandererKills.Domain.Killmail do
     Updated killmail struct
   """
   @spec update_with_enriched_data(t(), map()) :: t()
-  def update_with_enriched_data(%__MODULE__{} = killmail, enriched_data) when is_map(enriched_data) do
-    victim = 
+  def update_with_enriched_data(%__MODULE__{} = killmail, enriched_data)
+      when is_map(enriched_data) do
+    victim =
       if enriched_victim = enriched_data["victim"] do
         Victim.update_with_enriched_data(killmail.victim, enriched_victim)
       else
@@ -136,11 +137,13 @@ defmodule WandererKills.Domain.Killmail do
   # Private functions
 
   defp build_victim(nil), do: {:error, :missing_victim}
+
   defp build_victim(victim_data) when is_map(victim_data) do
     Victim.new(victim_data)
   end
 
   defp build_attackers(nil), do: {:ok, []}
+
   defp build_attackers(attackers) when is_list(attackers) do
     attackers
     |> Enum.map(&Attacker.new/1)
@@ -155,13 +158,14 @@ defmodule WandererKills.Domain.Killmail do
   end
 
   defp build_zkb(nil), do: {:ok, nil}
+
   defp build_zkb(zkb_data) when is_map(zkb_data) do
     ZkbMetadata.new(zkb_data)
   end
 
   defp parse_kill_time(attrs) do
     time_str = get_field(attrs, ["kill_time", :kill_time, "killmail_time", :killmail_time])
-    
+
     case time_str do
       nil -> {:error, :missing_kill_time}
       str when is_binary(str) -> {:ok, str}
@@ -182,7 +186,7 @@ defmodule WandererKills.Domain.Killmail do
     errors = if is_nil(killmail.killmail_id), do: [:missing_killmail_id | errors], else: errors
     errors = if is_nil(killmail.kill_time), do: [:missing_kill_time | errors], else: errors
     errors = if is_nil(killmail.system_id), do: [:missing_system_id | errors], else: errors
-    
+
     case errors do
       [] -> {:ok, killmail}
       _ -> {:error, {:validation_failed, errors}}

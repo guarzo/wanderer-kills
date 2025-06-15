@@ -139,7 +139,7 @@ defmodule WandererKillsWeb.SubscriptionController do
 
   defp validate_create_params(params) do
     attrs = normalize_subscription_attrs(params)
-    
+
     # Use a validation pipeline with early exit
     [
       &validate_required_fields/1,

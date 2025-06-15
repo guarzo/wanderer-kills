@@ -15,7 +15,11 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Enricher do
   alias WandererKills.Domain.Killmail
 
   # Compile-time configuration
-  @min_attackers_for_parallel Application.compile_env(:wanderer_kills, [:enricher, :min_attackers_for_parallel], 3)
+  @min_attackers_for_parallel Application.compile_env(
+                                :wanderer_kills,
+                                [:enricher, :min_attackers_for_parallel],
+                                3
+                              )
   @max_concurrency Application.compile_env(:wanderer_kills, [:enricher, :max_concurrency], 10)
   @task_timeout_ms Application.compile_env(:wanderer_kills, [:enricher, :task_timeout_ms], 30_000)
 
@@ -38,8 +42,10 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Enricher do
   @spec enrich_killmail(map() | Killmail.t()) :: {:ok, map() | Killmail.t()} | {:error, term()}
   def enrich_killmail(%Killmail{} = killmail) do
     # For structs, enrichment should update the nested structs
-    {:ok, killmail}  # TODO: Implement struct enrichment
+    # TODO: Implement struct enrichment
+    {:ok, killmail}
   end
+
   def enrich_killmail(killmail) do
     with {:ok, killmail} <- enrich_victim(killmail),
          {:ok, killmail} <- enrich_attackers(killmail),

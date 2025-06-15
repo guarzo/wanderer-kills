@@ -39,11 +39,16 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Validator do
     # Structs are already validated during construction
     # Convert to map temporarily for time validation
     killmail_map = Killmail.to_map(killmail)
+
     case TimeFilters.validate_cutoff_time(killmail_map, cutoff_time) do
-      :ok -> {:ok, killmail}
-      {:error, _} -> {:error, Error.killmail_error(:kill_too_old, "Killmail is older than cutoff time")}
+      :ok ->
+        {:ok, killmail}
+
+      {:error, _} ->
+        {:error, Error.killmail_error(:kill_too_old, "Killmail is older than cutoff time")}
     end
   end
+
   def validate_killmail(killmail, cutoff_time) when is_map(killmail) do
     result = %{
       valid: true,

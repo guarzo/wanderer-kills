@@ -1,16 +1,6 @@
 defmodule WandererKills.CacheKeyTest do
   # Disable async to avoid cache interference
-  use ExUnit.Case, async: false
-  alias WandererKills.Core.Cache
-  alias WandererKills.TestHelpers
-
-  setup do
-    TestHelpers.clear_all_caches()
-
-    on_exit(fn ->
-      TestHelpers.clear_all_caches()
-    end)
-  end
+  use WandererKills.TestCase, async: false
 
   describe "cache key patterns" do
     test "killmail keys follow expected pattern" do

@@ -13,7 +13,7 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
   # Removed unused aliases
   alias WandererKills.Ingest.Killmails.{ZkbClient, UnifiedProcessor}
   alias WandererKills.Core.Support.{SupervisedTask, Error}
-  alias WandererKillsWeb.Endpoint
+  # Conditional web dependency
 
   @type preload_request :: %{
           subscription_id: String.t(),
@@ -538,7 +538,7 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
   defp deliver_batch(subscription_id, kills) do
     # Use Phoenix PubSub to broadcast to the subscription's topic
     # The WebSocket channel will handle delivery if connected
-    Endpoint.broadcast("killmails:#{subscription_id}", "preload_batch", %{
+    safe_broadcast("killmails:#{subscription_id}", "preload_batch", %{
       kills: kills,
       batch_size: length(kills)
     })
@@ -548,7 +548,7 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
   end
 
   defp send_preload_status(subscription_id, status) do
-    Endpoint.broadcast("killmails:#{subscription_id}", "preload_status", status)
+    safe_broadcast("killmails:#{subscription_id}", "preload_status", status)
   end
 
   defp send_preload_complete(subscription_id, request) do
@@ -558,7 +558,23 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
       errors: request.progress.errors
     }
 
-    Endpoint.broadcast("killmails:#{subscription_id}", "preload_complete", status)
+    safe_broadcast("killmails:#{subscription_id}", "preload_complete", status)
+  end
+
+  # Safely broadcast only if web endpoint is available
+  defp safe_broadcast(topic, event, payload) do
+    case Code.ensure_loaded(WandererKillsWeb.Endpoint) do
+      {:module, _} ->
+        WandererKillsWeb.Endpoint.broadcast(topic, event, payload)
+
+      {:error, _} ->
+        Logger.debug("Skipping broadcast - web endpoint not available",
+          topic: topic,
+          event: event
+        )
+
+        :ok
+    end
   end
 
   defp get_subscription_from_manager(subscription_id) do

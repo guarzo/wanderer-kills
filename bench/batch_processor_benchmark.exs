@@ -2,7 +2,7 @@ defmodule WandererKills.Benchmarks.BatchProcessorBenchmark do
   @moduledoc """
   Benchmarks for the batch processor with realistic data volumes.
 
-  Run with: mix run test/benchmarks/batch_processor_benchmark.exs
+  Run with: mix run bench/batch_processor_benchmark.exs
   """
 
   alias WandererKills.Ingest.Killmails.BatchProcessor

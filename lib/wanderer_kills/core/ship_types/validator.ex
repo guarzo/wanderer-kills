@@ -98,9 +98,10 @@ defmodule WandererKills.Core.ShipTypes.Validator do
           {:ok, [term()], map()} | {:error, Error.t()}
   def validate_batch(records, validator, opts \\ []) when is_list(records) do
     # Get validation thresholds from options or configuration
-    validation_config = Application.get_env(:wanderer_kills, :ship_types, [])
-                       |> Keyword.get(:validation, [])
-    
+    validation_config =
+      Application.get_env(:wanderer_kills, :ship_types, [])
+      |> Keyword.get(:validation, [])
+
     min_validation_rate =
       Keyword.get(opts, :min_validation_rate) ||
         Keyword.get(validation_config, :min_validation_rate, 0.5)

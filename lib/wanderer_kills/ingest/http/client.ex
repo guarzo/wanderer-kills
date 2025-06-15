@@ -49,7 +49,11 @@ defmodule WandererKills.Ingest.Http.Client do
   alias WandererKills.Core.Observability.Telemetry
 
   # Compile-time configuration
-  @default_timeout_ms Application.compile_env(:wanderer_kills, [:http, :default_timeout_ms], 10_000)
+  @default_timeout_ms Application.compile_env(
+                        :wanderer_kills,
+                        [:http, :default_timeout_ms],
+                        10_000
+                      )
   @esi_timeout_ms Application.compile_env(:wanderer_kills, [:esi, :request_timeout_ms], 30_000)
   @max_retries Application.compile_env(:wanderer_kills, [:http, :retry, :max_retries], 3)
   @base_delay Application.compile_env(:wanderer_kills, [:http, :retry, :base_delay], 1000)
@@ -188,16 +192,25 @@ defmodule WandererKills.Ingest.Http.Client do
   """
   @spec post(url(), map(), opts()) :: response()
   def post(url, body, options \\ []) do
-    default_headers = [{"content-type", "application/json"}]
-    headers = Keyword.get(options, :headers, []) ++ default_headers
-    opts = Keyword.put(options, :headers, headers)
+    # Check if we should use a mock client
+    case http_client() do
+      __MODULE__ ->
+        # Use the real implementation
+        default_headers = [{"content-type", "application/json"}]
+        headers = Keyword.get(options, :headers, []) ++ default_headers
+        opts = Keyword.put(options, :headers, headers)
 
-    Retry.retry_with_backoff(
-      fn ->
-        do_post(url, body, opts)
-      end,
-      operation_name: "HTTP POST #{url}"
-    )
+        Retry.retry_with_backoff(
+          fn ->
+            do_post(url, body, opts)
+          end,
+          operation_name: "HTTP POST #{url}"
+        )
+
+      mock_client ->
+        # Use mock implementation directly
+        mock_client.post(url, body, options)
+    end
   end
 
   # ============================================================================

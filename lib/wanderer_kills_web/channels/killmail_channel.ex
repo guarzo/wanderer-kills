@@ -636,11 +636,13 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp validate_systems(systems) do
-    max_systems = Application.get_env(:wanderer_kills, :validation, [])
-                 |> Keyword.get(:max_subscribed_systems, 50)
+    max_systems =
+      Application.get_env(:wanderer_kills, :validation, [])
+      |> Keyword.get(:max_subscribed_systems, 50)
 
-    max_system_id = Application.get_env(:wanderer_kills, :validation, [])
-                    |> Keyword.get(:max_system_id, 32_000_000)
+    max_system_id =
+      Application.get_env(:wanderer_kills, :validation, [])
+      |> Keyword.get(:max_system_id, 32_000_000)
 
     cond do
       length(systems) > max_systems ->
@@ -911,6 +913,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   @doc """
   Get websocket statistics - delegated to WebSocketStats GenServer
   """
+  @spec get_stats() :: map()
   def get_stats do
     WebSocketStats.get_stats()
   end
@@ -918,6 +921,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   @doc """
   Reset websocket statistics - delegated to WebSocketStats GenServer
   """
+  @spec reset_stats() :: :ok
   def reset_stats do
     WebSocketStats.reset_stats()
   end

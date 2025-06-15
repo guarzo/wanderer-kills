@@ -49,7 +49,11 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
 
   # Compile-time configuration
   @zkb_timeout_ms Application.compile_env(:wanderer_kills, [:zkb, :request_timeout_ms], 15_000)
-  @zkb_base_url Application.compile_env(:wanderer_kills, [:zkb, :base_url], "https://zkillboard.com/api")
+  @zkb_base_url Application.compile_env(
+                  :wanderer_kills,
+                  [:zkb, :base_url],
+                  "https://zkillboard.com/api"
+                )
 
   @type killmail_id :: pos_integer()
   @type system_id :: pos_integer()
@@ -584,6 +588,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   defp get_victim_info(%{victim: victim}) when not is_nil(victim) do
     {:ok, victim}
   end
+
   defp get_victim_info(killmail) when is_map(killmail) do
     victim = Map.get(killmail, "victim", %{})
     {:ok, victim}
@@ -592,6 +597,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   defp get_attackers_info(%{attackers: attackers}) when not is_nil(attackers) do
     {:ok, attackers}
   end
+
   defp get_attackers_info(killmail) when is_map(killmail) do
     attackers = Map.get(killmail, "attackers", [])
     {:ok, attackers}
@@ -600,6 +606,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   defp get_items_info(%{items: items}) when not is_nil(items) do
     {:ok, items}
   end
+
   defp get_items_info(killmail) when is_map(killmail) do
     items = Map.get(killmail, "items", [])
     {:ok, items}

@@ -114,6 +114,9 @@ defmodule WandererKills.Core.Observability.Status do
   # Private functions
 
   defp websocket_connected? do
-    Process.whereis(WandererKillsWeb.Endpoint) != nil
+    case Code.ensure_loaded(WandererKillsWeb.Endpoint) do
+      {:module, _} -> Process.whereis(WandererKillsWeb.Endpoint) != nil
+      {:error, _} -> false
+    end
   end
 end

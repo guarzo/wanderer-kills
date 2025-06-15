@@ -94,14 +94,17 @@ defmodule WandererKills.Domain.Victim do
   Updates victim with enriched data from ESI/cache.
   """
   @spec update_with_enriched_data(t(), map()) :: t()
-  def update_with_enriched_data(%__MODULE__{} = victim, enriched_data) when is_map(enriched_data) do
-    %{victim | 
-      character_name: enriched_data["character_name"] || enriched_data["victim_name"] || victim.character_name,
-      corporation_name: enriched_data["corporation_name"] || victim.corporation_name,
-      corporation_ticker: enriched_data["corporation_ticker"] || victim.corporation_ticker,
-      alliance_name: enriched_data["alliance_name"] || victim.alliance_name,
-      alliance_ticker: enriched_data["alliance_ticker"] || victim.alliance_ticker,
-      ship_name: enriched_data["ship_name"] || victim.ship_name
+  def update_with_enriched_data(%__MODULE__{} = victim, enriched_data)
+      when is_map(enriched_data) do
+    %{
+      victim
+      | character_name:
+          enriched_data["character_name"] || enriched_data["victim_name"] || victim.character_name,
+        corporation_name: enriched_data["corporation_name"] || victim.corporation_name,
+        corporation_ticker: enriched_data["corporation_ticker"] || victim.corporation_ticker,
+        alliance_name: enriched_data["alliance_name"] || victim.alliance_name,
+        alliance_ticker: enriched_data["alliance_ticker"] || victim.alliance_ticker,
+        ship_name: enriched_data["ship_name"] || victim.ship_name
     }
   end
 

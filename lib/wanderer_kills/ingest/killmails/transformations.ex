@@ -89,6 +89,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   """
   @spec normalize_field_names(map() | Killmail.t()) :: map() | Killmail.t()
   def normalize_field_names(%Killmail{} = killmail), do: killmail
+
   def normalize_field_names(killmail) when is_map(killmail) do
     Enum.reduce(@field_mappings, killmail, fn {old_key, new_key}, acc ->
       case Map.pop(acc, old_key) do
@@ -170,7 +171,9 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   - Killmail with flattened data fields
   """
   @spec flatten_enriched_data(map() | Killmail.t()) :: map() | Killmail.t()
-  def flatten_enriched_data(%Killmail{} = killmail), do: killmail  # Already flat in struct form
+  # Already flat in struct form
+  def flatten_enriched_data(%Killmail{} = killmail), do: killmail
+
   def flatten_enriched_data(killmail) when is_map(killmail) do
     killmail
     |> flatten_victim_data()
@@ -190,7 +193,9 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   - Killmail with flattened victim data
   """
   @spec flatten_victim_data(map() | Killmail.t()) :: map() | Killmail.t()
-  def flatten_victim_data(%Killmail{} = killmail), do: killmail  # Already flat in struct
+  # Already flat in struct
+  def flatten_victim_data(%Killmail{} = killmail), do: killmail
+
   def flatten_victim_data(killmail) when is_map(killmail) do
     victim = Map.get(killmail, "victim", %{})
 
@@ -220,7 +225,9 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   - Killmail with flattened attackers data
   """
   @spec flatten_attackers_data(map() | Killmail.t()) :: map() | Killmail.t()
-  def flatten_attackers_data(%Killmail{} = killmail), do: killmail  # Already flat in struct
+  # Already flat in struct
+  def flatten_attackers_data(%Killmail{} = killmail), do: killmail
+
   def flatten_attackers_data(killmail) when is_map(killmail) do
     attackers = Map.get(killmail, "attackers", [])
 
@@ -257,6 +264,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
     # Attacker count is already computed in the struct
     killmail
   end
+
   def add_attacker_count(killmail) when is_map(killmail) do
     count = killmail |> Map.get("attackers", []) |> length()
     Map.put(killmail, "attacker_count", count)
@@ -279,6 +287,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
     # For structs, ship names should already be populated during enrichment
     {:ok, killmail}
   end
+
   def enrich_with_ship_names(killmail) when is_map(killmail) do
     Logger.debug("Starting ship name enrichment for killmail",
       killmail_id: Map.get(killmail, "killmail_id")
@@ -455,6 +464,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   """
   @spec get_killmail_time(map() | Killmail.t()) :: String.t() | DateTime.t() | nil
   def get_killmail_time(%Killmail{kill_time: time}), do: time
+
   def get_killmail_time(killmail) when is_map(killmail) do
     # ESI returns "killmail_time", but after normalization it might be "kill_time"
     killmail["killmail_time"] || killmail["kill_time"]

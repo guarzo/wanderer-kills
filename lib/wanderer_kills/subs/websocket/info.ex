@@ -103,6 +103,9 @@ defmodule WandererKills.WebSocket.Info do
   end
 
   defp endpoint_running? do
-    Process.whereis(Endpoint) != nil
+    case Code.ensure_loaded(Endpoint) do
+      {:module, _} -> Process.whereis(Endpoint) != nil
+      {:error, _} -> false
+    end
   end
 end

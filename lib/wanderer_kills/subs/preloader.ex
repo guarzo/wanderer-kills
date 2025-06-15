@@ -175,7 +175,7 @@ defmodule WandererKills.Subs.Preloader do
   def count_enriched_kills(kills) do
     Enum.count(kills, fn %Killmail{victim: victim, attackers: attackers} ->
       victim_name = victim && victim.character_name
-      
+
       victim_name != nil or
         Enum.any?(attackers, fn attacker ->
           attacker.character_name != nil

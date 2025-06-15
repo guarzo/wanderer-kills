@@ -50,7 +50,7 @@ defmodule WandererKillsWeb.Api.Helpers do
   def send_json_resp(conn, status, data) do
     # Convert structs to maps for JSON encoding
     json_data = prepare_for_json(data)
-    
+
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(status, Jason.encode!(json_data))
@@ -219,12 +219,15 @@ defmodule WandererKillsWeb.Api.Helpers do
 
   # Private helper to convert structs to maps for JSON encoding
   defp prepare_for_json(%Killmail{} = killmail), do: Killmail.to_map(killmail)
+
   defp prepare_for_json(list) when is_list(list) do
     Enum.map(list, &prepare_for_json/1)
   end
+
   defp prepare_for_json(%{__struct__: _} = struct) do
     # Generic struct handling - convert to map
     Map.from_struct(struct)
   end
+
   defp prepare_for_json(data), do: data
 end

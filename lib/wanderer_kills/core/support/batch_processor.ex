@@ -44,7 +44,11 @@ defmodule WandererKills.Core.Support.BatchProcessor do
   require Logger
   # Compile-time configuration
   @default_concurrency Application.compile_env(:wanderer_kills, [:batch, :default_concurrency], 5)
-  @default_timeout_ms Application.compile_env(:wanderer_kills, [:http, :default_timeout_ms], 10_000)
+  @default_timeout_ms Application.compile_env(
+                        :wanderer_kills,
+                        [:http, :default_timeout_ms],
+                        10_000
+                      )
   alias WandererKills.Core.Support.Error
 
   @type task_result :: {:ok, term()} | {:error, term()}
