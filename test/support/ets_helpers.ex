@@ -18,11 +18,17 @@ defmodule WandererKills.Test.EtsHelpers do
       :system_killmails_456
   """
   def create_unique_table_name(base_name, test_id) when is_atom(base_name) do
-    :"#{base_name}_#{test_id}"
+    base_name
+    |> Atom.to_string()
+    |> create_unique_table_name(test_id)
   end
 
   def create_unique_table_name(base_name, test_id) when is_binary(base_name) do
-    :"#{base_name}_#{test_id}"
+    # We need to create dynamic atoms for test table names
+    # This is safe because it's only used in test environments
+    # and the number of atoms is limited by the number of tests
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    String.to_atom("#{base_name}_#{test_id}")
   end
 
   @doc """

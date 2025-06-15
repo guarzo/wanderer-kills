@@ -51,9 +51,13 @@ defmodule WandererKills.TestFactory do
   def mock_http_responses(url_responses, client_mock \\ WandererKills.Ingest.Http.Client.Mock) do
     client_mock
     |> expect(:get_with_rate_limit, fn url, _opts ->
-      Enum.find_value(url_responses, {:error, :not_found}, fn {pattern, response} ->
-        if String.contains?(url, pattern), do: response
-      end)
+      find_matching_response(url, url_responses)
+    end)
+  end
+
+  defp find_matching_response(url, url_responses) do
+    Enum.find_value(url_responses, {:error, :not_found}, fn {pattern, response} ->
+      if String.contains?(url, pattern), do: response
     end)
   end
 

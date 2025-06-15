@@ -278,7 +278,8 @@ defmodule WandererKills.Test.SharedContexts do
 
     # Create unique name for this test
     test_id = WandererKills.Test.EtsHelpers.get_test_id()
-    unique_name = :"#{base_name}_test_#{test_id}"
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    unique_name = String.to_atom("#{base_name}_test_#{test_id}")
 
     # Add the unique name to the args if it's a keyword list
     final_args =
@@ -303,7 +304,8 @@ defmodule WandererKills.Test.SharedContexts do
   """
   def with_pubsub(_context \\ %{}) do
     test_id = WandererKills.Test.EtsHelpers.get_test_id()
-    pubsub_name = :"TestPubSub_#{test_id}"
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    pubsub_name = String.to_atom("TestPubSub_#{test_id}")
 
     {:ok, _pid} =
       Phoenix.PubSub.Supervisor.start_link(
@@ -440,14 +442,15 @@ defmodule WandererKills.Test.SharedContexts do
   # Cleans up test-specific ETS tables by unique ID.
   defp cleanup_unique_tables(unique_id) do
     # Generate the table names that would have been created for this test
+    # credo:disable-for-lines:8 Credo.Check.Warning.UnsafeToAtom
     test_table_names = [
-      :"killmails_#{unique_id}",
-      :"system_killmails_#{unique_id}",
-      :"system_kill_counts_#{unique_id}",
-      :"system_fetch_timestamps_#{unique_id}",
-      :"killmail_events_#{unique_id}",
-      :"client_offsets_#{unique_id}",
-      :"counters_#{unique_id}"
+      String.to_atom("killmails_#{unique_id}"),
+      String.to_atom("system_killmails_#{unique_id}"),
+      String.to_atom("system_kill_counts_#{unique_id}"),
+      String.to_atom("system_fetch_timestamps_#{unique_id}"),
+      String.to_atom("killmail_events_#{unique_id}"),
+      String.to_atom("client_offsets_#{unique_id}"),
+      String.to_atom("counters_#{unique_id}")
     ]
 
     # Delete each table if it exists

@@ -214,22 +214,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
     if not Enum.empty?(matching_kills) do
       case state.type do
         :webhook ->
-          # Send webhook notification asynchronously
-          SupervisedTask.start_child(
-            fn ->
-              WebhookNotifier.notify_webhook(
-                state.subscription["callback_url"],
-                system_id,
-                matching_kills,
-                state.subscription_id
-              )
-            end,
-            task_name: "webhook_notification",
-            metadata: %{
-              subscription_id: state.subscription_id,
-              killmail_count: length(matching_kills)
-            }
-          )
+          send_webhook_notification(state, system_id, matching_kills)
 
         :websocket ->
           # Broadcast to WebSocket via PubSub (using the general broadcast function)
@@ -318,5 +303,24 @@ defmodule WandererKills.Subs.SubscriptionWorker do
     new_chars = MapSet.new(new_sub["character_ids"] || [])
 
     not MapSet.equal?(old_systems, new_systems) or not MapSet.equal?(old_chars, new_chars)
+  end
+
+  defp send_webhook_notification(state, system_id, matching_kills) do
+    # Send webhook notification asynchronously
+    SupervisedTask.start_child(
+      fn ->
+        WebhookNotifier.notify_webhook(
+          state.subscription["callback_url"],
+          system_id,
+          matching_kills,
+          state.subscription_id
+        )
+      end,
+      task_name: "webhook_notification",
+      metadata: %{
+        subscription_id: state.subscription_id,
+        killmail_count: length(matching_kills)
+      }
+    )
   end
 end
