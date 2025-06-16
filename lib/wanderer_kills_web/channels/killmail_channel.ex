@@ -145,6 +145,9 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           socket = assign(socket, :subscribed_systems, all_systems)
 
+          # Check if we need to unsubscribe from all_systems topic
+          maybe_unsubscribe_from_all_systems(socket, current_systems, new_systems)
+
           Logger.debug("[DEBUG] Client subscribed to systems",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
@@ -352,12 +355,10 @@ defmodule WandererKillsWeb.KillmailChannel do
         timestamp: timestamp
       )
 
-      # Convert structs to maps for JSON serialization
-      killmail_maps = Enum.map(filtered_killmails, &WandererKills.Domain.Killmail.to_map/1)
-
+      # Use structs directly for lazy JSON encoding (Jason.Encoder is implemented)
       push(socket, "killmail_update", %{
         system_id: system_id,
-        killmails: killmail_maps,
+        killmails: filtered_killmails,
         timestamp: DateTime.to_iso8601(timestamp),
         preload: false
       })
@@ -797,13 +798,10 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Helper function to send preload kills to WebSocket client
   defp send_preload_kills_to_websocket(socket, system_id, kills) when is_list(kills) do
     if length(kills) > 0 do
-      # Convert structs to maps for JSON serialization
-      killmail_maps = Enum.map(kills, &WandererKills.Domain.Killmail.to_map/1)
-
-      # Send killmail update to the WebSocket client
+      # Use structs directly for lazy JSON encoding (Jason.Encoder is implemented)
       push(socket, "killmail_update", %{
         system_id: system_id,
-        killmails: killmail_maps,
+        killmails: kills,
         timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
         preload: true
       })
@@ -875,6 +873,23 @@ defmodule WandererKillsWeb.KillmailChannel do
     maybe_subscribe_to_all_systems(updated_socket, all_characters)
 
     {:reply, {:ok, message}, updated_socket}
+  end
+
+  defp maybe_unsubscribe_from_all_systems(socket, current_systems, new_systems) do
+    # This happens when we go from 0 system subscriptions to >0 and we have character subscriptions
+    if MapSet.size(current_systems) == 0 and MapSet.size(new_systems) > 0 and
+         MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new()) > 0 do
+      Phoenix.PubSub.unsubscribe(
+        WandererKills.PubSub,
+        WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+      )
+
+      Logger.debug(
+        "[DEBUG] Unsubscribed from all_systems topic due to specific system subscription",
+        user_id: socket.assigns.user_id,
+        subscription_id: socket.assigns.subscription_id
+      )
+    end
   end
 
   defp maybe_subscribe_to_all_systems(socket, all_characters) do

@@ -522,7 +522,7 @@ WandererKills delivers exceptional performance with sub-microsecond operations:
 - **Fast Health Checks**: Under 4ms
 
 > 📊 **[View Detailed Performance Benchmarks](docs/PERFORMANCE.md)**
-> 
+>
 > Run benchmarks: `MIX_ENV=test mix test test/performance --include perf`
 
 ### Key Performance Features
