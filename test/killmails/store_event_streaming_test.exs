@@ -15,49 +15,29 @@ defmodule WandererKills.Ingest.Killmails.StoreEventStreamingTest do
 
   @test_killmail_1 %{
     "killmail_id" => 12_345,
-    "kill_time" => "2024-01-01T12:00:00Z",
-    "system_id" => @system_id_1,
-    "victim" => %{
-      "character_id" => 123,
-      "ship_type_id" => 670,
-      "damage_taken" => 1000
-    },
+    "solar_system_id" => @system_id_1,
+    "victim" => %{"character_id" => 123},
     "attackers" => [],
     "zkb" => %{"totalValue" => 1000}
   }
 
   @test_killmail_2 %{
     "killmail_id" => 12_346,
-    "kill_time" => "2024-01-01T12:30:00Z",
-    "system_id" => @system_id_1,
-    "victim" => %{
-      "character_id" => 124,
-      "ship_type_id" => 671,
-      "damage_taken" => 2000
-    },
+    "solar_system_id" => @system_id_1,
+    "victim" => %{"character_id" => 124},
     "attackers" => [],
     "zkb" => %{"totalValue" => 2000}
   }
 
   @test_killmail_3 %{
     "killmail_id" => 12_347,
-    "kill_time" => "2024-01-01T13:00:00Z",
-    "system_id" => @system_id_2,
-    "victim" => %{
-      "character_id" => 125,
-      "ship_type_id" => 672,
-      "damage_taken" => 3000
-    },
+    "solar_system_id" => @system_id_2,
+    "victim" => %{"character_id" => 125},
     "attackers" => [],
     "zkb" => %{"totalValue" => 3000}
   }
 
   setup [:with_clean_environment, :ensure_event_streaming_tables, :with_kill_store]
-
-  # Helper functions for migration period
-  defp get_killmail_id(%WandererKills.Domain.Killmail{killmail_id: id}), do: id
-  defp get_killmail_id(%{"killmail_id" => id}), do: id
-  defp get_killmail_id(%{killmail_id: id}), do: id
 
   defp ensure_event_streaming_tables(_context) do
     # Ensure event streaming is enabled before table initialization
@@ -118,32 +98,27 @@ defmodule WandererKills.Ingest.Killmails.StoreEventStreamingTest do
       # Subscribe to PubSub to verify broadcast
       Phoenix.PubSub.subscribe(WandererKills.PubSub, "system:#{@system_id_1}")
 
-      {:ok, struct} = WandererKills.Domain.Killmail.new(@test_killmail_1)
-      assert :ok = KillmailStore.insert_event(@system_id_1, struct)
+      assert :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
 
       # Verify PubSub broadcast
       assert_receive {:new_killmail, @system_id_1, killmail}
-      assert get_killmail_id(killmail) == @test_killmail_1["killmail_id"]
+      assert killmail["killmail_id"] == @test_killmail_1["killmail_id"]
 
       # Verify killmail is stored
       assert {:ok, stored} = KillmailStore.get(@test_killmail_1["killmail_id"])
-      assert get_killmail_id(stored) == @test_killmail_1["killmail_id"]
+      assert stored == @test_killmail_1
 
       # Verify it's in system list
       system_kills = KillmailStore.list_by_system(@system_id_1)
       assert length(system_kills) == 1
-      assert get_killmail_id(hd(system_kills)) == @test_killmail_1["killmail_id"]
+      assert hd(system_kills)["killmail_id"] == @test_killmail_1["killmail_id"]
     end
 
     test "events have sequential IDs" do
       # Insert multiple events
-      {:ok, struct1} = WandererKills.Domain.Killmail.new(@test_killmail_1)
-      {:ok, struct2} = WandererKills.Domain.Killmail.new(@test_killmail_2)
-      {:ok, struct3} = WandererKills.Domain.Killmail.new(@test_killmail_3)
-      
-      assert :ok = KillmailStore.insert_event(@system_id_1, struct1)
-      assert :ok = KillmailStore.insert_event(@system_id_1, struct2)
-      assert :ok = KillmailStore.insert_event(@system_id_2, struct3)
+      assert :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_1)
+      assert :ok = KillmailStore.insert_event(@system_id_1, @test_killmail_2)
+      assert :ok = KillmailStore.insert_event(@system_id_2, @test_killmail_3)
 
       # Fetch events and verify sequential IDs
       {:ok, events} = KillmailStore.fetch_for_client(@client_id, [@system_id_1, @system_id_2])
@@ -175,9 +150,8 @@ defmodule WandererKills.Ingest.Killmails.StoreEventStreamingTest do
       Enum.each(events, fn {event_id, system_id, killmail} ->
         assert is_integer(event_id)
         assert system_id in [@system_id_1, @system_id_2]
-        # During migration, killmail can be a struct or map
-        assert is_map(killmail) or match?(%WandererKills.Domain.Killmail{}, killmail)
-        assert get_killmail_id(killmail) in [12_345, 12_346, 12_347]
+        assert is_map(killmail)
+        assert killmail["killmail_id"] in [12_345, 12_346, 12_347]
       end)
     end
 
@@ -208,7 +182,7 @@ defmodule WandererKills.Ingest.Killmails.StoreEventStreamingTest do
       {:ok, newer_events} = KillmailStore.fetch_for_client(@client_id, [@system_id_1])
       assert length(newer_events) == 1
       {_, _, killmail} = hd(newer_events)
-      assert get_killmail_id(killmail) == @test_killmail_3["killmail_id"]
+      assert killmail["killmail_id"] == @test_killmail_3["killmail_id"]
     end
 
     test "handles multiple systems with different offsets" do

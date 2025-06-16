@@ -188,25 +188,25 @@ defmodule WandererKillsWeb.SubscriptionController do
     end
   end
 
-  defp validate_required_subscriber_id(nil), do: {:error, Error.validation_error(:missing_subscriber_id, "subscriber_id is required")}
-  defp validate_required_subscriber_id(""), do: {:error, Error.validation_error(:missing_subscriber_id, "subscriber_id is required")}
+  defp validate_required_subscriber_id(nil), do: {:error, "subscriber_id is required"}
+  defp validate_required_subscriber_id(""), do: {:error, "subscriber_id is required"}
   defp validate_required_subscriber_id(_), do: :ok
 
-  defp validate_required_callback_url(nil), do: {:error, Error.validation_error(:missing_callback_url, "callback_url is required")}
-  defp validate_required_callback_url(""), do: {:error, Error.validation_error(:missing_callback_url, "callback_url is required")}
+  defp validate_required_callback_url(nil), do: {:error, "callback_url is required"}
+  defp validate_required_callback_url(""), do: {:error, "callback_url is required"}
   defp validate_required_callback_url(_), do: :ok
 
   defp validate_callback_url_format(url) do
     if valid_url?(url) do
       :ok
     else
-      {:error, Error.validation_error(:invalid_callback_url, "callback_url must be a valid HTTP/HTTPS URL")}
+      {:error, "callback_url must be a valid HTTP/HTTPS URL"}
     end
   end
 
   defp validate_at_least_one_id(attrs) do
     if Enum.empty?(attrs["system_ids"]) and Enum.empty?(attrs["character_ids"]) do
-      {:error, Error.validation_error(:missing_ids, "At least one system_id or character_id is required")}
+      {:error, "At least one system_id or character_id is required"}
     else
       :ok
     end
@@ -216,13 +216,13 @@ defmodule WandererKillsWeb.SubscriptionController do
     if valid_ids?(ids) do
       :ok
     else
-      {:error, Error.validation_error(:invalid_id_format, "#{field_name} must be an array of positive integers")}
+      {:error, "#{field_name} must be an array of positive integers"}
     end
   end
 
   defp validate_ids_count(ids, field_name, max_count) do
     if length(ids) > max_count do
-      {:error, Error.validation_error(:too_many_ids, "Maximum #{max_count} #{field_name} allowed per subscription", %{field: field_name, max: max_count})}
+      {:error, "Maximum #{max_count} #{field_name} allowed per subscription"}
     else
       :ok
     end

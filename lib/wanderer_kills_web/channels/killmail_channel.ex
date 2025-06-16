@@ -848,7 +848,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Helper function to send preload kills to WebSocket client
   defp send_preload_kills_to_websocket(socket, system_id, kills) when is_list(kills) do
     if length(kills) > 0 do
-      killmail_ids = Enum.map(kills, & &1.killmail_id)
+      killmail_ids = Enum.map(kills, & &1["killmail_id"])
       kill_times = Preloader.extract_kill_times(kills)
       enriched_count = Preloader.count_enriched_kills(kills)
 
