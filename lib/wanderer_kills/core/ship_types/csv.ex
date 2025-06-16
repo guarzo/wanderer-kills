@@ -47,7 +47,7 @@ defmodule WandererKills.Core.ShipTypes.CSV do
     with {:ok, file_paths} <- ensure_csv_files(),
          {:ok, ship_types_map} <- process_csv_files(file_paths),
          {:ok, count} <- Cache.warm_cache(ship_types_map) do
-      Logger.info("[Ship Types] Loaded #{count} ship types from CSV")
+      Logger.info("[Ship Types] Loaded ship types from CSV", count: count)
       {:ok, count}
     else
       {:error, _reason} = error ->

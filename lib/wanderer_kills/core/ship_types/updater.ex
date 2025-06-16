@@ -147,7 +147,7 @@ defmodule WandererKills.Core.ShipTypes.Updater do
 
         case update_with_esi() do
           :ok ->
-            Logger.info("[Ship Types] Loaded ship types from ESI (CSV fallback)")
+            Logger.info("[Ship Types] Loaded ship types", source: :esi_fallback)
             :ok
 
           esi_result ->

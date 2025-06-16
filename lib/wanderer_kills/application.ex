@@ -162,20 +162,20 @@ defmodule WandererKills.Application do
 
   defp execute_ship_type_update do
     case WandererKills.Core.ShipTypes.Updater.update_ship_types() do
+      :ok ->
+        :ok
+
       {:error, reason} ->
         Logger.error("Failed to update ship types: #{inspect(reason)}")
         {:error, reason}
-
-      result ->
-        result
     end
   end
 
   defp handle_task_start_result({:ok, _pid}) do
-    Logger.debug("[Application] Ship type update task started successfully")
+    Logger.debug("Ship type update task started successfully")
   end
 
   defp handle_task_start_result({:error, reason}) do
-    Logger.error("[Application] Failed to start ship type update task: #{inspect(reason)}")
+    Logger.error("Failed to start ship type update task: #{inspect(reason)}")
   end
 end

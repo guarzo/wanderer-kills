@@ -845,34 +845,36 @@ defmodule WandererKillsWeb.KillmailChannel do
   defp process_character_subscription(socket, valid_characters) do
     current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
     new_characters = MapSet.difference(MapSet.new(valid_characters), current_characters)
+    all_characters = MapSet.union(current_characters, MapSet.new(valid_characters))
 
-    if MapSet.size(new_characters) > 0 do
-      # Update subscription
-      all_characters = MapSet.union(current_characters, new_characters)
+    {updated_socket, message} =
+      if MapSet.size(new_characters) > 0 do
+        # Update subscription
+        updates = %{
+          systems: MapSet.to_list(socket.assigns.subscribed_systems),
+          character_ids: MapSet.to_list(all_characters)
+        }
 
-      updates = %{
-        systems: MapSet.to_list(socket.assigns.subscribed_systems),
-        character_ids: MapSet.to_list(all_characters)
-      }
+        update_subscription(socket.assigns.subscription_id, updates)
 
-      update_subscription(socket.assigns.subscription_id, updates)
+        socket = assign(socket, :subscribed_characters, all_characters)
 
-      socket = assign(socket, :subscribed_characters, all_characters)
+        Logger.debug("[DEBUG] Client subscribed to characters",
+          user_id: socket.assigns.user_id,
+          subscription_id: socket.assigns.subscription_id,
+          new_characters_count: MapSet.size(new_characters),
+          total_characters_count: MapSet.size(all_characters)
+        )
 
-      # Check if we need to subscribe to all_systems topic
-      maybe_subscribe_to_all_systems(socket, all_characters)
+        {socket, %{subscribed_characters: MapSet.to_list(all_characters)}}
+      else
+        {socket, %{message: "Already subscribed to all requested characters"}}
+      end
 
-      Logger.debug("[DEBUG] Client subscribed to characters",
-        user_id: socket.assigns.user_id,
-        subscription_id: socket.assigns.subscription_id,
-        new_characters_count: MapSet.size(new_characters),
-        total_characters_count: MapSet.size(all_characters)
-      )
+    # Check if we need to subscribe to all_systems topic (always run)
+    maybe_subscribe_to_all_systems(updated_socket, all_characters)
 
-      {:reply, {:ok, %{subscribed_characters: MapSet.to_list(all_characters)}}, socket}
-    else
-      {:reply, {:ok, %{message: "Already subscribed to all requested characters"}}, socket}
-    end
+    {:reply, {:ok, message}, updated_socket}
   end
 
   defp maybe_subscribe_to_all_systems(socket, all_characters) do
