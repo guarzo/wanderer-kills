@@ -26,9 +26,6 @@ defmodule WandererKills.Domain.Boundary do
       WandererKills.Domain.Killmail,
       WandererKills.Domain.Victim,
       WandererKills.Domain.Attacker,
-      WandererKills.Domain.ZkbMetadata,
-
-      # Data conversion utilities
-      WandererKills.Domain.Converter
+      WandererKills.Domain.ZkbMetadata
     ]
 end

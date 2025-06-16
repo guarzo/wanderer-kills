@@ -7,6 +7,7 @@ defmodule WandererKills.Domain.Killmail do
   """
 
   alias WandererKills.Domain.{Victim, Attacker, ZkbMetadata}
+  alias WandererKills.Core.Support.Error
 
   @type t :: %__MODULE__{
           killmail_id: integer(),
@@ -136,7 +137,7 @@ defmodule WandererKills.Domain.Killmail do
 
   # Private functions
 
-  defp build_victim(nil), do: {:error, :missing_victim}
+  defp build_victim(nil), do: {:error, Error.validation_error(:missing_victim, "Victim data is required")}
 
   defp build_victim(victim_data) when is_map(victim_data) do
     Victim.new(victim_data)
@@ -167,10 +168,10 @@ defmodule WandererKills.Domain.Killmail do
     time_str = get_field(attrs, ["kill_time", :kill_time, "killmail_time", :killmail_time])
 
     case time_str do
-      nil -> {:error, :missing_kill_time}
+      nil -> {:error, Error.validation_error(:missing_kill_time, "Kill time is required")}
       str when is_binary(str) -> {:ok, str}
       %DateTime{} = dt -> {:ok, dt}
-      _ -> {:error, :invalid_kill_time}
+      _ -> {:error, Error.validation_error(:invalid_kill_time, "Kill time must be a string or DateTime")}
     end
   end
 
@@ -188,7 +189,12 @@ defmodule WandererKills.Domain.Killmail do
 
     case errors do
       [] -> {:ok, killmail}
-      _ -> {:error, {:validation_failed, errors}}
+      _ -> 
+        error_messages = Enum.map(errors, fn
+          :missing_killmail_id -> "killmail_id is required"
+          :missing_system_id -> "system_id is required"
+        end)
+        {:error, Error.validation_error(:validation_failed, Enum.join(error_messages, ", "), %{errors: errors})}
     end
   end
 

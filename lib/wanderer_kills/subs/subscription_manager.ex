@@ -25,6 +25,7 @@ defmodule WandererKills.Subs.SubscriptionManager do
   alias WandererKills.Subs.Subscriptions.{SystemIndex, CharacterIndex}
   alias WandererKills.Core.Types
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Core.Support.Error
 
   @type subscription_id :: String.t()
   @type subscriber_id :: String.t()
@@ -329,13 +330,13 @@ defmodule WandererKills.Subs.SubscriptionManager do
   defp validate_subscription_attrs(attrs) do
     cond do
       not is_map(attrs) ->
-        {:error, "Subscription attributes must be a map"}
+        {:error, Error.validation_error(:invalid_attrs, "Subscription attributes must be a map")}
 
       not Map.has_key?(attrs, "subscriber_id") ->
-        {:error, "subscriber_id is required"}
+        {:error, Error.validation_error(:missing_subscriber_id, "subscriber_id is required")}
 
       is_nil(attrs["subscriber_id"]) or attrs["subscriber_id"] == "" ->
-        {:error, "subscriber_id cannot be empty"}
+        {:error, Error.validation_error(:empty_subscriber_id, "subscriber_id cannot be empty")}
 
       true ->
         :ok
