@@ -138,11 +138,8 @@ defmodule WandererKills.Core.ShipTypes.Updater do
   """
   @spec update_ship_types() :: :ok | {:error, term()}
   def update_ship_types do
-    Logger.debug("Starting ship type update with fallback strategy")
-
     case update_with_csv() do
       :ok ->
-        Logger.debug("Ship type update completed successfully using CSV data")
         :ok
 
       csv_result ->
@@ -150,7 +147,7 @@ defmodule WandererKills.Core.ShipTypes.Updater do
 
         case update_with_esi() do
           :ok ->
-            Logger.debug("Ship type update completed successfully using ESI fallback")
+            Logger.info("[Ship Types] Loaded ship types from ESI (CSV fallback)")
             :ok
 
           esi_result ->
@@ -193,11 +190,8 @@ defmodule WandererKills.Core.ShipTypes.Updater do
   """
   @spec update_with_csv() :: :ok | {:error, term()}
   def update_with_csv do
-    Logger.debug("Attempting ship type update from CSV")
-
     case CSV.update_ship_types() do
       :ok ->
-        Logger.debug("CSV ship type update completed successfully")
         :ok
 
       {:error, _reason} = error ->
@@ -228,11 +222,8 @@ defmodule WandererKills.Core.ShipTypes.Updater do
   """
   @spec update_with_esi() :: :ok | {:error, term()}
   def update_with_esi do
-    Logger.debug("Attempting ship type update from ESI")
-
     case EsiSource.update() do
       :ok ->
-        Logger.debug("ESI ship type update completed successfully")
         :ok
 
       {:error, reason} ->

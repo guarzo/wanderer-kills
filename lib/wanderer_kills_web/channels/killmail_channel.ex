@@ -741,7 +741,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     current_systems = MapSet.size(socket.assigns.subscribed_systems)
     current_characters = MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
 
-    Logger.info("[INFO] Starting preload for WebSocket client",
+    Logger.info("[INFO] Starting preload for WebSocket client: #{length(systems)} systems",
       user_id: user_id,
       subscription_id: subscription_id,
       systems_to_preload: length(systems),
@@ -760,7 +760,7 @@ defmodule WandererKillsWeb.KillmailChannel do
           end)
           |> Enum.sum()
 
-        Logger.info("[INFO] Preload completed for WebSocket client",
+        Logger.info("[INFO] Preload completed: #{total_kills_sent} kills sent across #{length(systems)} systems",
           user_id: user_id,
           subscription_id: subscription_id,
           total_systems: length(systems),
@@ -786,21 +786,8 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp preload_system_kills_for_websocket(socket, system_id, limit) do
-    Logger.debug("[DEBUG] Starting preload for system",
-      user_id: socket.assigns.user_id,
-      system_id: system_id,
-      limit: limit
-    )
-
     # Use the shared preloader
     kills = Preloader.preload_kills_for_system(system_id, limit, 24)
-
-    Logger.debug("[DEBUG] Got kills from preload function",
-      user_id: socket.assigns.user_id,
-      system_id: system_id,
-      kills_count: length(kills)
-    )
-
     send_preload_kills_to_websocket(socket, system_id, kills)
   end
 
@@ -809,43 +796,6 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Helper function to send preload kills to WebSocket client
   defp send_preload_kills_to_websocket(socket, system_id, kills) when is_list(kills) do
     if length(kills) > 0 do
-      killmail_ids = Enum.map(kills, & &1.killmail_id)
-      kill_times = Preloader.extract_kill_times(kills)
-      enriched_count = Preloader.count_enriched_kills(kills)
-
-      Logger.debug("[DEBUG] Sending preload kills to WebSocket client",
-        user_id: socket.assigns.user_id,
-        system_id: system_id,
-        killmail_count: length(kills),
-        killmail_ids: killmail_ids,
-        enriched_count: enriched_count,
-        unenriched_count: length(kills) - enriched_count,
-        kill_time_range:
-          if(length(kill_times) > 0,
-            do: "#{List.first(kill_times)} to #{List.last(kill_times)}",
-            else: "none"
-          )
-      )
-
-      # Log sample killmails to debug client issues
-      sample_kills = Enum.take(kills, 2)
-
-      Enum.each(sample_kills, fn kill ->
-        Logger.debug("[DEBUG] Sample killmail being sent",
-          killmail_id: kill.killmail_id,
-          system_id: system_id,
-          has_victim: not is_nil(kill.victim),
-          has_attackers: not is_nil(kill.attackers),
-          has_zkb: not is_nil(kill.zkb),
-          victim_ship: kill.victim && kill.victim.ship_type_id,
-          victim_character: kill.victim && kill.victim.character_id,
-          attacker_count: length(kill.attackers || []),
-          total_value: kill.zkb && kill.zkb.total_value,
-          kill_time: kill.kill_time,
-          struct_name: kill.__struct__
-        )
-      end)
-
       # Convert structs to maps for JSON serialization
       killmail_maps = Enum.map(kills, &WandererKills.Domain.Killmail.to_map/1)
 
@@ -862,12 +812,6 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       length(kills)
     else
-      Logger.debug("[DEBUG] No kills available for preload",
-        user_id: socket.assigns.user_id,
-        system_id: system_id,
-        reason: "no_kills_found"
-      )
-
       0
     end
   end
