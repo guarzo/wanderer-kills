@@ -133,7 +133,7 @@ defmodule WandererKills.Ingest.RateLimiter do
       # Calculate time until next token is available
       tokens_needed = 1.0 - bucket.tokens
       minutes_to_wait = tokens_needed / bucket.refill_rate
-      retry_after_ms = round(minutes_to_wait * 60_000)
+      retry_after_ms = ceil(minutes_to_wait * 60_000)
 
       {:reply,
        {:error,

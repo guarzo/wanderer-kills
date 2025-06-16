@@ -275,7 +275,7 @@ socket.connect();
 // Join the killmail lobby channel with systems and optional extended preload
 const channel = socket.channel('killmails:lobby', {
   systems: [30000142, 30000144],
-  characters: [95465499],  // Optional: track specific characters
+  character_ids: [95465499],  // Optional: track specific characters
   preload: {               // Optional: extended historical data preload
     enabled: true,
     limit_per_system: 100,
@@ -326,12 +326,12 @@ channel.push('unsubscribe_systems', { systems: [30000144] })
   .receive('error', resp => console.log('Failed to unsubscribe', resp));
 
 // Subscribe to specific characters
-channel.push('subscribe_characters', { characters: [95465499, 90379338] })
+channel.push('subscribe_characters', { character_ids: [95465499, 90379338] })
   .receive('ok', resp => console.log('Subscribed to characters', resp))
   .receive('error', resp => console.log('Failed to subscribe', resp));
 
 // Unsubscribe from characters
-channel.push('unsubscribe_characters', { characters: [95465499] })
+channel.push('unsubscribe_characters', { character_ids: [95465499] })
   .receive('ok', resp => console.log('Unsubscribed from characters', resp))
   .receive('error', resp => console.log('Failed to unsubscribe', resp));
 
@@ -498,7 +498,7 @@ channel.join()
 
 | Parameter | Type | Description | Required |
 |-----------|------|-------------|----------|
-| `characters` | integer[] | EVE Online character IDs to track | Yes |
+| `character_ids` | integer[] | EVE Online character IDs to track | Yes |
 
 **Example Character IDs:**
 
@@ -514,15 +514,16 @@ channel.join()
 // - Character 90379338 appears as victim or attacker
 const channel = socket.channel('killmails:lobby', {
   systems: [30000142],
-  characters: [95465499, 90379338]
+  character_ids: [95465499, 90379338]
 });
 ```
 
 ### WebSocket API Changes
 
-**Important**: Recent API updates have changed parameter names for character subscriptions:
-- **Join parameters**: Use `characters` (not `character_ids`)
-- **Push method parameters**: Use `characters` (not `character_ids`)
+**Important**: API standardization update:
+- **All WebSocket parameters now use `_ids` suffix**: Use `character_ids` and `system_ids` consistently
+- **Join parameters**: Use `character_ids` (matching webhook API)
+- **Push method parameters**: Use `character_ids` (matching webhook API)
 - The mixed `subscribe` method with both systems and characters has been removed
 - Use dedicated `subscribe_systems` and `subscribe_characters` methods instead
 
@@ -530,11 +531,11 @@ const channel = socket.channel('killmails:lobby', {
 
 | Method | Parameters | Description |
 |--------|------------|-------------|
-| `join` | `{systems: [], characters: [], preload: {}}` | Join the channel with initial subscriptions |
+| `join` | `{systems: [], character_ids: [], preload: {}}` | Join the channel with initial subscriptions |
 | `subscribe_systems` | `{systems: []}` | Add system subscriptions |
 | `unsubscribe_systems` | `{systems: []}` | Remove system subscriptions |
-| `subscribe_characters` | `{characters: []}` | Add character subscriptions |
-| `unsubscribe_characters` | `{characters: []}` | Remove character subscriptions |
+| `subscribe_characters` | `{character_ids: []}` | Add character subscriptions |
+| `unsubscribe_characters` | `{character_ids: []}` | Remove character subscriptions |
 | `get_status` | `{}` | Get current subscription status |
 
 ### Channel Events

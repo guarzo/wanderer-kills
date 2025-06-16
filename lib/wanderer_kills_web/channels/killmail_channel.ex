@@ -29,7 +29,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   const channel = socket.channel("killmails:lobby", {
     systems: [30000142, 30002187],
-    characters: [95465499, 90379338],  // Optional character IDs
+    character_ids: [95465499, 90379338],  // Optional character IDs
     preload: {
       enabled: true,
       since_hours: 24,
@@ -51,8 +51,8 @@ defmodule WandererKillsWeb.KillmailChannel do
   channel.push("unsubscribe_systems", {systems: [30000142]})
 
   // Add/remove character subscriptions
-  channel.push("subscribe_characters", {characters: [12345678]})
-  channel.push("unsubscribe_characters", {characters: [95465499]})
+  channel.push("subscribe_characters", {character_ids: [12345678]})
+  channel.push("unsubscribe_characters", {character_ids: [95465499]})
 
   // Get current subscription status
   channel.push("get_status", {})
@@ -72,16 +72,16 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   @impl true
   def join("killmails:lobby", %{"systems" => systems} = params, socket) when is_list(systems) do
-    characters = Map.get(params, "characters", [])
+    character_ids = Map.get(params, "character_ids", [])
     preload_config = Map.get(params, "preload", %{})
-    join_with_filters(socket, systems, characters, preload_config)
+    join_with_filters(socket, systems, character_ids, preload_config)
   end
 
-  def join("killmails:lobby", %{"characters" => characters} = params, socket)
-      when is_list(characters) do
+  def join("killmails:lobby", %{"character_ids" => character_ids} = params, socket)
+      when is_list(character_ids) do
     systems = Map.get(params, "systems", [])
     preload_config = Map.get(params, "preload", %{})
-    join_with_filters(socket, systems, characters, preload_config)
+    join_with_filters(socket, systems, character_ids, preload_config)
   end
 
   def join("killmails:lobby", params, socket) do
@@ -138,7 +138,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           updates = %{
             systems: MapSet.to_list(all_systems),
-            characters: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+            character_ids: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
           }
 
           update_subscription(socket.assigns.subscription_id, updates)
@@ -181,7 +181,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           updates = %{
             systems: MapSet.to_list(remaining_systems),
-            characters: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+            character_ids: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
           }
 
           update_subscription(socket.assigns.subscription_id, updates)
@@ -206,9 +206,9 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   # Handle subscribing to characters
-  def handle_in("subscribe_characters", %{"characters" => characters}, socket)
-      when is_list(characters) do
-    case validate_characters(characters) do
+  def handle_in("subscribe_characters", %{"character_ids" => character_ids}, socket)
+      when is_list(character_ids) do
+    case validate_characters(character_ids) do
       {:ok, valid_characters} ->
         process_character_subscription(socket, valid_characters)
 
@@ -218,9 +218,9 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   # Handle unsubscribing from characters
-  def handle_in("unsubscribe_characters", %{"characters" => characters}, socket)
-      when is_list(characters) do
-    case validate_characters(characters) do
+  def handle_in("unsubscribe_characters", %{"character_ids" => character_ids}, socket)
+      when is_list(character_ids) do
+    case validate_characters(character_ids) do
       {:ok, valid_characters} ->
         current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
 
@@ -233,7 +233,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           updates = %{
             systems: MapSet.to_list(socket.assigns.subscribed_systems),
-            characters: MapSet.to_list(remaining_characters)
+            character_ids: MapSet.to_list(remaining_characters)
           }
 
           update_subscription(socket.assigns.subscription_id, updates)
@@ -511,9 +511,9 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Private helper functions
 
   # Helper function to handle join with filters
-  defp join_with_filters(socket, systems, characters, preload_config) do
+  defp join_with_filters(socket, systems, character_ids, preload_config) do
     with {:ok, valid_systems} <- validate_systems(systems),
-         {:ok, valid_characters} <- validate_characters(characters) do
+         {:ok, valid_characters} <- validate_characters(character_ids) do
       # Register this WebSocket connection as a subscriber
       subscription_id =
         create_subscription(socket, valid_systems, valid_characters, preload_config)
@@ -589,7 +589,7 @@ defmodule WandererKillsWeb.KillmailChannel do
           reason: reason,
           peer_data: socket.assigns.peer_data,
           systems: systems,
-          characters: characters
+          character_ids: character_ids
         )
 
         {:error, %{reason: Error.to_string(reason)}}
@@ -692,7 +692,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       updates
       |> Enum.map(fn
         {:systems, value} -> {"system_ids", value}
-        {:characters, value} -> {"character_ids", value}
+        {:character_ids, value} -> {"character_ids", value}
         {key, value} -> {to_string(key), value}
       end)
       |> Enum.into(%{})
@@ -907,7 +907,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       updates = %{
         systems: MapSet.to_list(socket.assigns.subscribed_systems),
-        characters: MapSet.to_list(all_characters)
+        character_ids: MapSet.to_list(all_characters)
       }
 
       update_subscription(socket.assigns.subscription_id, updates)
