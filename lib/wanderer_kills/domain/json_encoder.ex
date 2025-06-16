@@ -1,7 +1,7 @@
 defmodule WandererKills.Domain.JsonEncoder do
   @moduledoc """
   Jason.Encoder protocol implementations for domain structs.
-  
+
   This module provides optimized JSON encoding for domain structs,
   eliminating the need for intermediate map conversions.
   """

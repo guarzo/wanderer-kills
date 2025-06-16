@@ -31,7 +31,6 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
 
   require Logger
   alias WandererKills.Core.Support.Error
-  alias WandererKills.Domain.Killmail
 
   # Field name mappings for normalization
   @field_mappings %{
@@ -87,9 +86,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   # %{"killmail_id" => 123, "kill_time" => "2024-01-01T12:00:00Z"}
   ```
   """
-  @spec normalize_field_names(map() | Killmail.t()) :: map() | Killmail.t()
-  def normalize_field_names(%Killmail{} = killmail), do: killmail
-
+  @spec normalize_field_names(map()) :: map()
   def normalize_field_names(killmail) when is_map(killmail) do
     Enum.reduce(@field_mappings, killmail, fn {old_key, new_key}, acc ->
       case Map.pop(acc, old_key) do
@@ -170,10 +167,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   ## Returns
   - Killmail with flattened data fields
   """
-  @spec flatten_enriched_data(map() | Killmail.t()) :: map() | Killmail.t()
-  # Already flat in struct form
-  def flatten_enriched_data(%Killmail{} = killmail), do: killmail
-
+  @spec flatten_enriched_data(map()) :: map()
   def flatten_enriched_data(killmail) when is_map(killmail) do
     killmail
     |> flatten_victim_data()
@@ -192,10 +186,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   ## Returns
   - Killmail with flattened victim data
   """
-  @spec flatten_victim_data(map() | Killmail.t()) :: map() | Killmail.t()
-  # Already flat in struct
-  def flatten_victim_data(%Killmail{} = killmail), do: killmail
-
+  @spec flatten_victim_data(map()) :: map()
   def flatten_victim_data(killmail) when is_map(killmail) do
     victim = Map.get(killmail, "victim", %{})
 
@@ -224,10 +215,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   ## Returns
   - Killmail with flattened attackers data
   """
-  @spec flatten_attackers_data(map() | Killmail.t()) :: map() | Killmail.t()
-  # Already flat in struct
-  def flatten_attackers_data(%Killmail{} = killmail), do: killmail
-
+  @spec flatten_attackers_data(map()) :: map()
   def flatten_attackers_data(killmail) when is_map(killmail) do
     attackers = Map.get(killmail, "attackers", [])
 
@@ -259,12 +247,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   ## Returns
   - Killmail with "attacker_count" field added
   """
-  @spec add_attacker_count(map() | Killmail.t()) :: map() | Killmail.t()
-  def add_attacker_count(%Killmail{} = killmail) do
-    # Attacker count is already computed in the struct
-    killmail
-  end
-
+  @spec add_attacker_count(map()) :: map()
   def add_attacker_count(killmail) when is_map(killmail) do
     count = killmail |> Map.get("attackers", []) |> length()
     Map.put(killmail, "attacker_count", count)
@@ -282,12 +265,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   ## Returns
   - `{:ok, enriched_killmail}` - Killmail with ship names added
   """
-  @spec enrich_with_ship_names(map() | Killmail.t()) :: {:ok, map() | Killmail.t()}
-  def enrich_with_ship_names(%Killmail{} = killmail) do
-    # For structs, ship names should already be populated during enrichment
-    {:ok, killmail}
-  end
-
+  @spec enrich_with_ship_names(map()) :: {:ok, map()}
   def enrich_with_ship_names(killmail) when is_map(killmail) do
     Logger.debug("Starting ship name enrichment for killmail",
       killmail_id: Map.get(killmail, "killmail_id")
@@ -462,9 +440,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
 
   Handles different field name variations.
   """
-  @spec get_killmail_time(map() | Killmail.t()) :: String.t() | DateTime.t() | nil
-  def get_killmail_time(%Killmail{kill_time: time}), do: time
-
+  @spec get_killmail_time(map()) :: String.t() | DateTime.t() | nil
   def get_killmail_time(killmail) when is_map(killmail) do
     # ESI returns "killmail_time", but after normalization it might be "kill_time"
     killmail["killmail_time"] || killmail["kill_time"]
@@ -474,7 +450,6 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   Extracts the killmail ID from a killmail safely.
   """
   @spec get_killmail_id(map()) :: integer() | nil
-  def get_killmail_id(%Killmail{killmail_id: id}), do: id
   def get_killmail_id(%{"killmail_id" => id}) when is_integer(id), do: id
   def get_killmail_id(_), do: nil
 end

@@ -50,13 +50,9 @@ defmodule WandererKillsWeb.KillmailChannel do
   channel.push("subscribe_systems", {systems: [30000144]})
   channel.push("unsubscribe_systems", {systems: [30000142]})
 
-  // Add/remove character subscriptions (supports both formats)
+  // Add/remove character subscriptions
   channel.push("subscribe_characters", {characters: [12345678]})
   channel.push("unsubscribe_characters", {characters: [95465499]})
-
-  // Alternative format also supported for backward compatibility
-  channel.push("subscribe_characters", {character_ids: [12345678]})
-  channel.push("unsubscribe_characters", {character_ids: [95465499]})
 
   // Get current subscription status
   channel.push("get_status", {})
@@ -209,13 +205,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
-  # Handle subscribing to characters (also supports "character_ids" for backward compatibility)
-  def handle_in("subscribe_characters", %{"character_ids" => characters} = params, socket)
-      when is_list(characters) do
-    # Rewrite to standard format and delegate
-    handle_in("subscribe_characters", Map.put(params, "characters", characters), socket)
-  end
-
+  # Handle subscribing to characters
   def handle_in("subscribe_characters", %{"characters" => characters}, socket)
       when is_list(characters) do
     case validate_characters(characters) do
@@ -253,13 +243,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
-  # Handle unsubscribing from characters (also supports "character_ids" for backward compatibility)
-  def handle_in("unsubscribe_characters", %{"character_ids" => characters} = params, socket)
-      when is_list(characters) do
-    # Rewrite to standard format and delegate
-    handle_in("unsubscribe_characters", Map.put(params, "characters", characters), socket)
-  end
-
+  # Handle unsubscribing from characters
   def handle_in("unsubscribe_characters", %{"characters" => characters}, socket)
       when is_list(characters) do
     case validate_characters(characters) do
@@ -394,9 +378,12 @@ defmodule WandererKillsWeb.KillmailChannel do
         timestamp: timestamp
       )
 
+      # Convert structs to maps for JSON serialization
+      killmail_maps = Enum.map(filtered_killmails, &WandererKills.Domain.Killmail.to_map/1)
+
       push(socket, "killmail_update", %{
         system_id: system_id,
-        killmails: filtered_killmails,
+        killmails: killmail_maps,
         timestamp: DateTime.to_iso8601(timestamp),
         preload: false
       })
@@ -871,24 +858,27 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       Enum.each(sample_kills, fn kill ->
         Logger.debug("[DEBUG] Sample killmail being sent",
-          killmail_id: kill["killmail_id"],
+          killmail_id: kill.killmail_id,
           system_id: system_id,
-          has_victim: Map.has_key?(kill, "victim"),
-          has_attackers: Map.has_key?(kill, "attackers"),
-          has_zkb: Map.has_key?(kill, "zkb"),
-          victim_ship: get_in(kill, ["victim", "ship_type_id"]),
-          victim_character: get_in(kill, ["victim", "character_id"]),
-          attacker_count: length(Map.get(kill, "attackers", [])),
-          total_value: get_in(kill, ["zkb", "totalValue"]),
-          kill_time: kill["kill_time"],
-          available_keys: Map.keys(kill) |> Enum.sort()
+          has_victim: not is_nil(kill.victim),
+          has_attackers: not is_nil(kill.attackers),
+          has_zkb: not is_nil(kill.zkb),
+          victim_ship: kill.victim && kill.victim.ship_type_id,
+          victim_character: kill.victim && kill.victim.character_id,
+          attacker_count: length(kill.attackers || []),
+          total_value: kill.zkb && kill.zkb.total_value,
+          kill_time: kill.kill_time,
+          struct_name: kill.__struct__
         )
       end)
+
+      # Convert structs to maps for JSON serialization
+      killmail_maps = Enum.map(kills, &WandererKills.Domain.Killmail.to_map/1)
 
       # Send killmail update to the WebSocket client
       push(socket, "killmail_update", %{
         system_id: system_id,
-        killmails: kills,
+        killmails: killmail_maps,
         timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
         preload: true
       })

@@ -483,11 +483,15 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
       :ok ->
         handle_page_processing(request, page_kills, buffer_pid)
 
-      {:error, :rate_limited} ->
+      {:error, %Error{type: :rate_limit}} ->
         # Wait and retry
         Logger.warning("Rate limited, waiting 60 seconds", system_id: system_id)
         Process.sleep(60_000)
         :retry
+
+      {:error, error} ->
+        # Other errors should be propagated
+        {:error, error}
     end
   end
 

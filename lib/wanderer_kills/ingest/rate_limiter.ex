@@ -130,7 +130,12 @@ defmodule WandererKills.Ingest.RateLimiter do
         %{service: service}
       )
 
-      {:reply, {:error, Error.rate_limit_error("Rate limit exceeded for #{service}", %{service: service, tokens_available: bucket.tokens})}, state}
+      {:reply,
+       {:error,
+        Error.rate_limit_error("Rate limit exceeded for #{service}", %{
+          service: service,
+          tokens_available: bucket.tokens
+        })}, state}
     end
   end
 
