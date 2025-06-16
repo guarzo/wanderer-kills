@@ -71,8 +71,6 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
           esi_data
           |> Map.put("zkb", zkb)
           |> Map.put("kill_time", kill_time)
-          # Keep both for compatibility
-          |> Map.put("killmail_time", kill_time)
 
         {:ok, merged}
 

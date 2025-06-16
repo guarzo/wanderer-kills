@@ -24,7 +24,11 @@ defmodule WandererKills.Core.Client do
       limit: limit
     )
 
-    case ZkbClient.fetch_system_killmails(system_id, limit, since_hours) do
+    # Convert limit and since_hours to options for the new API
+    past_seconds = since_hours * 3600
+    opts = [past_seconds: past_seconds]
+
+    case ZkbClient.fetch_system_killmails(system_id, opts) do
       {:ok, killmails} ->
         # Filter by time window if needed (since ZKB API doesn't support time filtering directly)
         filtered_killmails = filter_killmails_by_time(killmails, since_hours)

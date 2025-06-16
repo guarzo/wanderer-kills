@@ -196,7 +196,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
           id = struct_killmail.killmail_id
           characters = CharacterMatcher.extract_character_ids(struct_killmail)
           {id, characters}
-        
+
         map_killmail when is_map(map_killmail) ->
           id = map_killmail["killmail_id"] || System.unique_integer()
           characters = extract_character_ids_from_map(map_killmail)

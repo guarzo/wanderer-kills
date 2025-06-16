@@ -166,10 +166,11 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
     )
 
     # Build query parameters from options using consolidated helper
-    query_params = Param.process_params(opts ++ [no_items: true], 
-      key_transform: :snake_to_camel,
-      validator: &zkb_param_validator/2
-    )
+    query_params =
+      Param.process_params(opts ++ [no_items: true],
+        key_transform: :snake_to_camel,
+        validator: &zkb_param_validator/2
+      )
 
     request_opts =
       Client.build_request_opts(
@@ -243,23 +244,6 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   end
 
   def fetch_system_killmails(invalid_id, _opts) do
-    {:error,
-     Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
-  end
-
-  @doc """
-  Fetches killmails for a system from zKillboard with telemetry (compatibility function).
-  The limit and since_hours parameters are currently ignored but kept for API compatibility.
-  """
-  @spec fetch_system_killmails(system_id(), pos_integer(), pos_integer()) ::
-          {:ok, [killmail()]} | {:error, term()}
-  def fetch_system_killmails(system_id, _limit, _since_hours)
-      when is_integer(system_id) and system_id > 0 do
-    # For now, delegate to the main function - in the future we could use limit/since_hours
-    fetch_system_killmails(system_id)
-  end
-
-  def fetch_system_killmails(invalid_id, _limit, _since_hours) do
     {:error,
      Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
   end
@@ -564,10 +548,16 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
 
   # ZKB-specific parameter validation for use with consolidated helper
   defp zkb_param_validator(:page, page) when is_integer(page) and page > 0, do: true
-  defp zkb_param_validator(:limit, limit) when is_integer(limit) and limit > 0 and limit <= 200, do: true
+
+  defp zkb_param_validator(:limit, limit) when is_integer(limit) and limit > 0 and limit <= 200,
+    do: true
+
   defp zkb_param_validator(:start_time, start_time) when is_binary(start_time), do: true
   defp zkb_param_validator(:end_time, end_time) when is_binary(end_time), do: true
-  defp zkb_param_validator(:past_seconds, seconds) when is_integer(seconds) and seconds > 0, do: true
+
+  defp zkb_param_validator(:past_seconds, seconds) when is_integer(seconds) and seconds > 0,
+    do: true
+
   defp zkb_param_validator(:no_items, no_items) when is_boolean(no_items), do: true
   defp zkb_param_validator(_, _), do: false
 

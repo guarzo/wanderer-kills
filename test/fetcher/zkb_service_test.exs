@@ -74,7 +74,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClientTest do
     end
   end
 
-  describe "fetch_system_killmails/3" do
+  describe "fetch_system_killmails/2" do
     test "successfully fetches system killmails" do
       system_id = 30_000_142
       killmail1 = TestHelpers.generate_test_data(:killmail, 123)
@@ -87,7 +87,25 @@ defmodule WandererKills.Ingest.Killmails.ZkbClientTest do
           {:ok, %{status: 200, body: Jason.encode!(killmails)}}
       end)
 
-      assert {:ok, ^killmails} = ZKB.fetch_system_killmails(system_id, 10, 24)
+      # Using new API with options
+      assert {:ok, ^killmails} =
+               ZKB.fetch_system_killmails(system_id, limit: 10, past_seconds: 86_400)
+    end
+
+    test "successfully fetches system killmails without options" do
+      system_id = 30_000_142
+      killmail1 = TestHelpers.generate_test_data(:killmail, 123)
+      killmail2 = TestHelpers.generate_test_data(:killmail, 456)
+      killmails = [killmail1, killmail2]
+
+      HttpClientMock
+      |> expect(:get_with_rate_limit, fn
+        "#{@base_url}/systemID/30000142/", _opts ->
+          {:ok, %{status: 200, body: Jason.encode!(killmails)}}
+      end)
+
+      # Using new API without options
+      assert {:ok, ^killmails} = ZKB.fetch_system_killmails(system_id)
     end
 
     test "handles empty killmail list" do
@@ -99,7 +117,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClientTest do
           {:ok, %{status: 200, body: "[]"}}
       end)
 
-      assert {:ok, []} = ZKB.fetch_system_killmails(system_id, 10, 24)
+      assert {:ok, []} = ZKB.fetch_system_killmails(system_id, [])
     end
 
     test "handles client errors" do
@@ -111,17 +129,17 @@ defmodule WandererKills.Ingest.Killmails.ZkbClientTest do
           {:error, :timeout}
       end)
 
-      assert {:error, :timeout} = ZKB.fetch_system_killmails(system_id, 10, 24)
+      assert {:error, :timeout} = ZKB.fetch_system_killmails(system_id, [])
     end
 
     test "validates system ID format" do
-      assert {:error, error} = ZKB.fetch_system_killmails("invalid", 10, 24)
+      assert {:error, error} = ZKB.fetch_system_killmails("invalid", [])
       assert error.domain == :validation
       assert String.contains?(error.message, "Invalid system ID format")
     end
 
     test "validates positive system ID" do
-      assert {:error, error} = ZKB.fetch_system_killmails(-1, 10, 24)
+      assert {:error, error} = ZKB.fetch_system_killmails(-1, [])
       assert error.domain == :validation
     end
   end

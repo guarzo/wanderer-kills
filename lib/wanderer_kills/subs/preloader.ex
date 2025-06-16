@@ -279,7 +279,11 @@ defmodule WandererKills.Subs.Preloader do
       since_hours: since_hours
     )
 
-    case ZkbClient.fetch_system_killmails(system_id, 50, since_hours) do
+    # Convert since_hours to options for the new API
+    past_seconds = since_hours * 3600
+    opts = [past_seconds: past_seconds, limit: 50]
+
+    case ZkbClient.fetch_system_killmails(system_id, opts) do
       {:ok, fresh_kills} when is_list(fresh_kills) ->
         # Only process the number of kills we need for preload
         kills_to_cache = Enum.take(fresh_kills, limit)

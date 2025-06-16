@@ -82,14 +82,4 @@ defmodule WandererKills.Config do
     services = Application.get_env(:wanderer_kills, :services, [])
     Keyword.get(services, :start_redisq, true)
   end
-
-  @doc """
-  Check if event streaming is enabled.
-  This is a runtime check for the storage module.
-  """
-  @spec event_streaming_enabled?() :: boolean()
-  def event_streaming_enabled? do
-    storage = Application.get_env(:wanderer_kills, :storage, [])
-    Keyword.get(storage, :enable_event_streaming, true)
-  end
 end

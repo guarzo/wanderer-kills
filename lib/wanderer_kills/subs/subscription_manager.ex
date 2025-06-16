@@ -163,7 +163,10 @@ defmodule WandererKills.Subs.SubscriptionManager do
         :ok
 
       {:error, :not_found} ->
-        Logger.debug("[DEBUG] Subscription not found for removal", subscription_id: subscription_id)
+        Logger.debug("[DEBUG] Subscription not found for removal",
+          subscription_id: subscription_id
+        )
+
         # Already gone, that's fine
         :ok
     end
@@ -210,12 +213,15 @@ defmodule WandererKills.Subs.SubscriptionManager do
       |> Enum.flat_map(fn killmail ->
         victim = Map.get(killmail, :victim) || Map.get(killmail, "victim")
         attackers = Map.get(killmail, :attackers) || Map.get(killmail, "attackers") || []
-        
-        victim_id = if victim, do: Map.get(victim, :character_id) || Map.get(victim, "character_id")
-        attacker_ids = Enum.map(attackers, fn attacker ->
-          Map.get(attacker, :character_id) || Map.get(attacker, "character_id")
-        end)
-        
+
+        victim_id =
+          if victim, do: Map.get(victim, :character_id) || Map.get(victim, "character_id")
+
+        attacker_ids =
+          Enum.map(attackers, fn attacker ->
+            Map.get(attacker, :character_id) || Map.get(attacker, "character_id")
+          end)
+
         [victim_id | attacker_ids]
       end)
       |> Enum.filter(& &1)

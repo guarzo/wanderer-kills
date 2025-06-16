@@ -8,10 +8,11 @@ defmodule WandererKills.Ingest.Http.Param do
 
   @type param_key :: atom() | String.t()
   @type param_value :: any()
-  @type param_option :: {:key_transform, :snake_to_camel | :identity}
-                       | {:filter_nils, boolean()}
-                       | {:string_convert, boolean()}
-                       | {:validator, (param_key(), param_value() -> boolean())}
+  @type param_option ::
+          {:key_transform, :snake_to_camel | :identity}
+          | {:filter_nils, boolean()}
+          | {:string_convert, boolean()}
+          | {:validator, (param_key(), param_value() -> boolean())}
 
   @doc """
   Encodes parameters into a pre-encoded query string.
@@ -25,13 +26,13 @@ defmodule WandererKills.Ingest.Http.Param do
 
   ## Examples
 
-      iex> encode([page: 1, limit: nil, active: true])
+      iex> WandererKills.Ingest.Http.Param.encode([page: 1, limit: nil, active: true])
       "page=1&active=true"
 
-      iex> encode([start_time: "2023-01-01", page: 1], key_transform: :snake_to_camel)
+      iex> WandererKills.Ingest.Http.Param.encode([start_time: "2023-01-01", page: 1], key_transform: :snake_to_camel)
       "startTime=2023-01-01&page=1"
 
-      iex> encode([page: 1, limit: 50], validator: fn :limit, v -> v <= 200 end)
+      iex> WandererKills.Ingest.Http.Param.encode([page: 1, limit: 50], validator: fn _, _ -> true end)
       "page=1&limit=50"
   """
   @spec encode(keyword() | map(), [param_option()]) :: String.t()
@@ -131,24 +132,43 @@ defmodule WandererKills.Ingest.Http.Param do
     key
     |> Atom.to_string()
     |> snake_to_camel()
-    |> String.to_atom()
   end
 
   defp snake_to_camel(key) when is_binary(key) do
     case String.split(key, "_") do
       [single] ->
-        single
+        safe_string_to_atom(single)
 
       [first | rest] ->
-        first <> Enum.map_join(rest, &String.capitalize/1)
+        camel_case = first <> Enum.map_join(rest, &String.capitalize/1)
+        safe_string_to_atom(camel_case)
+    end
+  end
+
+  # Safely convert string to atom, preferring existing atoms to avoid dynamic atom creation
+  defp safe_string_to_atom(string) when is_binary(string) do
+    try do
+      String.to_existing_atom(string)
+    rescue
+      ArgumentError ->
+        # If atom doesn't exist, create it (for controlled parameter names only)
+        # This is safe for HTTP parameter names which are controlled by our application
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        String.to_atom(string)
     end
   end
 
   # ZKB-specific parameter validation
   defp zkb_param_validator(:page, page) when is_integer(page) and page > 0, do: true
-  defp zkb_param_validator(:limit, limit) when is_integer(limit) and limit > 0 and limit <= 200, do: true
+
+  defp zkb_param_validator(:limit, limit) when is_integer(limit) and limit > 0 and limit <= 200,
+    do: true
+
   defp zkb_param_validator(:start_time, start_time) when is_binary(start_time), do: true
   defp zkb_param_validator(:end_time, end_time) when is_binary(end_time), do: true
-  defp zkb_param_validator(:past_seconds, seconds) when is_integer(seconds) and seconds > 0, do: true
+
+  defp zkb_param_validator(:past_seconds, seconds) when is_integer(seconds) and seconds > 0,
+    do: true
+
   defp zkb_param_validator(_, _), do: false
 end

@@ -27,7 +27,6 @@ defmodule WandererKills.Core.Storage.KillmailStore do
 
   require Logger
   alias WandererKills.Core.Support.Error
-  alias WandererKills.Config
 
   # ETS tables
   @killmails_table :killmails
@@ -457,66 +456,12 @@ defmodule WandererKills.Core.Storage.KillmailStore do
   end
 
   # ============================================================================
-  # Legacy API Support
-  # ============================================================================
-
-  # These functions provide backward compatibility with existing code
-
-  @doc false
-  def store_killmail(killmail) when is_map(killmail) do
-    killmail_id = killmail["killmail_id"]
-
-    if killmail_id do
-      put(killmail_id, killmail)
-    else
-      {:error,
-       Error.validation_error(:missing_killmail_id, "Killmail missing required killmail_id field")}
-    end
-  end
-
-  @doc false
-  def get_killmail(killmail_id) when is_integer(killmail_id) do
-    get(killmail_id)
-  end
-
-  @doc false
-  def delete_killmail(killmail_id) when is_integer(killmail_id) do
-    delete(killmail_id)
-  end
-
-  @doc false
-  def fetch_events(client_id, system_ids, limit \\ 100)
-      when is_list(system_ids) and is_integer(limit) do
-    case fetch_for_client(client_id, system_ids) do
-      {:ok, events} ->
-        events
-        |> Enum.take(limit)
-        |> Enum.map(&elem(&1, 2))
-    end
-  end
-
-  @doc false
-  def fetch_timestamp(system_id, timestamp) when is_integer(system_id) do
-    set_system_fetch_timestamp(system_id, timestamp)
-  end
-
-  @doc false
-  def fetch_timestamp(system_id) when is_integer(system_id) do
-    get_system_fetch_timestamp(system_id)
-  end
-
-  @doc false
-  def cleanup_tables, do: clear()
-
-  @doc false
-  def clear_all, do: clear()
-
-  # ============================================================================
   # Private Functions
   # ============================================================================
 
   defp event_streaming_enabled? do
-    Config.event_streaming_enabled?()
+    Application.get_env(:wanderer_kills, :storage, [])
+    |> Keyword.get(:enable_event_streaming, true)
   end
 
   defp get_killmail_data(killmail_id) do

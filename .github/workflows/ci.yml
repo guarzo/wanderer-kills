@@ -168,6 +168,22 @@ jobs:
             exit 1
           fi
 
+      - name: Generate boundary visualization
+        id: boundary
+        continue-on-error: true
+        run: |
+          echo "## Boundary Visualization" >> $GITHUB_STEP_SUMMARY
+          mkdir -p priv/static/images
+          if mix boundary.visualize --format svg --output priv/static/images/boundary.svg; then
+            echo "✅ **Boundary visualization generated**" >> $GITHUB_STEP_SUMMARY
+            echo "boundary_status=success" >> $GITHUB_OUTPUT
+            # Also generate dot format for additional processing if needed
+            mix boundary.visualize --format dot --output priv/static/images/boundary.dot
+          else
+            echo "⚠️ **Boundary visualization failed**" >> $GITHUB_STEP_SUMMARY
+            echo "boundary_status=failed" >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate coverage report
         id: coverage
         run: |
@@ -192,6 +208,15 @@ jobs:
           name: coverage-report
           path: cover/
 
+      - name: Upload boundary visualization
+        if: steps.boundary.outputs.boundary_status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: boundary-visualization
+          path: |
+            priv/static/images/boundary.svg
+            priv/static/images/boundary.dot
+
       - name: Create Quality Summary
         if: always()
         run: |
@@ -207,6 +232,7 @@ jobs:
           else
             echo "| Coverage | ❓ Unknown |" >> $GITHUB_STEP_SUMMARY
           fi
+          echo "| Boundary | ${{ steps.boundary.outputs.boundary_status == 'success' && '✅ Visualized' || '⚠️ Failed' }} |" >> $GITHUB_STEP_SUMMARY
 
           # Create JSON summary for potential badge usage
           mkdir -p .github/badges
@@ -217,6 +243,7 @@ jobs:
             --arg dialyzer_warnings "${{ steps.dialyzer.outputs.dialyzer_warnings || '0' }}" \
             --arg tests_status "${{ steps.tests.outputs.tests_status || 'unknown' }}" \
             --arg coverage "${{ steps.coverage.outputs.coverage || 'unknown' }}" \
+            --arg boundary_status "${{ steps.boundary.outputs.boundary_status || 'unknown' }}" \
             '{
               "credo": {
                 "status": $credo_status,
@@ -229,7 +256,10 @@ jobs:
               "tests": {
                 "status": $tests_status
               },
-              "coverage": $coverage
+              "coverage": $coverage,
+              "boundary": {
+                "status": $boundary_status
+              }
             }' > .github/badges/quality-status.json
 
       - name: Upload quality status

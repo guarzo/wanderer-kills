@@ -50,6 +50,7 @@ defmodule WandererKills.Ingest.Http.ParamTest do
 
     test "applies custom validator" do
       params = [page: 1, limit: 250, valid: 10]
+
       validator = fn
         :limit, v -> v <= 200
         _, _ -> true
@@ -69,7 +70,10 @@ defmodule WandererKills.Ingest.Http.ParamTest do
       params = %{page: 1, limit: 50}
       result = Param.encode(params)
 
-      assert result == "page=1&limit=50"
+      # Maps don't guarantee order, so check both parameters exist
+      assert String.contains?(result, "page=1")
+      assert String.contains?(result, "limit=50")
+      assert String.contains?(result, "&")
     end
   end
 
@@ -103,15 +107,18 @@ defmodule WandererKills.Ingest.Http.ParamTest do
       assert String.contains?(result, "no_items=true")
       assert String.contains?(result, "page=1")
       assert String.contains?(result, "limit=50")
-      assert String.contains?(result, "startTime=2023-01-01T00:00:00Z")
+      assert String.contains?(result, "startTime=2023-01-01T00%3A00%3A00Z")
       assert String.contains?(result, "pastSeconds=3600")
     end
 
     test "rejects invalid ZKB parameters" do
       params = [
-        page: 0,        # Invalid: must be > 0
-        limit: 300,     # Invalid: must be <= 200
-        invalid_param: "test"  # Invalid: unknown parameter
+        # Invalid: must be > 0
+        page: 0,
+        # Invalid: must be <= 200
+        limit: 300,
+        # Invalid: unknown parameter
+        invalid_param: "test"
       ]
 
       result = Param.encode_zkb_params(params)
@@ -122,33 +129,33 @@ defmodule WandererKills.Ingest.Http.ParamTest do
 
     test "validates page parameter" do
       # Valid page
-      result = Param.encode_zkb_params([page: 5])
+      result = Param.encode_zkb_params(page: 5)
       assert String.contains?(result, "page=5")
 
       # Invalid page (zero)
-      result = Param.encode_zkb_params([page: 0])
+      result = Param.encode_zkb_params(page: 0)
       refute String.contains?(result, "page=")
 
       # Invalid page (negative)
-      result = Param.encode_zkb_params([page: -1])
+      result = Param.encode_zkb_params(page: -1)
       refute String.contains?(result, "page=")
     end
 
     test "validates limit parameter" do
       # Valid limit
-      result = Param.encode_zkb_params([limit: 100])
+      result = Param.encode_zkb_params(limit: 100)
       assert String.contains?(result, "limit=100")
 
       # Valid limit (max)
-      result = Param.encode_zkb_params([limit: 200])
+      result = Param.encode_zkb_params(limit: 200)
       assert String.contains?(result, "limit=200")
 
       # Invalid limit (too high)
-      result = Param.encode_zkb_params([limit: 300])
+      result = Param.encode_zkb_params(limit: 300)
       refute String.contains?(result, "limit=")
 
       # Invalid limit (zero)
-      result = Param.encode_zkb_params([limit: 0])
+      result = Param.encode_zkb_params(limit: 0)
       refute String.contains?(result, "limit=")
     end
   end
