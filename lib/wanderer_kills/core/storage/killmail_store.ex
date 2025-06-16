@@ -42,6 +42,7 @@ defmodule WandererKills.Core.Storage.KillmailStore do
   @type killmail_id :: integer()
   @type system_id :: integer()
   @type killmail_data :: map()
+  @type killmail_struct :: WandererKills.Domain.Killmail.t()
   @type event_id :: integer()
   @type client_id :: term()
   @type client_offsets :: %{system_id() => event_id()}
@@ -131,21 +132,25 @@ defmodule WandererKills.Core.Storage.KillmailStore do
 
   @doc """
   Stores a killmail without system association.
+  Accepts a Domain.Killmail struct.
   """
   @impl true
-  def put(killmail_id, killmail_data) when is_integer(killmail_id) and is_map(killmail_data) do
-    :ets.insert(@killmails_table, {killmail_id, killmail_data})
+  def put(killmail_id, %WandererKills.Domain.Killmail{} = killmail) when is_integer(killmail_id) do
+    map_data = WandererKills.Domain.Killmail.to_map(killmail)
+    :ets.insert(@killmails_table, {killmail_id, map_data})
     :ok
   end
 
   @doc """
   Stores a killmail with system association.
+  Accepts a Domain.Killmail struct.
   """
   @impl true
-  def put(killmail_id, system_id, killmail_data)
-      when is_integer(killmail_id) and is_integer(system_id) and is_map(killmail_data) do
+  def put(killmail_id, system_id, %WandererKills.Domain.Killmail{} = killmail)
+      when is_integer(killmail_id) and is_integer(system_id) do
     # Store the killmail
-    :ets.insert(@killmails_table, {killmail_id, killmail_data})
+    map_data = WandererKills.Domain.Killmail.to_map(killmail)
+    :ets.insert(@killmails_table, {killmail_id, map_data})
 
     # Associate with system
     add_system_killmail(system_id, killmail_id)
@@ -155,12 +160,16 @@ defmodule WandererKills.Core.Storage.KillmailStore do
 
   @doc """
   Retrieves a killmail by ID.
+  Returns a Domain.Killmail struct.
   """
   @impl true
   def get(killmail_id) when is_integer(killmail_id) do
     case :ets.lookup(@killmails_table, killmail_id) do
-      [{^killmail_id, data}] ->
-        {:ok, data}
+      [{^killmail_id, map_data}] ->
+        case WandererKills.Domain.Killmail.new(map_data) do
+          {:ok, struct} -> {:ok, struct}
+          {:error, reason} -> {:error, Error.killmail_error(:invalid_format, "Failed to create killmail struct", %{reason: reason})}
+        end
 
       [] ->
         {:error, Error.not_found_error("Killmail not found", %{killmail_id: killmail_id})}
@@ -189,12 +198,14 @@ defmodule WandererKills.Core.Storage.KillmailStore do
 
   @doc """
   Lists all killmails for a specific system.
+  Returns a list of Domain.Killmail structs.
   """
   @impl true
   def list_by_system(system_id) when is_integer(system_id) do
     case :ets.lookup(@system_killmails_table, system_id) do
       [{^system_id, killmail_ids}] ->
-        Enum.flat_map(killmail_ids, &get_killmail_data/1)
+        killmail_ids
+        |> Enum.flat_map(&get_killmail_struct/1)
 
       [] ->
         []
@@ -322,33 +333,33 @@ defmodule WandererKills.Core.Storage.KillmailStore do
 
   @doc """
   Inserts a new killmail event for streaming (if enabled).
+  Accepts a Domain.Killmail struct.
   """
   @impl true
-  def insert_event(system_id, killmail_map) when is_integer(system_id) and is_map(killmail_map) do
+  def insert_event(system_id, %WandererKills.Domain.Killmail{} = killmail) when is_integer(system_id) do
     if event_streaming_enabled?() do
       # Get next event ID
       event_id = get_next_event_id()
 
       # Store the killmail
-      killmail_id = killmail_map["killmail_id"]
-      :ets.insert(@killmails_table, {killmail_id, killmail_map})
+      map_data = WandererKills.Domain.Killmail.to_map(killmail)
+      :ets.insert(@killmails_table, {killmail.killmail_id, map_data})
 
       # Add to system killmails
-      add_system_killmail(system_id, killmail_id)
+      add_system_killmail(system_id, killmail.killmail_id)
 
-      # Insert event for streaming
-      :ets.insert(@killmail_events_table, {event_id, system_id, killmail_map})
+      # Insert event for streaming (store struct for events)
+      :ets.insert(@killmail_events_table, {event_id, system_id, killmail})
 
-      # Broadcast via PubSub
+      # Broadcast via PubSub (send struct)
       Phoenix.PubSub.broadcast(
         WandererKills.PubSub,
         "system:#{system_id}",
-        {:new_killmail, system_id, killmail_map}
+        {:new_killmail, system_id, killmail}
       )
     else
       # Just store without event streaming
-      killmail_id = killmail_map["killmail_id"]
-      put(killmail_id, system_id, killmail_map)
+      put(killmail.killmail_id, system_id, killmail)
     end
 
     :ok
@@ -464,12 +475,19 @@ defmodule WandererKills.Core.Storage.KillmailStore do
     |> Keyword.get(:enable_event_streaming, true)
   end
 
-  defp get_killmail_data(killmail_id) do
+  defp get_killmail_struct(killmail_id) do
     case :ets.lookup(@killmails_table, killmail_id) do
-      [{^killmail_id, killmail_data}] -> [killmail_data]
-      [] -> []
+      [{^killmail_id, map_data}] ->
+        case WandererKills.Domain.Killmail.new(map_data) do
+          {:ok, struct} -> [struct]
+          {:error, _} -> []
+        end
+      [] -> 
+        []
     end
   end
+
+  # Removed backwards compatibility helpers - no longer needed
 
   defp get_next_event_id do
     :ets.update_counter(@counters_table, :event_counter, 1)

@@ -9,6 +9,7 @@ defmodule WandererKills.Ingest.RateLimiter do
 
   use GenServer
   require Logger
+  alias WandererKills.Core.Support.Error
 
   @type service :: :zkillboard | :esi
   @type bucket_state :: %{
@@ -37,9 +38,9 @@ defmodule WandererKills.Ingest.RateLimiter do
 
   @doc """
   Attempts to consume a token for the given service.
-  Returns :ok if a token was available, {:error, :rate_limited} otherwise.
+  Returns :ok if a token was available, {:error, Error.t()} otherwise.
   """
-  @spec check_rate_limit(service()) :: :ok | {:error, :rate_limited}
+  @spec check_rate_limit(service()) :: :ok | {:error, Error.t()}
   def check_rate_limit(service) when service in [:zkillboard, :esi] do
     GenServer.call(__MODULE__, {:consume_token, service})
   end
@@ -129,7 +130,7 @@ defmodule WandererKills.Ingest.RateLimiter do
         %{service: service}
       )
 
-      {:reply, {:error, :rate_limited}, state}
+      {:reply, {:error, Error.rate_limit_error("Rate limit exceeded for #{service}", %{service: service, tokens_available: bucket.tokens})}, state}
     end
   end
 

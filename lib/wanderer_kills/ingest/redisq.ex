@@ -16,6 +16,7 @@ defmodule WandererKills.Ingest.RedisQ do
   alias WandererKills.Core.EtsOwner
   alias WandererKills.Ingest.ESI.Client, as: EsiClient
   alias WandererKills.Core.Support.Clock
+  alias WandererKills.Core.Support.Error
   alias WandererKills.Ingest.Http.Client, as: HttpClient
   alias WandererKills.Domain.Killmail
 
@@ -331,7 +332,7 @@ defmodule WandererKills.Ingest.RedisQ do
       # Anything else is unexpected
       {:ok, resp} ->
         Logger.warning("[RedisQ] Unexpected response shape: #{inspect(resp)}")
-        {:error, :unexpected_format}
+        {:error, Error.invalid_format_error("Unexpected RedisQ response format", %{response: resp})}
 
       {:error, reason} ->
         Logger.warning("[RedisQ] HTTP request failed: #{inspect(reason)}")
@@ -409,7 +410,7 @@ defmodule WandererKills.Ingest.RedisQ do
 
       other ->
         Logger.error("[RedisQ] Unexpected task result for legacy kill #{id}: #{inspect(other)}")
-        {:error, :unexpected_task_result}
+        {:error, Error.system_error(:unexpected_task_result, "Unexpected task result for legacy kill", %{kill_id: id, result: other})}
     end
   end
 

@@ -27,7 +27,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   Processes any killmail, automatically detecting if it's full or partial.
 
   ## Parameters
-  - `killmail` - The killmail data (full or partial)
+  - `killmail` - The killmail data (full or partial, map or struct)
   - `cutoff_time` - DateTime cutoff for filtering old killmails
   - `opts` - Processing options:
     - `:store` - Whether to store the killmail (default: true)
@@ -109,21 +109,26 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
       |> collect_valid_killmails()
 
     if validate_only? do
+      # Convert to structs and return immediately
       {:ok, convert_to_structs(validated_killmails)}
     else
-      # Batch enrich all valid killmails if enrichment is enabled
-      final_killmails = apply_enrichment(validated_killmails, enrich?)
+      # Batch enrich all valid killmails if enrichment is enabled (before struct conversion)
+      enriched_killmails = if enrich? do
+        apply_enrichment(validated_killmails, true)
+      else
+        validated_killmails
+      end
 
-      # Store killmails if requested
+      # Convert to structs after enrichment
+      final_killmails = convert_to_structs(enriched_killmails)
+
+      # Store killmails if requested (store now accepts structs)
       if store? do
         Enum.each(final_killmails, &store_killmail_async/1)
       end
 
-      # Convert to structs
-      result_killmails = convert_to_structs(final_killmails)
-
       # Monitoring is handled at the entry point level
-      {:ok, result_killmails}
+      {:ok, final_killmails}
     end
   end
 
@@ -174,43 +179,33 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   end
 
   defp store_killmail_async(killmail) do
-    # Convert struct to map for storage if needed
-    killmail_map = ensure_map(killmail)
+    # Extract IDs from either struct or map
+    {killmail_id, system_id} = case killmail do
+      %Killmail{killmail_id: kid, system_id: sid} -> {kid, sid}
+      %{"killmail_id" => kid, "system_id" => sid} -> {kid, sid}
+      %{"killmail_id" => kid, "solar_system_id" => sid} -> {kid, sid}
+      _ -> {nil, nil}
+    end
 
-    case extract_system_id(killmail_map) do
-      {:ok, system_id} ->
-        Task.Supervisor.start_child(WandererKills.TaskSupervisor, fn ->
-          Logger.debug("Storing killmail asynchronously",
-            killmail_id: killmail_map["killmail_id"],
-            system_id: system_id
-          )
-
-          KillmailStore.put(killmail_map["killmail_id"], system_id, killmail_map)
-        end)
-
-      {:error, reason} ->
-        Logger.error("Cannot store killmail without system_id",
-          killmail_id: killmail_map["killmail_id"],
-          error: reason
+    if killmail_id && system_id do
+      Task.Supervisor.start_child(WandererKills.TaskSupervisor, fn ->
+        Logger.debug("Storing killmail asynchronously",
+          killmail_id: killmail_id,
+          system_id: system_id
         )
 
-        {:error, reason}
+        # KillmailStore now accepts structs directly
+        KillmailStore.put(killmail_id, system_id, killmail)
+      end)
+    else
+      Logger.error("Cannot store killmail without required IDs",
+        killmail: inspect(killmail)
+      )
+      {:error, Error.killmail_error(:missing_ids, "Missing killmail_id or system_id")}
     end
   end
 
-  defp extract_system_id(%Killmail{system_id: id}) when not is_nil(id), do: {:ok, id}
-  defp extract_system_id(%{"solar_system_id" => id}) when not is_nil(id), do: {:ok, id}
-  defp extract_system_id(%{"system_id" => id}) when not is_nil(id), do: {:ok, id}
-
-  defp extract_system_id(killmail) do
-    killmail_id = get_killmail_id(killmail)
-    Logger.warning("Killmail missing system_id", killmail_id: killmail_id)
-    {:error, :missing_system_id}
-  end
-
-  defp get_killmail_id(%Killmail{killmail_id: id}), do: id
-  defp get_killmail_id(%{"killmail_id" => id}), do: id
-  defp get_killmail_id(_), do: nil
+  # Removed unused helper functions - extraction logic is now inline in store_killmail_async
 
   defp validate_and_build_killmail(killmail, cutoff_time) do
     case Validator.validate_killmail(killmail, cutoff_time) do
@@ -306,6 +301,5 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
     end)
   end
 
-  defp ensure_map(%Killmail{} = killmail), do: Killmail.to_map(killmail)
-  defp ensure_map(map) when is_map(map), do: map
+  # Removed ensure_map - no longer needed
 end
