@@ -18,7 +18,7 @@
 
         overlay = (final: prev: {
           yarn = prev.yarn.override {
-                  nodejs = final.pkgs.nodejs-18_x;
+                  nodejs = final.pkgs.nodejs_20;
                 };
         });
 
@@ -33,7 +33,7 @@
         elixir = pkgs.beam.packages.erlang_27.elixir_1_17;
         elixir-ls = pkgs.beam.packages.erlang_27.elixir_ls;
         packages = pkgs.beam.packagesWith erlang;
-        nodejs = pkgs.nodejs-18_x;
+        nodejs = pkgs.nodejs_20;
         postgresql = pkgs.postgresql_14;
         yarn = pkgs.yarn;
 
