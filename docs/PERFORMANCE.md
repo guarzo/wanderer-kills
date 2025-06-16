@@ -1,6 +1,6 @@
 # Performance Benchmarks
 
-WandererKills has been thoroughly benchmarked for production readiness with impressive sub-microsecond performance across all core operations.
+WandererKills has been thoroughly benchmarked for production readiness, with impressive sub-microsecond performance across all core operations.
 
 ## System Performance
 
@@ -51,3 +51,4 @@ These benchmarks demonstrate that WandererKills is optimized for:
 - **Fast API response times**
 
 The service leverages Elixir's actor model and ETS-based storage to achieve these performance characteristics while maintaining reliability and fault tolerance.
+

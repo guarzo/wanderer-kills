@@ -250,6 +250,22 @@ defmodule WandererKillsWeb.KillmailChannel do
             remaining_characters_count: MapSet.size(remaining_characters)
           )
 
+          # Check if we need to unsubscribe from all_systems topic
+          # This happens when we have no system subscriptions and no character subscriptions left
+          if MapSet.size(socket.assigns.subscribed_systems) == 0 and
+               MapSet.size(remaining_characters) == 0 do
+            Phoenix.PubSub.unsubscribe(
+              WandererKills.PubSub,
+              WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+            )
+
+            Logger.debug(
+              "[DEBUG] Unsubscribed from all_systems topic (no subscriptions remaining)",
+              user_id: socket.assigns.user_id,
+              subscription_id: socket.assigns.subscription_id
+            )
+          end
+
           {:reply, {:ok, %{subscribed_characters: MapSet.to_list(remaining_characters)}}, socket}
         else
           {:reply, {:ok, %{message: "Not subscribed to any of the requested characters"}}, socket}
@@ -869,8 +885,10 @@ defmodule WandererKillsWeb.KillmailChannel do
         {socket, %{message: "Already subscribed to all requested characters"}}
       end
 
-    # Check if we need to subscribe to all_systems topic (always run)
-    maybe_subscribe_to_all_systems(updated_socket, all_characters)
+    # Check if we need to subscribe to all_systems topic (only if we added new characters)
+    if MapSet.size(new_characters) > 0 do
+      maybe_subscribe_to_all_systems(updated_socket, all_characters)
+    end
 
     {:reply, {:ok, message}, updated_socket}
   end

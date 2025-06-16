@@ -1,11 +1,10 @@
 # WandererKills
 
-[![CI/CD](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml/badge.svg)](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml)
+[![CI/CD](https://github.com/guarzo/wanderer-kills/actions/workflows/ci.yml/badge.svg)](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml)
 [![Credo](https://img.shields.io/badge/credo-0%20issues-brightgreen.svg)](https://github.com/rrrene/credo)
 [![Dialyzer](https://img.shields.io/badge/dialyzer-0%20warnings-brightgreen.svg)](https://www.erlang.org/doc/man/dialyzer.html)
 [![Elixir](https://img.shields.io/badge/elixir-1.18%2B-purple.svg)](https://elixir-lang.org/)
 [![Phoenix Framework](https://img.shields.io/badge/phoenix-1.7-orange.svg)](https://www.phoenixframework.org/)
-[![Docker](https://img.shields.io/docker/v/guarzo/wanderer-kills?label=docker&sort=semver)](https://hub.docker.com/r/guarzo/wanderer-kills)
 
 A high-performance, real-time EVE Online killmail data service built with Elixir/Phoenix. This service provides REST API and WebSocket interfaces for accessing killmail data from zKillboard.
 
@@ -510,19 +509,19 @@ docker run -d \
 
 ## Performance
 
-The service is designed for high performance and has been thoroughly benchmarked for production readiness.
+The service is designed for high performance and has been thoroughly benchmarked for production readiness, with impressive sub-microsecond operations.
 
 ### Performance Benchmarks
 
 WandererKills delivers exceptional performance with sub-microsecond operations:
 
-- **System Operations**: 8.32μs per lookup, 13.15μs per bulk subscription
-- **Character Operations**: 7.64μs per lookup, 20.52μs per batch lookup  
-- **Memory Efficient**: 0.13MB per index
-- **Fast Health Checks**: Under 4ms
+- **System Operations**: 8.32 μs per lookup, 13.15 μs per bulk subscription
+- **Character Operations**: 7.64 μs per lookup, 20.52 μs per batch lookup  
+- **Memory Efficient**: 0.13 MB per index
+- **Fast Health Checks**: Under 4 ms
 
 > 📊 **[View Detailed Performance Benchmarks](docs/PERFORMANCE.md)**
->
+> 
 > Run benchmarks: `MIX_ENV=test mix test test/performance --include perf`
 
 ### Key Performance Features
