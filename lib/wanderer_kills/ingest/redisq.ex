@@ -327,7 +327,7 @@ defmodule WandererKills.Ingest.RedisQ do
 
       # Legacy format: { "killID" => id, "zkb" => zkb }
       {:ok, %{body: %{"killID" => id, "zkb" => zkb}}} ->
-        process_legacy_kill(id, zkb)
+        process_legacy_kill(id, zkb, queue_id)
 
       # Anything else is unexpected
       {:ok, resp} ->
@@ -386,7 +386,14 @@ defmodule WandererKills.Ingest.RedisQ do
   #   {:ok, :kill_older}      (if Coordinator returns :kill_older)
   #   {:ok, :kill_skipped}    (if Coordinator returns :kill_skipped)
   #   {:error, reason}
-  defp process_legacy_kill(id, zkb) do
+  defp process_legacy_kill(id, zkb, queue_id) do
+    Logger.warning("[RedisQ] Processing LEGACY kill format",
+      kill_id: id,
+      queue_id: queue_id,
+      zkb_has: Map.keys(zkb || %{}),
+      message: "Legacy kill format detected - this format may be deprecated"
+    )
+
     task =
       Task.Supervisor.async(WandererKills.TaskSupervisor, fn ->
         fetch_and_parse_full_kill(id, zkb)
@@ -396,6 +403,11 @@ defmodule WandererKills.Ingest.RedisQ do
     |> Task.await(@task_timeout_ms)
     |> case do
       {:ok, :kill_received} ->
+        Logger.warning("[RedisQ] Successfully processed LEGACY kill",
+          kill_id: id,
+          message: "Consider migrating to new kill format"
+        )
+
         {:ok, :legacy_kill}
 
       {:ok, :kill_older} ->
@@ -420,7 +432,8 @@ defmodule WandererKills.Ingest.RedisQ do
            false,
            %{
              kill_id: id,
-             result: other
+             result: other,
+             queue_id: queue_id
            }
          )}
     end

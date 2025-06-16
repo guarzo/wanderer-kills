@@ -110,7 +110,7 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessorPropertyTest do
           {:ok, parsed} when is_struct(parsed) ->
             assert parsed.killmail_id == killmail_id
             assert parsed.system_id == system_id
-            assert parsed.kill_time == timestamp
+            assert DateTime.to_iso8601(parsed.kill_time) == timestamp
 
           {:ok, :kill_older} ->
             # The generated timestamp was too old, that's okay

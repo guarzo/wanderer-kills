@@ -20,13 +20,11 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
   """
   @spec build_killmail_data(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
   def build_killmail_data(killmail) do
-    # Use the original string time, not the parsed DateTime
-    kill_time = killmail["kill_time"] || killmail["killmail_time"]
-
+    # Trust normalized keys from earlier pipeline stage
     structured = %{
       "killmail_id" => killmail["killmail_id"],
-      "kill_time" => kill_time,
-      "system_id" => killmail["solar_system_id"] || killmail["system_id"],
+      "kill_time" => killmail["kill_time"],
+      "system_id" => killmail["system_id"],
       "victim" => Transformations.normalize_victim(killmail["victim"]),
       "attackers" => Transformations.normalize_attackers(killmail["attackers"]),
       "zkb" => killmail["zkb"] || %{},
@@ -54,7 +52,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
   @spec merge_killmail_data(map(), map()) :: {:ok, map()} | {:error, Error.t()}
   def merge_killmail_data(%{"killmail_id" => id} = esi_data, %{"zkb" => zkb})
       when is_integer(id) and is_map(zkb) do
-    case Transformations.get_killmail_time(esi_data) do
+    case Transformations.get_killmail_time(esi_data) || esi_data["kill_time"] do
       kill_time when is_binary(kill_time) ->
         merged =
           esi_data

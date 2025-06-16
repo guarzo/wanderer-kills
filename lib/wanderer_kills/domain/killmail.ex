@@ -11,7 +11,7 @@ defmodule WandererKills.Domain.Killmail do
 
   @type t :: %__MODULE__{
           killmail_id: integer(),
-          kill_time: DateTime.t() | String.t(),
+          kill_time: DateTime.t(),
           system_id: integer(),
           moon_id: integer() | nil,
           war_id: integer() | nil,
@@ -173,7 +173,14 @@ defmodule WandererKills.Domain.Killmail do
         {:error, Error.validation_error(:missing_kill_time, "Kill time is required")}
 
       str when is_binary(str) ->
-        {:ok, str}
+        case DateTime.from_iso8601(str) do
+          {:ok, dt, _} ->
+            {:ok, dt}
+
+          _ ->
+            {:error,
+             Error.validation_error(:invalid_kill_time, "Kill time must be valid ISO-8601 format")}
+        end
 
       %DateTime{} = dt ->
         {:ok, dt}

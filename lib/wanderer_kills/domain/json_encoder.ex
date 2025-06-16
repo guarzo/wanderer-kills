@@ -8,6 +8,10 @@ defmodule WandererKills.Domain.JsonEncoder do
 
   alias WandererKills.Domain.{Killmail, Victim, Attacker, ZkbMetadata}
 
+  # Shared helper function for all protocol implementations
+  def maybe_add_field(map, _key, nil), do: map
+  def maybe_add_field(map, key, value), do: Map.put(map, key, value)
+
   # Implement Jason.Encoder for Killmail
   defimpl Jason.Encoder, for: Killmail do
     def encode(killmail, opts) do
@@ -24,17 +28,18 @@ defmodule WandererKills.Domain.JsonEncoder do
         "victim" => killmail.victim,
         "attackers" => killmail.attackers
       }
-      |> maybe_add_field("moon_id", killmail.moon_id)
-      |> maybe_add_field("war_id", killmail.war_id)
-      |> maybe_add_field("zkb", killmail.zkb)
-      |> maybe_add_field("attacker_count", killmail.attacker_count)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("moon_id", killmail.moon_id)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("war_id", killmail.war_id)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("zkb", killmail.zkb)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "attacker_count",
+        killmail.attacker_count
+      )
     end
 
     defp format_kill_time(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
     defp format_kill_time(str) when is_binary(str), do: str
-
-    defp maybe_add_field(map, _key, nil), do: map
-    defp maybe_add_field(map, key, value), do: Map.put(map, key, value)
+    defp format_kill_time(nil), do: nil
   end
 
   # Implement Jason.Encoder for Victim
@@ -51,19 +56,25 @@ defmodule WandererKills.Domain.JsonEncoder do
         "ship_type_id" => victim.ship_type_id,
         "damage_taken" => victim.damage_taken
       }
-      |> maybe_add_field("corporation_id", victim.corporation_id)
-      |> maybe_add_field("alliance_id", victim.alliance_id)
-      |> maybe_add_field("position", victim.position)
-      |> maybe_add_field("character_name", victim.character_name)
-      |> maybe_add_field("corporation_name", victim.corporation_name)
-      |> maybe_add_field("corporation_ticker", victim.corporation_ticker)
-      |> maybe_add_field("alliance_name", victim.alliance_name)
-      |> maybe_add_field("alliance_ticker", victim.alliance_ticker)
-      |> maybe_add_field("ship_name", victim.ship_name)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("corporation_id", victim.corporation_id)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("alliance_id", victim.alliance_id)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("position", victim.position)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("character_name", victim.character_name)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "corporation_name",
+        victim.corporation_name
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "corporation_ticker",
+        victim.corporation_ticker
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("alliance_name", victim.alliance_name)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "alliance_ticker",
+        victim.alliance_ticker
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("ship_name", victim.ship_name)
     end
-
-    defp maybe_add_field(map, _key, nil), do: map
-    defp maybe_add_field(map, key, value), do: Map.put(map, key, value)
   end
 
   # Implement Jason.Encoder for Attacker
@@ -79,22 +90,40 @@ defmodule WandererKills.Domain.JsonEncoder do
         "damage_done" => attacker.damage_done,
         "final_blow" => attacker.final_blow
       }
-      |> maybe_add_field("character_id", attacker.character_id)
-      |> maybe_add_field("corporation_id", attacker.corporation_id)
-      |> maybe_add_field("alliance_id", attacker.alliance_id)
-      |> maybe_add_field("ship_type_id", attacker.ship_type_id)
-      |> maybe_add_field("weapon_type_id", attacker.weapon_type_id)
-      |> maybe_add_field("security_status", attacker.security_status)
-      |> maybe_add_field("character_name", attacker.character_name)
-      |> maybe_add_field("corporation_name", attacker.corporation_name)
-      |> maybe_add_field("corporation_ticker", attacker.corporation_ticker)
-      |> maybe_add_field("alliance_name", attacker.alliance_name)
-      |> maybe_add_field("alliance_ticker", attacker.alliance_ticker)
-      |> maybe_add_field("ship_name", attacker.ship_name)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("character_id", attacker.character_id)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "corporation_id",
+        attacker.corporation_id
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("alliance_id", attacker.alliance_id)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("ship_type_id", attacker.ship_type_id)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "weapon_type_id",
+        attacker.weapon_type_id
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "security_status",
+        attacker.security_status
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "character_name",
+        attacker.character_name
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "corporation_name",
+        attacker.corporation_name
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "corporation_ticker",
+        attacker.corporation_ticker
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("alliance_name", attacker.alliance_name)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field(
+        "alliance_ticker",
+        attacker.alliance_ticker
+      )
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("ship_name", attacker.ship_name)
     end
-
-    defp maybe_add_field(map, _key, nil), do: map
-    defp maybe_add_field(map, key, value), do: Map.put(map, key, value)
   end
 
   # Implement Jason.Encoder for ZkbMetadata
@@ -115,13 +144,10 @@ defmodule WandererKills.Domain.JsonEncoder do
         "solo" => zkb.solo,
         "awox" => zkb.awox
       }
-      |> maybe_add_field("fittedValue", zkb.fitted_value)
-      |> maybe_add_field("droppedValue", zkb.dropped_value)
-      |> maybe_add_field("destroyedValue", zkb.destroyed_value)
-      |> maybe_add_field("labels", zkb.labels)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("fittedValue", zkb.fitted_value)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("droppedValue", zkb.dropped_value)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("destroyedValue", zkb.destroyed_value)
+      |> WandererKills.Domain.JsonEncoder.maybe_add_field("labels", zkb.labels)
     end
-
-    defp maybe_add_field(map, _key, nil), do: map
-    defp maybe_add_field(map, key, value), do: Map.put(map, key, value)
   end
 end

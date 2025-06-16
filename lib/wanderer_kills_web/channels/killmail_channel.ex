@@ -210,33 +210,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       when is_list(characters) do
     case validate_characters(characters) do
       {:ok, valid_characters} ->
-        current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
-        new_characters = MapSet.difference(MapSet.new(valid_characters), current_characters)
-
-        if MapSet.size(new_characters) > 0 do
-          # Update subscription
-          all_characters = MapSet.union(current_characters, new_characters)
-
-          updates = %{
-            systems: MapSet.to_list(socket.assigns.subscribed_systems),
-            characters: MapSet.to_list(all_characters)
-          }
-
-          update_subscription(socket.assigns.subscription_id, updates)
-
-          socket = assign(socket, :subscribed_characters, all_characters)
-
-          Logger.debug("[DEBUG] Client subscribed to characters",
-            user_id: socket.assigns.user_id,
-            subscription_id: socket.assigns.subscription_id,
-            new_characters_count: MapSet.size(new_characters),
-            total_characters_count: MapSet.size(all_characters)
-          )
-
-          {:reply, {:ok, %{subscribed_characters: MapSet.to_list(all_characters)}}, socket}
-        else
-          {:reply, {:ok, %{message: "Already subscribed to all requested characters"}}, socket}
-        end
+        process_character_subscription(socket, valid_characters)
 
       {:error, reason} ->
         {:reply, {:error, %{reason: reason}}, socket}
@@ -921,5 +895,48 @@ defmodule WandererKillsWeb.KillmailChannel do
   defp generate_random_id do
     :crypto.strong_rand_bytes(16)
     |> Base.url_encode64(padding: false)
+  end
+
+  defp process_character_subscription(socket, valid_characters) do
+    current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
+    new_characters = MapSet.difference(MapSet.new(valid_characters), current_characters)
+
+    if MapSet.size(new_characters) > 0 do
+      # Update subscription
+      all_characters = MapSet.union(current_characters, new_characters)
+
+      updates = %{
+        systems: MapSet.to_list(socket.assigns.subscribed_systems),
+        characters: MapSet.to_list(all_characters)
+      }
+
+      update_subscription(socket.assigns.subscription_id, updates)
+
+      socket = assign(socket, :subscribed_characters, all_characters)
+
+      # Check if we need to subscribe to all_systems topic
+      maybe_subscribe_to_all_systems(socket, all_characters)
+
+      Logger.debug("[DEBUG] Client subscribed to characters",
+        user_id: socket.assigns.user_id,
+        subscription_id: socket.assigns.subscription_id,
+        new_characters_count: MapSet.size(new_characters),
+        total_characters_count: MapSet.size(all_characters)
+      )
+
+      {:reply, {:ok, %{subscribed_characters: MapSet.to_list(all_characters)}}, socket}
+    else
+      {:reply, {:ok, %{message: "Already subscribed to all requested characters"}}, socket}
+    end
+  end
+
+  defp maybe_subscribe_to_all_systems(socket, all_characters) do
+    if MapSet.size(socket.assigns.subscribed_systems) == 0 and
+         MapSet.size(all_characters) > 0 do
+      Phoenix.PubSub.subscribe(
+        WandererKills.PubSub,
+        WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+      )
+    end
   end
 end

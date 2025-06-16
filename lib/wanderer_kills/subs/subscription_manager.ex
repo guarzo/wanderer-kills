@@ -338,9 +338,18 @@ defmodule WandererKills.Subs.SubscriptionManager do
       is_nil(attrs["subscriber_id"]) or attrs["subscriber_id"] == "" ->
         {:error, Error.validation_error(:empty_subscriber_id, "subscriber_id cannot be empty")}
 
+      Map.has_key?(attrs, "system_ids") and not valid_system_ids?(attrs["system_ids"]) ->
+        {:error,
+         Error.validation_error(:invalid_system_ids, "system_ids must be a list of integers")}
+
       true ->
         :ok
     end
+  end
+
+  defp valid_system_ids?(system_ids) do
+    is_list(system_ids) and
+      Enum.all?(system_ids, &is_integer/1)
   end
 
   defp generate_subscription_id do
