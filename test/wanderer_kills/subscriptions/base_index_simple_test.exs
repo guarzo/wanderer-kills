@@ -1,4 +1,4 @@
-defmodule WandererKills.Subscriptions.BaseIndexSimpleTest do
+defmodule WandererKills.Subs.Subscriptions.BaseIndexSimpleTest do
   use ExUnit.Case, async: false
 
   # Simple test without the using macro to isolate the issue
@@ -17,7 +17,7 @@ defmodule WandererKills.Subscriptions.BaseIndexSimpleTest do
 
     # Test find_subscriptions_for_entity with empty table
     result =
-      WandererKills.Subscriptions.BaseIndex.find_subscriptions_for_entity(
+      WandererKills.Subs.Subscriptions.BaseIndex.find_subscriptions_for_entity(
         table_name,
         123,
         :test_entity
@@ -30,7 +30,7 @@ defmodule WandererKills.Subscriptions.BaseIndexSimpleTest do
 
     # Test find_subscriptions_for_entity with data
     result =
-      WandererKills.Subscriptions.BaseIndex.find_subscriptions_for_entity(
+      WandererKills.Subs.Subscriptions.BaseIndex.find_subscriptions_for_entity(
         table_name,
         123,
         :test_entity
@@ -42,7 +42,7 @@ defmodule WandererKills.Subscriptions.BaseIndexSimpleTest do
 
     # Test find_subscriptions_for_entities
     result =
-      WandererKills.Subscriptions.BaseIndex.find_subscriptions_for_entities(
+      WandererKills.Subs.Subscriptions.BaseIndex.find_subscriptions_for_entities(
         table_name,
         [123, 456],
         :test_entity
@@ -54,7 +54,7 @@ defmodule WandererKills.Subscriptions.BaseIndexSimpleTest do
 
     # Test cleanup function
     :ets.insert(table_name, {456, MapSet.new([])})
-    WandererKills.Subscriptions.BaseIndex.cleanup_empty_entries(table_name)
+    WandererKills.Subs.Subscriptions.BaseIndex.cleanup_empty_entries(table_name)
 
     # Verify empty entry was removed
     assert :ets.lookup(table_name, 456) == []

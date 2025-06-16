@@ -1,13 +1,13 @@
 defmodule WandererKills.EsiCacheTest do
   # Disable async to avoid cache interference
   use ExUnit.Case, async: false
-  alias WandererKills.Cache.Helper
+  alias WandererKills.Core.Cache
 
   setup do
     WandererKills.TestHelpers.clear_all_caches()
 
     # Set the http_client for this test
-    Application.put_env(:wanderer_kills, :http_client, WandererKills.Http.Client.Mock)
+    Application.put_env(:wanderer_kills, :http_client, WandererKills.Ingest.Http.Client.Mock)
 
     on_exit(fn ->
       Application.put_env(:wanderer_kills, :http_client, WandererKills.MockHttpClient)
@@ -29,8 +29,8 @@ defmodule WandererKills.EsiCacheTest do
       }
 
       # Store test data using unified cache interface
-      assert {:ok, true} = Helper.put(:characters, character_id, expected_data)
-      assert {:ok, actual_data} = Helper.get(:characters, character_id)
+      assert {:ok, true} = Cache.put(:characters, character_id, expected_data)
+      assert {:ok, actual_data} = Cache.get(:characters, character_id)
       assert actual_data.character_id == expected_data.character_id
       assert actual_data.name == expected_data.name
     end
@@ -47,8 +47,8 @@ defmodule WandererKills.EsiCacheTest do
         member_count: 100
       }
 
-      assert {:ok, true} = Helper.put(:corporations, corporation_id, corp_data)
-      assert {:ok, cached_data} = Helper.get(:corporations, corporation_id)
+      assert {:ok, true} = Cache.put(:corporations, corporation_id, corp_data)
+      assert {:ok, cached_data} = Cache.get(:corporations, corporation_id)
       assert cached_data.corporation_id == corporation_id
       assert cached_data.name == "Test Corp"
     end
@@ -65,8 +65,8 @@ defmodule WandererKills.EsiCacheTest do
         creator_corporation_id: 456
       }
 
-      assert {:ok, true} = Helper.put(:alliances, alliance_id, alliance_data)
-      assert {:ok, cached_data} = Helper.get(:alliances, alliance_id)
+      assert {:ok, true} = Cache.put(:alliances, alliance_id, alliance_data)
+      assert {:ok, cached_data} = Cache.get(:alliances, alliance_id)
       assert cached_data.alliance_id == alliance_id
       assert cached_data.name == "Test Alliance"
     end
@@ -83,8 +83,8 @@ defmodule WandererKills.EsiCacheTest do
         published: true
       }
 
-      assert {:ok, true} = Helper.put(:ship_types, type_id, type_data)
-      assert {:ok, cached_data} = Helper.get(:ship_types, type_id)
+      assert {:ok, true} = Cache.put(:ship_types, type_id, type_data)
+      assert {:ok, cached_data} = Cache.get(:ship_types, type_id)
       assert cached_data.type_id == type_id
       assert cached_data.name == "Test Type"
     end
@@ -102,8 +102,8 @@ defmodule WandererKills.EsiCacheTest do
         types: [1234, 5678]
       }
 
-      assert {:ok, true} = Helper.put(:groups, to_string(group_id), group_data)
-      assert {:ok, cached_data} = Helper.get(:groups, to_string(group_id))
+      assert {:ok, true} = Cache.put(:groups, to_string(group_id), group_data)
+      assert {:ok, cached_data} = Cache.get(:groups, to_string(group_id))
       assert cached_data.group_id == group_id
       assert cached_data.name == "Test Group"
     end

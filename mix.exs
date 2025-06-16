@@ -7,6 +7,7 @@ defmodule WandererKills.MixProject do
       version: "0.1.3",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
+      compilers: Mix.compilers() ++ [:boundary],
       deps: deps(),
       description:
         "A standalone service for retrieving and caching EVE Online killmails from zKillboard",
@@ -24,6 +25,15 @@ defmodule WandererKills.MixProject do
         "coveralls.html": :test,
         "coveralls.json": :test,
         "coveralls.xml": :test
+      ],
+
+      # Boundary configuration
+      boundary: [
+        default: [
+          check: [
+            apps: [:wanderer_kills, :wanderer_kills_web]
+          ]
+        ]
       ]
     ]
   end
@@ -35,7 +45,7 @@ defmodule WandererKills.MixProject do
         :logger,
         :telemetry_poller
       ],
-      mod: {WandererKills.App.Application, []}
+      mod: {WandererKills.Application, []}
     ]
   end
 
@@ -45,9 +55,9 @@ defmodule WandererKills.MixProject do
 
   defp deps do
     [
-      # Phoenix framework
-      {:phoenix, "~> 1.7.14"},
-      {:plug_cowboy, "~> 2.7"},
+      # Phoenix framework (optional - can be excluded for headless operation)
+      {:phoenix, "~> 1.7.14", optional: true},
+      {:plug_cowboy, "~> 2.7", optional: true},
 
       # JSON parsing
       {:jason, "~> 1.4"},
@@ -74,10 +84,14 @@ defmodule WandererKills.MixProject do
       # Development and test tools
       {:credo, "~> 1.7.6", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4.3", only: [:dev], runtime: false},
+      {:boundary, "~> 0.10", runtime: false},
       {:mox, "~> 1.2.0", only: :test},
 
       # Code coverage
-      {:excoveralls, "~> 0.18", only: :test}
+      {:excoveralls, "~> 0.18", only: :test},
+
+      # Property-based testing
+      {:stream_data, "~> 0.6", only: [:test, :dev]}
     ]
   end
 
@@ -97,7 +111,12 @@ defmodule WandererKills.MixProject do
         "dialyzer"
       ],
       "test.coverage": ["coveralls.html"],
-      "test.coverage.ci": ["coveralls.json"]
+      "test.coverage.ci": ["coveralls.json"],
+      "test.headless": [
+        "test --config config/test_headless.exs --require test/test_helper_headless.exs"
+      ],
+      "test.core": ["test.headless test/wanderer_kills/"],
+      "test.perf": ["test --include perf test/performance/"]
     ]
   end
 end

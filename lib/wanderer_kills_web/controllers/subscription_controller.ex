@@ -10,8 +10,8 @@ defmodule WandererKillsWeb.SubscriptionController do
 
   use WandererKillsWeb, :controller
 
-  alias WandererKills.SubscriptionManager
-  alias WandererKills.Support.Error
+  alias WandererKills.Subs.SubscriptionManager
+  alias WandererKills.Core.Support.Error
 
   @doc """
   Create a new webhook subscription.
@@ -28,6 +28,7 @@ defmodule WandererKillsWeb.SubscriptionController do
 
   At least one of system_ids or character_ids must be provided.
   """
+  @spec create(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def create(conn, params) do
     with {:ok, attrs} <- validate_create_params(params),
          {:ok, subscription_id} <- SubscriptionManager.add_subscription(attrs) do
@@ -67,6 +68,7 @@ defmodule WandererKillsWeb.SubscriptionController do
 
   Returns an array of subscription objects.
   """
+  @spec index(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def index(conn, _params) do
     subscriptions = SubscriptionManager.list_subscriptions()
 
@@ -84,6 +86,7 @@ defmodule WandererKillsWeb.SubscriptionController do
 
   Returns counts and aggregate information about subscriptions.
   """
+  @spec stats(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def stats(conn, _params) do
     stats = SubscriptionManager.get_stats()
 
@@ -98,6 +101,7 @@ defmodule WandererKillsWeb.SubscriptionController do
 
   Unsubscribes the subscriber from all killmail notifications.
   """
+  @spec delete(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def delete(conn, %{"subscriber_id" => subscriber_id}) do
     case SubscriptionManager.unsubscribe(subscriber_id) do
       :ok ->
@@ -109,16 +113,11 @@ defmodule WandererKillsWeb.SubscriptionController do
           }
         })
 
-      {:error, reason} ->
-        message =
-          case reason do
-            %Error{} -> Error.to_string(reason)
-            binary when is_binary(binary) -> binary
-            _ -> inspect(reason)
-          end
+      {:error, :partial_failure} ->
+        message = "Some subscriptions could not be removed"
 
         # Ensure details field is JSON-serializable
-        details = serialize_error_details(reason)
+        details = serialize_error_details(:partial_failure)
 
         conn
         |> put_status(:bad_request)
@@ -134,22 +133,58 @@ defmodule WandererKillsWeb.SubscriptionController do
   # Private functions
 
   defp validate_create_params(params) do
-    attrs = %{
+    attrs = normalize_subscription_attrs(params)
+
+    # Use a validation pipeline with early exit
+    [
+      &validate_required_fields/1,
+      &validate_field_formats/1,
+      &validate_business_rules/1
+    ]
+    |> run_validation_pipeline(attrs)
+  end
+
+  # Pipeline runner that stops at first error
+  defp run_validation_pipeline(validators, attrs) do
+    Enum.reduce_while(validators, {:ok, attrs}, fn validator, {:ok, attrs} ->
+      case validator.(attrs) do
+        :ok -> {:cont, {:ok, attrs}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  # Normalize and clean input attributes
+  defp normalize_subscription_attrs(params) do
+    %{
       "subscriber_id" => params["subscriber_id"],
       "system_ids" => normalize_ids(params["system_ids"]),
       "character_ids" => normalize_ids(params["character_ids"]),
       "callback_url" => params["callback_url"]
     }
+  end
 
+  # Group related validations together
+  defp validate_required_fields(attrs) do
     with :ok <- validate_required_subscriber_id(attrs["subscriber_id"]),
-         :ok <- validate_required_callback_url(attrs["callback_url"]),
-         :ok <- validate_callback_url_format(attrs["callback_url"]),
-         :ok <- validate_at_least_one_id(attrs),
+         :ok <- validate_required_callback_url(attrs["callback_url"]) do
+      :ok
+    end
+  end
+
+  defp validate_field_formats(attrs) do
+    with :ok <- validate_callback_url_format(attrs["callback_url"]),
          :ok <- validate_ids_format(attrs["system_ids"], "system_ids"),
-         :ok <- validate_ids_format(attrs["character_ids"], "character_ids"),
+         :ok <- validate_ids_format(attrs["character_ids"], "character_ids") do
+      :ok
+    end
+  end
+
+  defp validate_business_rules(attrs) do
+    with :ok <- validate_at_least_one_id(attrs),
          :ok <- validate_ids_count(attrs["system_ids"], "system_ids", 100),
          :ok <- validate_ids_count(attrs["character_ids"], "character_ids", 1000) do
-      {:ok, attrs}
+      :ok
     end
   end
 

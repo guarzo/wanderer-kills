@@ -14,6 +14,7 @@ defmodule WandererKills do
   @doc """
   Returns the application version.
   """
+  @spec version() :: String.t()
   def version do
     case Application.spec(:wanderer_kills) do
       nil -> "0.1.0"
@@ -24,6 +25,7 @@ defmodule WandererKills do
   @doc """
   Returns the application name.
   """
+  @spec app_name() :: atom()
   def app_name do
     case Application.spec(:wanderer_kills) do
       nil -> :wanderer_kills

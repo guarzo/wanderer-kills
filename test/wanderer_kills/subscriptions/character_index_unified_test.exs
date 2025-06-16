@@ -1,4 +1,4 @@
-defmodule WandererKills.Subscriptions.CharacterIndexUnifiedTest do
+defmodule WandererKills.Subs.Subscriptions.CharacterIndexUnifiedTest do
   @moduledoc """
   Unified test suite for CharacterIndex using shared test patterns.
 
@@ -10,8 +10,8 @@ defmodule WandererKills.Subscriptions.CharacterIndexUnifiedTest do
   use ExUnit.Case, async: false
 
   use IndexTestPatterns,
-    index_module: WandererKills.Subscriptions.CharacterIndex,
-    health_module: WandererKills.Observability.CharacterSubscriptionHealth,
+    index_module: WandererKills.Subs.Subscriptions.CharacterIndex,
+    health_module: WandererKills.Core.Observability.CharacterSubscriptionHealth,
     # Character IDs
     test_entities: [123_456, 789_012, 345_678]
 end

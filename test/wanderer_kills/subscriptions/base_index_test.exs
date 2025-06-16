@@ -1,9 +1,9 @@
-defmodule WandererKills.Subscriptions.BaseIndexTest do
+defmodule WandererKills.Subs.Subscriptions.BaseIndexTest do
   use ExUnit.Case, async: false
 
   # Create a test implementation of BaseIndex
   defmodule TestEntityIndex do
-    use WandererKills.Subscriptions.BaseIndex,
+    use WandererKills.Subs.Subscriptions.BaseIndex,
       entity_type: :test_entity,
       table_name: :test_entity_subscription_index
   end
@@ -61,7 +61,7 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
       # Verify the module implements the IndexBehaviour
       assert TestEntityIndex.__info__(:attributes)
              |> Enum.any?(fn {key, values} ->
-               key == :behaviour and WandererKills.Subscriptions.IndexBehaviour in values
+               key == :behaviour and WandererKills.Subs.Subscriptions.IndexBehaviour in values
              end)
     end
   end
@@ -365,7 +365,9 @@ defmodule WandererKills.Subscriptions.BaseIndexTest do
       TestEntityIndex.remove_subscription("temp_sub")
 
       # Force cleanup
-      WandererKills.Subscriptions.BaseIndex.cleanup_empty_entries(:test_entity_subscription_index)
+      WandererKills.Subs.Subscriptions.BaseIndex.cleanup_empty_entries(
+        :test_entity_subscription_index
+      )
 
       # Verify no entries remain
       stats = TestEntityIndex.get_stats()

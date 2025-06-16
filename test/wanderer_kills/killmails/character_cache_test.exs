@@ -1,19 +1,7 @@
-defmodule WandererKills.Killmails.CharacterCacheTest do
-  use ExUnit.Case, async: false
-  use WandererKills.Test.SharedContexts
+defmodule WandererKills.Ingest.Killmails.CharacterCacheTest do
+  use WandererKills.DataCase, async: false
 
-  alias WandererKills.Killmails.CharacterCache
-
-  setup do
-    # Use the test helpers to properly clear caches
-    WandererKills.TestHelpers.clear_all_caches()
-
-    on_exit(fn ->
-      WandererKills.TestHelpers.clear_all_caches()
-    end)
-
-    :ok
-  end
+  alias WandererKills.Ingest.Killmails.CharacterCache
 
   describe "extract_characters_cached/1" do
     test "extracts and caches characters from killmail" do

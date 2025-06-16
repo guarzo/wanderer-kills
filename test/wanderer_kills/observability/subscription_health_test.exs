@@ -1,48 +1,37 @@
-defmodule WandererKills.Observability.SubscriptionHealthTest do
+defmodule WandererKills.Core.Observability.SubscriptionHealthTest do
   use ExUnit.Case, async: false
 
   # Create test implementations using the unified health check
   defmodule TestCharacterHealth do
-    use WandererKills.Observability.SubscriptionHealth,
-      index_module: WandererKills.Subscriptions.CharacterIndex,
+    use WandererKills.Core.Observability.SubscriptionHealth,
+      index_module: WandererKills.Subs.Subscriptions.CharacterIndex,
       entity_type: :character
   end
 
   defmodule TestSystemHealth do
-    use WandererKills.Observability.SubscriptionHealth,
-      index_module: WandererKills.Subscriptions.SystemIndex,
+    use WandererKills.Core.Observability.SubscriptionHealth,
+      index_module: WandererKills.Subs.Subscriptions.SystemIndex,
       entity_type: :system
   end
 
-  alias WandererKills.Subscriptions.{CharacterIndex, SystemIndex}
+  alias WandererKills.Subs.Subscriptions.{CharacterIndex, SystemIndex}
 
   setup do
-    # Handle already started GenServers
-    char_pid =
-      case CharacterIndex.start_link([]) do
-        {:ok, pid} ->
-          on_exit(fn -> GenServer.stop(pid) end)
-          pid
+    # Clear both indexes if they're available
+    # In parallel tests, the indexes might not be immediately available
+    try do
+      CharacterIndex.clear()
+      SystemIndex.clear()
+    rescue
+      _ -> :ok
+    catch
+      :exit, _ -> :ok
+    end
 
-        {:error, {:already_started, pid}} ->
-          pid
-      end
+    # Give the system a moment to stabilize
+    Process.sleep(10)
 
-    sys_pid =
-      case SystemIndex.start_link([]) do
-        {:ok, pid} ->
-          on_exit(fn -> GenServer.stop(pid) end)
-          pid
-
-        {:error, {:already_started, pid}} ->
-          pid
-      end
-
-    # Clear both indexes
-    CharacterIndex.clear()
-    SystemIndex.clear()
-
-    %{char_pid: char_pid, sys_pid: sys_pid}
+    :ok
   end
 
   describe "unified health check behaviour" do
@@ -50,12 +39,14 @@ defmodule WandererKills.Observability.SubscriptionHealthTest do
       # Verify both modules implement the behaviour
       assert TestCharacterHealth.__info__(:attributes)
              |> Enum.any?(fn {key, values} ->
-               key == :behaviour and WandererKills.Observability.HealthCheckBehaviour in values
+               key == :behaviour and
+                 WandererKills.Core.Observability.HealthCheckBehaviour in values
              end)
 
       assert TestSystemHealth.__info__(:attributes)
              |> Enum.any?(fn {key, values} ->
-               key == :behaviour and WandererKills.Observability.HealthCheckBehaviour in values
+               key == :behaviour and
+                 WandererKills.Core.Observability.HealthCheckBehaviour in values
              end)
     end
 

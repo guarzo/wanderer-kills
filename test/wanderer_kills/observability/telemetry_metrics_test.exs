@@ -1,7 +1,7 @@
-defmodule WandererKills.Observability.TelemetryMetricsTest do
+defmodule WandererKills.Core.Observability.TelemetryMetricsTest do
   use ExUnit.Case, async: false
 
-  alias WandererKills.Observability.TelemetryMetrics
+  alias WandererKills.Core.Observability.TelemetryMetrics
 
   setup do
     # Ensure clean state

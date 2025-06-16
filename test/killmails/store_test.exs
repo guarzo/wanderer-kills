@@ -1,9 +1,9 @@
-defmodule WandererKills.Killmails.StoreTest do
+defmodule WandererKills.Ingest.Killmails.StoreTest do
   use WandererKills.TestCase
   use WandererKills.Test.SharedContexts
   use WandererKills.Test.Tags
 
-  alias WandererKills.Storage.KillmailStore
+  alias WandererKills.Core.Storage.KillmailStore
   alias WandererKills.TestHelpers
 
   unit_test_tags()

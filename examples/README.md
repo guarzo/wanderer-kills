@@ -168,8 +168,13 @@ The client identifier will be sanitized (alphanumeric, underscore, and dash only
 See: [`websocket_client.js`](./websocket_client.js)
 
 ```bash
-npm install phoenix
-node websocket_client.js
+npm install
+npm run start
+
+# Or run specific examples:
+npm run basic    # Basic connection example
+npm run preload  # Extended preload example
+npm run advanced # Mixed subscriptions example
 ```
 
 ### Python
@@ -177,7 +182,7 @@ node websocket_client.js
 See: [`websocket_client.py`](./websocket_client.py)
 
 ```bash
-pip install websockets
+pip install -r requirements.txt
 python websocket_client.py
 ```
 
@@ -188,7 +193,9 @@ See: [`websocket_client.exs`](./websocket_client.exs)
 **Dependencies**: Add to your `mix.exs`:
 
 ```elixir
-{:phoenix_channels_client, "~> 0.7.0"}
+{:phoenix_client, "~> 0.11"} # For external client
+# OR use built-in Phoenix.Channels.GenSocketClient if available
+{:websocket_client, "~> 1.5"} # Alternative WebSocket client
 ```
 
 **Usage**:
@@ -221,7 +228,7 @@ Here are some popular system IDs for testing:
 
 ## ⚙️ Configuration Limits
 
-- **Max Systems per Subscription**: 100 (configurable)
+- **Max Systems per Subscription**: 50 (configurable)
 - **WebSocket Timeout**: 45 seconds
 - **Connection Authentication**: None required - anonymous connections
 - **Rate Limiting**: Applied per connection

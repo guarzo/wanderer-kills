@@ -1,27 +1,11 @@
-defmodule WandererKills.Http.UtilTest do
+defmodule WandererKills.Ingest.Http.UtilTest do
   use ExUnit.Case, async: false
 
-  alias WandererKills.Http.Client
+  alias WandererKills.Ingest.Http.Client
 
   setup do
     WandererKills.TestHelpers.setup_mocks()
     :ok
-  end
-
-  describe "retriable_error?/1" do
-    test "returns true for retriable errors" do
-      # Note: retriable_error? was removed with Http.Util consolidation
-      # These tests are now obsolete as the functionality was simplified
-      # Placeholder - this functionality was removed
-      assert true
-    end
-
-    test "returns false for non-retriable errors" do
-      # Note: retriable_error? was removed with Http.Util consolidation
-      # These tests are now obsolete as the functionality was simplified
-      # Placeholder - this functionality was removed
-      assert true
-    end
   end
 
   describe "handle_status_code/2" do

@@ -39,6 +39,7 @@ defmodule WandererKillsWeb.WebSocketController do
 
   Endpoint: GET /websocket
   """
+  @spec info(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def info(conn, _params) do
     conn_info = %{
       scheme: conn.scheme,
@@ -58,6 +59,7 @@ defmodule WandererKillsWeb.WebSocketController do
 
   Endpoint: GET /websocket/status
   """
+  @spec status(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def status(conn, _params) do
     # Use cache to reduce load when endpoint is polled frequently
     response =

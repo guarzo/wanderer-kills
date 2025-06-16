@@ -7,16 +7,17 @@ defmodule WandererKillsWeb.KillsController do
   """
 
   use Phoenix.Controller, namespace: WandererKillsWeb
-  import WandererKillsWeb.Api.Helpers
+  import WandererKillsWeb.Api.Validators
   require Logger
-  alias WandererKills.Client
-  alias WandererKills.Support.Error
+  alias WandererKills.Core.Client
+  alias WandererKills.Core.Support.Error
 
   @doc """
   Lists kills for a specific system with time filtering.
 
   GET /api/v1/kills/system/:system_id?since_hours=X&limit=Y
   """
+  @spec list(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def list(conn, %{"system_id" => system_id_str} = params) do
     with {:ok, system_id} <- validate_system_id(system_id_str),
          {:ok, since_hours} <- validate_since_hours(Map.get(params, "since_hours", "24")),
@@ -54,6 +55,7 @@ defmodule WandererKillsWeb.KillsController do
   POST /api/v1/kills/systems
   Body: {"system_ids": [int], "since_hours": int, "limit": int}
   """
+  @spec bulk(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def bulk(conn, params) do
     with {:ok, system_ids} <- validate_system_ids(Map.get(params, "system_ids")),
          {:ok, since_hours} <- validate_since_hours(Map.get(params, "since_hours", 24)),
@@ -86,6 +88,7 @@ defmodule WandererKillsWeb.KillsController do
 
   GET /api/v1/kills/cached/:system_id
   """
+  @spec cached(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def cached(conn, %{"system_id" => system_id_str}) do
     case validate_system_id(system_id_str) do
       {:ok, system_id} ->
@@ -105,6 +108,7 @@ defmodule WandererKillsWeb.KillsController do
 
   GET /api/v1/killmail/:killmail_id
   """
+  @spec show(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def show(conn, %{"killmail_id" => killmail_id_str}) do
     case validate_killmail_id(killmail_id_str) do
       {:ok, killmail_id} ->
@@ -128,6 +132,7 @@ defmodule WandererKillsWeb.KillsController do
 
   GET /api/v1/kills/count/:system_id
   """
+  @spec count(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def count(conn, %{"system_id" => system_id_str}) do
     case validate_system_id(system_id_str) do
       {:ok, system_id} ->
@@ -151,12 +156,14 @@ defmodule WandererKillsWeb.KillsController do
   @doc """
   Handles undefined API routes.
   """
+  @spec not_found(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def not_found(conn, _params) do
     render_error(conn, 404, "Not Found", "NOT_FOUND")
   end
 
   # Private helper functions
 
+  @spec build_cached_response(list(), boolean(), term()) :: map()
   defp build_cached_response(killmails, cached, error \\ nil) do
     base_response = %{
       kills: killmails,

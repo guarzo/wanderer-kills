@@ -3,7 +3,9 @@ import Config
 # Configure the application for testing with nested structure
 config :wanderer_kills,
   # Use ETS adapter for tests instead of Cachex
-  cache_adapter: WandererKills.Cache.ETSAdapter,
+  cache_adapter: WandererKills.Core.Cache.ETSAdapter,
+  # Run in headless mode by default for core tests
+  headless: false,
   # Service configuration
   services: [
     start_preloader: false,
@@ -21,7 +23,7 @@ config :wanderer_kills,
 
   # HTTP retry configuration
   http: [
-    client: WandererKills.Http.Client.Mock,
+    client: WandererKills.Ingest.Http.Client.Mock,
     request_timeout_ms: 1_000,
     default_timeout_ms: 1_000,
     retry: [
@@ -91,8 +93,8 @@ config :wanderer_kills,
   ],
 
   # Mock clients for testing (legacy flat config for now)
-  zkb_client: WandererKills.Zkb.Client.Mock,
-  esi_client: WandererKills.ESI.Client.Mock,
+  zkb_client: WandererKills.Ingest.Killmails.ZkbClient.Mock,
+  esi_client: WandererKills.Ingest.ESI.Client.Mock,
 
   # Test-specific configurations (legacy)
   start_ets_supervisor: false,
@@ -105,8 +107,9 @@ config :wanderer_kills,
 # Configure Cachex for tests
 config :cachex, :default_ttl, :timer.minutes(1)
 
-# Configure Mox - use global mode
-config :mox, global: true
+# Configure Mox - use private mode for better test isolation
+# Tests can still use Mox.set_mox_global() if needed
+# config :mox, global: true
 
 # Logger configuration for tests - set to debug to allow testing of log output
 # Note: runtime.exs may override this, so we'll handle it differently

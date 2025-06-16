@@ -8,6 +8,7 @@ defmodule WandererKillsWeb do
       use WandererKillsWeb, :controller
   """
 
+  @spec controller() :: Macro.t()
   def controller do
     quote do
       use Phoenix.Controller, namespace: WandererKillsWeb
@@ -16,6 +17,7 @@ defmodule WandererKillsWeb do
     end
   end
 
+  @spec router() :: Macro.t()
   def router do
     quote do
       use Phoenix.Router
@@ -25,6 +27,7 @@ defmodule WandererKillsWeb do
     end
   end
 
+  @spec channel() :: Macro.t()
   def channel do
     quote do
       use Phoenix.Channel
@@ -34,6 +37,7 @@ defmodule WandererKillsWeb do
   @doc """
   When used, dispatch to the appropriate controller/view/etc.
   """
+  @spec __using__(atom()) :: Macro.t()
   defmacro __using__(which) when is_atom(which) do
     apply(__MODULE__, which, [])
   end

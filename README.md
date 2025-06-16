@@ -1,5 +1,12 @@
 # WandererKills
 
+[![CI/CD](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml/badge.svg)](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml)
+[![Credo](https://img.shields.io/badge/credo-0%20issues-brightgreen.svg)](https://github.com/rrrene/credo)
+[![Dialyzer](https://img.shields.io/badge/dialyzer-0%20warnings-brightgreen.svg)](https://www.erlang.org/doc/man/dialyzer.html)
+[![Elixir](https://img.shields.io/badge/elixir-1.18%2B-purple.svg)](https://elixir-lang.org/)
+[![Phoenix Framework](https://img.shields.io/badge/phoenix-1.7-orange.svg)](https://www.phoenixframework.org/)
+[![Docker](https://img.shields.io/docker/v/guarzo/wanderer-kills?label=docker&sort=semver)](https://hub.docker.com/r/guarzo/wanderer-kills)
+
 A high-performance, real-time EVE Online killmail data service built with Elixir/Phoenix. This service provides REST API and WebSocket interfaces for accessing killmail data from zKillboard.
 
 ## Features
@@ -26,7 +33,7 @@ docker run -p 4004:4004 guarzo/wanderer-kills
 # With environment variables
 docker run -p 4004:4004 \
   -e PORT=4004 \
-  -e ESI_BASE_URL=https://esi.evetech.net/latest \
+  -e MIX_ENV=prod \
   guarzo/wanderer-kills
 ```
 
@@ -51,8 +58,13 @@ docker-compose up -d
    ```bash
    git clone https://github.com/wanderer-industries/wanderer-kills.git
    cd wanderer-kills
+   
+   # Install dependencies
    mix deps.get
    mix compile
+   
+   # Optional: Copy environment template for customization
+   cp env.example .env
    ```
 
 3. **Start the Application**
@@ -75,11 +87,16 @@ The service will be available at `http://localhost:4004`
 | GET | `/api/v1/kills/cached/{system_id}` | Get cached kills only |
 | GET | `/api/v1/killmail/{killmail_id}` | Get specific killmail |
 | GET | `/api/v1/kills/count/{system_id}` | Get kill count |
+| POST | `/api/v1/subscriptions` | Create webhook subscription |
+| GET | `/api/v1/subscriptions` | List webhook subscriptions |
+| DELETE | `/api/v1/subscriptions/{subscriber_id}` | Delete webhook subscription |
 | GET | `/health` | Health check |
 | GET | `/status` | Service status |
 | GET | `/websocket` | WebSocket connection info |
 
 ### WebSocket Connection
+
+For complete WebSocket examples in multiple languages, see the [examples directory](examples/).
 
 ```javascript
 // Import Phoenix Socket library
@@ -92,22 +109,23 @@ const socket = new Socket('ws://localhost:4004/socket', {
 
 socket.connect();
 
-// Join a killmail channel for a specific system
-const channel = socket.channel('killmails:system:30000142', {});
+// Join the killmail lobby channel with initial systems
+const channel = socket.channel('killmails:lobby', {
+  systems: [30000142, 30000144]
+});
 
 channel.join()
   .receive('ok', resp => { console.log('Joined successfully', resp) })
   .receive('error', resp => { console.log('Unable to join', resp) });
 
-// Listen for new kills
-channel.on('new_kill', payload => {
-  console.log('New kill:', payload);
+// Listen for new killmails
+channel.on('killmail_update', payload => {
+  console.log('New killmails:', payload);
 });
 
-// Subscribe to multiple systems
-const systems = [30000142, 30000144];
-channel.push('subscribe', { systems: systems })
-  .receive('ok', resp => { console.log('Subscribed to systems', resp) });
+// Subscribe to additional systems dynamically
+channel.push('subscribe_systems', { systems: [30002187] })
+  .receive('ok', resp => { console.log('Subscribed to additional systems', resp) });
 ```
 
 ### Character-Based Subscriptions
@@ -120,12 +138,11 @@ const characters = [95465499, 90379338];  // Character IDs
 channel.push('subscribe_characters', { character_ids: characters })
   .receive('ok', resp => { console.log('Subscribed to characters', resp) });
 
-// Mixed subscription (systems OR characters)
-channel.push('subscribe', { 
+// Mixed subscription (systems OR characters) - can be done on channel join
+const channel2 = socket.channel('killmails:lobby', { 
   systems: [30000142], 
   character_ids: [95465499, 90379338] 
-})
-  .receive('ok', resp => { console.log('Mixed subscription active', resp) });
+});
 
 // Unsubscribe from specific characters
 channel.push('unsubscribe_characters', { character_ids: [95465499] })
@@ -278,33 +295,61 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
 
 ### Environment Variables
 
+See `env.example` for all available environment variables. The primary ones are:
+
 ```bash
 # Port configuration
 PORT=4004
 
-# ESI configuration
-ESI_BASE_URL=https://esi.evetech.net/latest
-ESI_DATASOURCE=tranquility
+# CORS/WebSocket origin checking (production only)
+ORIGIN_HOST=https://yourdomain.com
 
-# Cache TTLs (in seconds)
-CACHE_KILLMAIL_TTL=300
-CACHE_SYSTEM_TTL=3600
-CACHE_ESI_TTL=86400
+# Application environment
+MIX_ENV=prod
 ```
 
+Most configuration is handled through compile-time config files rather than environment variables for better performance.
+
 ### Application Configuration
+
+Configuration is organized by functional area in `config/config.exs`:
 
 ```elixir
 # config/config.exs
 config :wanderer_kills,
-  port: 4004,
-  redisq_base_url: "https://zkillredisq.stream/listen.php",
-  storage: [
-    enable_event_streaming: true
-  ],
+  # Cache TTLs (in seconds)
   cache: [
-    default_ttl: :timer.minutes(5),
-    cleanup_interval: :timer.minutes(10)
+    killmails_ttl: 3600,
+    system_ttl: 1800,
+    esi_ttl: 3600,
+    esi_killmail_ttl: 86_400
+  ],
+  
+  # ESI configuration
+  esi: [
+    base_url: "https://esi.evetech.net/latest",
+    request_timeout_ms: 30_000,
+    batch_concurrency: 10
+  ],
+  
+  # RedisQ stream configuration
+  redisq: [
+    base_url: "https://zkillredisq.stream/listen.php",
+    fast_interval_ms: 1_000,
+    idle_interval_ms: 5_000
+  ],
+  
+  # Storage and event streaming
+  storage: [
+    enable_event_streaming: true,
+    gc_interval_ms: 60_000,
+    max_events_per_system: 10_000
+  ],
+  
+  # Monitoring intervals
+  monitoring: [
+    status_interval_ms: 300_000,  # 5 minutes
+    health_check_interval_ms: 60_000
   ]
 ```
 
@@ -354,21 +399,33 @@ The service provides comprehensive monitoring with 5-minute status reports:
 # Run all tests
 mix test
 
-# Run with coverage
+# Generate HTML coverage report  
 mix test.coverage
 
+# Generate JSON coverage for CI
+mix test.coverage.ci
+
+# Run performance tests (normally excluded)
+mix test --include perf
+
 # Run specific test file
-mix test test/wanderer_kills/killmails/store_test.exs
+mix test test/wanderer_kills/ingest/killmails/unified_processor_test.exs
 ```
 
 ### Code Quality
+
+This project maintains **excellent code quality**:
+- ✅ **Credo**: 0 issues
+- ✅ **Dialyzer**: 0 warnings
+- ✅ **Tests**: 100% passing
+- ✅ **Format**: Fully formatted
 
 ```bash
 # Format code
 mix format
 
 # Run static analysis
-mix credo --strict
+mix credo
 
 # Run type checking
 mix dialyzer
@@ -392,12 +449,12 @@ The development container includes all required tools and dependencies.
 
 ### Ship Type Data
 
-The service requires ship type data for enrichment:
+The service includes ship type data for enrichment:
 
 ```bash
-# Data is automatically loaded on first run
-# Manual update if needed:
-mix run -e "WandererKills.ShipTypes.Updater.update_all_ship_types()"
+# Ship type data is automatically loaded from CSV files on startup
+# Data files are located in priv/data/ship_types/
+# Validation ensures data integrity during loading
 ```
 
 ### Cache Management
@@ -406,12 +463,13 @@ The service uses an ETS-based caching system that is automatically managed. Cach
 
 ## Documentation
 
-Comprehensive documentation is available in the `/docs` directory:
+Comprehensive documentation is available:
 
-- [API Reference](docs/api-reference.md) - Complete API documentation
-- [Integration Guide](docs/integration-guide.md) - Integration examples and best practices
-- [Architecture Overview](CLAUDE.md) - Detailed architecture documentation
-- [Code Review](CODE_REVIEW.md) - Recent refactoring documentation
+- [API & Integration Guide](docs/API_AND_INTEGRATION_GUIDE.md) - Complete API documentation and integration examples
+- [Examples](examples/README.md) - WebSocket client examples in multiple languages
+- [Architecture Overview](CLAUDE.md) - Detailed architecture documentation for developers
+- [Environment Configuration](env.example) - Complete list of environment variables and settings
+- [Docker Guide](DOCKER.md) - Docker deployment and development information
 
 ## Contributing
 
@@ -444,7 +502,8 @@ docker build -t wanderer-kills:latest .
 docker run -d \
   -p 4004:4004 \
   -e PORT=4004 \
-  -e ESI_BASE_URL=https://esi.evetech.net/latest \
+  -e MIX_ENV=prod \
+  -e ORIGIN_HOST=https://yourdomain.com \
   --name wanderer-kills \
   guarzo/wanderer-kills:latest
 ```
@@ -468,7 +527,7 @@ The service is optimized for:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the [MIT License](LICENSE).
 
 ## Acknowledgments
 

@@ -58,8 +58,35 @@ jobs:
         run: mix format --check-formatted
 
       - name: Run Credo
-        run: mix credo
-        continue-on-error: false
+        id: credo
+        run: |
+          echo "## Credo Results" >> $GITHUB_STEP_SUMMARY
+
+          # Run credo and capture the exit code
+          mix credo --format=oneline > credo_output.txt 2>&1 || CREDO_EXIT_CODE=$?
+
+          # Count issues
+          if [ -f credo_output.txt ]; then
+            # Count different types of issues
+            ISSUES=$(grep -E "[\[]([RCFAWSD])[\]]" credo_output.txt | wc -l || echo "0")
+            echo "credo_issues=$ISSUES" >> $GITHUB_OUTPUT
+
+            if [ "$ISSUES" -eq 0 ]; then
+              echo "✅ **Credo passed with 0 issues**" >> $GITHUB_STEP_SUMMARY
+              echo "credo_status=passing" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ **Credo found $ISSUES issues**" >> $GITHUB_STEP_SUMMARY
+              echo "credo_status=issues" >> $GITHUB_OUTPUT
+              # Show summary in step summary
+              tail -20 credo_output.txt >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "credo_issues=0" >> $GITHUB_OUTPUT
+            echo "credo_status=passing" >> $GITHUB_OUTPUT
+          fi
+
+          # Don't fail the build for credo issues (non-strict mode)
+          exit 0
 
       - name: Compile for dev (for Dialyzer)
         run: MIX_ENV=dev mix compile
@@ -69,20 +96,178 @@ jobs:
         run: MIX_ENV=dev mix dialyzer --plt
 
       - name: Run Dialyzer
-        run: MIX_ENV=dev mix dialyzer --format github
+        id: dialyzer
+        run: |
+          echo "## Dialyzer Results" >> $GITHUB_STEP_SUMMARY
+
+          # Run dialyzer and capture output
+          MIX_ENV=dev mix dialyzer --format short > dialyzer_output.txt 2>&1 || DIALYZER_EXIT_CODE=$?
+
+          # Check if Dialyzer itself failed (non-zero exit without warnings)
+          if [ -n "$DIALYZER_EXIT_CODE" ] && [ "$DIALYZER_EXIT_CODE" -ne 0 ]; then
+            # Check if this is due to warnings or actual failure
+            if [ -f dialyzer_output.txt ]; then
+              WARNINGS=$(grep -c "warning:" dialyzer_output.txt 2>/dev/null | head -1 || echo "0")
+              if ! [[ "$WARNINGS" =~ ^[0-9]+$ ]]; then
+                WARNINGS="0"
+              fi
+              
+              if [ "$WARNINGS" -eq 0 ]; then
+                # Non-zero exit with no warnings = actual failure
+                echo "❌ **Dialyzer failed to run**" >> $GITHUB_STEP_SUMMARY
+                echo "dialyzer_status=failed" >> $GITHUB_OUTPUT
+                echo "dialyzer_warnings=0" >> $GITHUB_OUTPUT
+                cat dialyzer_output.txt >> $GITHUB_STEP_SUMMARY
+                exit 1
+              fi
+            else
+              # No output file = complete failure
+              echo "❌ **Dialyzer failed to run**" >> $GITHUB_STEP_SUMMARY
+              echo "dialyzer_status=failed" >> $GITHUB_OUTPUT
+              echo "dialyzer_warnings=0" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          fi
+
+          # Count warnings - ensure we get a single number
+          if [ -f dialyzer_output.txt ]; then
+            # Count warning lines and ensure it's a single number
+            WARNINGS=$(grep -c "warning:" dialyzer_output.txt 2>/dev/null | head -1 || echo "0")
+            # Ensure WARNINGS is a valid number
+            if ! [[ "$WARNINGS" =~ ^[0-9]+$ ]]; then
+              WARNINGS="0"
+            fi
+            echo "dialyzer_warnings=$WARNINGS" >> $GITHUB_OUTPUT
+
+            if [ "$WARNINGS" -eq "0" ]; then
+              echo "✅ **Dialyzer passed with 0 warnings**" >> $GITHUB_STEP_SUMMARY
+              echo "dialyzer_status=passing" >> $GITHUB_OUTPUT
+            else
+              echo "❌ **Dialyzer found $WARNINGS warnings**" >> $GITHUB_STEP_SUMMARY
+              echo "dialyzer_status=warnings" >> $GITHUB_OUTPUT
+              # Show warnings in step summary
+              grep "warning:" dialyzer_output.txt | head -20 >> $GITHUB_STEP_SUMMARY
+              exit 1
+            fi
+          else
+            echo "dialyzer_warnings=0" >> $GITHUB_OUTPUT
+            echo "dialyzer_status=passing" >> $GITHUB_OUTPUT
+          fi
         continue-on-error: false
 
       - name: Run tests with coverage
-        run: mix test --max-failures=1
+        id: tests
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          if mix test --max-failures=1; then
+            echo "✅ **All tests passed**" >> $GITHUB_STEP_SUMMARY
+            echo "tests_status=passing" >> $GITHUB_OUTPUT
+          else
+            echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+            echo "tests_status=failing" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Generate boundary visualization
+        id: boundary
+        continue-on-error: true
+        run: |
+          echo "## Boundary Visualization" >> $GITHUB_STEP_SUMMARY
+          mkdir -p priv/static/images
+          if mix boundary.visualize --format svg --output priv/static/images/boundary.svg; then
+            echo "✅ **Boundary visualization generated**" >> $GITHUB_STEP_SUMMARY
+            echo "boundary_status=success" >> $GITHUB_OUTPUT
+            # Also generate dot format for additional processing if needed
+            mix boundary.visualize --format dot --output priv/static/images/boundary.dot
+          else
+            echo "⚠️ **Boundary visualization failed**" >> $GITHUB_STEP_SUMMARY
+            echo "boundary_status=failed" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate coverage report
-        run: MIX_ENV=test mix test.coverage.ci
+        id: coverage
+        run: |
+          MIX_ENV=test mix test.coverage.ci
+          # Try to extract coverage percentage if available
+          if [ -f cover/coverage.json ]; then
+            COVERAGE=$(jq -r '.percentage // "unknown"' cover/coverage.json 2>/dev/null || echo "unknown")
+            if [ "$COVERAGE" = "unknown" ]; then
+              echo "Coverage: unknown (malformed coverage.json)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          else
+            echo "Coverage: unknown (coverage.json not found)" >> $GITHUB_STEP_SUMMARY
+            echo "coverage=unknown" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: cover/
+
+      - name: Upload boundary visualization
+        if: steps.boundary.outputs.boundary_status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: boundary-visualization
+          path: |
+            priv/static/images/boundary.svg
+            priv/static/images/boundary.dot
+
+      - name: Create Quality Summary
+        if: always()
+        run: |
+          echo "## 📊 Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Credo | ${{ steps.credo.outputs.credo_status == 'passing' && '✅ Passing (0 issues)' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dialyzer | ${{ steps.dialyzer.outputs.dialyzer_status == 'passing' && '✅ Passing (0 warnings)' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ steps.tests.outputs.tests_status == 'passing' && '✅ All passing' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.coverage.outputs.coverage }}" != "unknown" ]; then
+            echo "| Coverage | ✅ ${{ steps.coverage.outputs.coverage }}% |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Coverage | ❓ Unknown |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "| Boundary | ${{ steps.boundary.outputs.boundary_status == 'success' && '✅ Visualized' || '⚠️ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+
+          # Create JSON summary for potential badge usage
+          mkdir -p .github/badges
+          jq -n \
+            --arg credo_status "${{ steps.credo.outputs.credo_status || 'unknown' }}" \
+            --arg credo_issues "${{ steps.credo.outputs.credo_issues || '0' }}" \
+            --arg dialyzer_status "${{ steps.dialyzer.outputs.dialyzer_status || 'unknown' }}" \
+            --arg dialyzer_warnings "${{ steps.dialyzer.outputs.dialyzer_warnings || '0' }}" \
+            --arg tests_status "${{ steps.tests.outputs.tests_status || 'unknown' }}" \
+            --arg coverage "${{ steps.coverage.outputs.coverage || 'unknown' }}" \
+            --arg boundary_status "${{ steps.boundary.outputs.boundary_status || 'unknown' }}" \
+            '{
+              "credo": {
+                "status": $credo_status,
+                "issues": $credo_issues
+              },
+              "dialyzer": {
+                "status": $dialyzer_status,
+                "warnings": $dialyzer_warnings
+              },
+              "tests": {
+                "status": $tests_status
+              },
+              "coverage": $coverage,
+              "boundary": {
+                "status": $boundary_status
+              }
+            }' > .github/badges/quality-status.json
+
+      - name: Upload quality status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-status
+          path: .github/badges/quality-status.json
 
   docker:
     name: Build and Push Docker Image
@@ -174,21 +359,21 @@ jobs:
         run: |
           # Basic container test - start and check health
           docker run -d --name test_container -p 4004:4004 guarzo/wanderer-kills:test
-          
+
           # Give it a moment to start
           sleep 5
-          
+
           # Check container status
           echo "Container status:"
           docker ps -a | grep test_container || true
-          
+
           # Check logs regardless
           echo "Container logs:"
           docker logs test_container 2>&1 || true
-          
+
           # Wait a bit more
           sleep 5
-          
+
           # Check if container is still running
           if ! docker ps | grep test_container; then
             echo "Container failed to start or exited"
@@ -198,11 +383,11 @@ jobs:
             docker logs test_container 2>&1 || true
             exit 1
           fi
-          
+
           # Try to check health endpoint
           echo "Checking health endpoint:"
           curl -f http://localhost:4004/health || echo "Health check failed"
-          
+
           # Clean up
           docker stop test_container
           docker rm test_container

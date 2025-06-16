@@ -1,9 +1,9 @@
-defmodule WandererKills.Subscriptions.BaseIndexSimpleMacroTest do
+defmodule WandererKills.Subs.Subscriptions.BaseIndexSimpleMacroTest do
   use ExUnit.Case, async: false
 
   # Create a minimal test module to verify the macro works
   defmodule TestIndex do
-    use WandererKills.Subscriptions.BaseIndex,
+    use WandererKills.Subs.Subscriptions.BaseIndex,
       entity_type: :test_entity,
       table_name: :test_entity_simple_macro_index
   end

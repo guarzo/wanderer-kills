@@ -10,10 +10,7 @@
     "deps/",
 
     # Application entry point (usually simple and well-tested through integration)
-    "lib/wanderer_kills/application.ex",
-
-    # Mock modules used in tests
-    "test/support/mocks.ex"
+    "lib/wanderer_kills/application.ex"
   ],
 
   # Coverage threshold - fail if coverage drops below this percentage
