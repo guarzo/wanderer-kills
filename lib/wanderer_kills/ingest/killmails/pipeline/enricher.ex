@@ -12,7 +12,6 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Enricher do
   alias WandererKills.Ingest.ESI.Client, as: EsiClient
   alias WandererKills.Core.ShipTypes.Info, as: ShipTypeInfo
   alias WandererKills.Ingest.Killmails.Transformations
-  alias WandererKills.Domain.Killmail
 
   # Compile-time configuration
   @min_attackers_for_parallel Application.compile_env(
@@ -39,13 +38,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Enricher do
   {:ok, enriched} = Enricher.enrich_killmail(raw_killmail)
   ```
   """
-  @spec enrich_killmail(map() | Killmail.t()) :: {:ok, map() | Killmail.t()} | {:error, term()}
-  def enrich_killmail(%Killmail{} = killmail) do
-    # For structs, enrichment should update the nested structs
-    # TODO: Implement struct enrichment
-    {:ok, killmail}
-  end
-
+  @spec enrich_killmail(map()) :: {:ok, map()} | {:error, term()}
   def enrich_killmail(killmail) do
     with {:ok, killmail} <- enrich_victim(killmail),
          {:ok, killmail} <- enrich_attackers(killmail),

@@ -41,6 +41,7 @@ Connect to the `killmails:lobby` channel to start receiving updates:
 ```javascript
 const channel = socket.channel("killmails:lobby", {
   systems: [30000142, 30002187],
+  character_ids: [95465499, 90379338]  // Optional: track specific characters
 });
 channel.join();
 ```
@@ -59,6 +60,22 @@ Remove system subscriptions:
 
 ```javascript
 channel.push("unsubscribe_systems", { systems: [30000142] });
+```
+
+### Subscribe to Characters
+
+Add character subscriptions to track specific players as victims or attackers:
+
+```javascript
+channel.push("subscribe_characters", { character_ids: [95465499, 90379338] });
+```
+
+### Unsubscribe from Characters
+
+Remove character subscriptions:
+
+```javascript
+channel.push("unsubscribe_characters", { character_ids: [95465499] });
 ```
 
 ### Get Status

@@ -45,7 +45,7 @@ defmodule WandererKills.Subs.Preloader do
   """
   @spec preload_kills_for_system(system_id(), limit(), hours()) :: [Killmail.t()]
   def preload_kills_for_system(system_id, limit, since_hours \\ 24) do
-    Logger.info("[INFO] Preloading kills for system",
+    Logger.debug("[DEBUG] Preloading kills for system",
       system_id: system_id,
       limit: limit,
       since_hours: since_hours
@@ -54,7 +54,7 @@ defmodule WandererKills.Subs.Preloader do
     result =
       case Cache.list_system_killmails(system_id) do
         {:ok, killmail_ids} when is_list(killmail_ids) and killmail_ids != [] ->
-          Logger.info("[INFO] Found cached killmails, using cache",
+          Logger.debug("[DEBUG] Found cached killmails, using cache",
             system_id: system_id,
             cached_count: length(killmail_ids)
           )
@@ -62,14 +62,14 @@ defmodule WandererKills.Subs.Preloader do
           get_enriched_killmails(killmail_ids, limit)
 
         _ ->
-          Logger.info("[INFO] No cached killmails found, fetching fresh data",
+          Logger.debug("[DEBUG] No cached killmails found, fetching fresh data",
             system_id: system_id
           )
 
           fetch_and_cache_fresh_kills(system_id, limit, since_hours)
       end
 
-    Logger.info("[INFO] Preload completed",
+    Logger.debug("[DEBUG] Preload completed",
       system_id: system_id,
       returned_count: length(result),
       requested_limit: limit
@@ -273,7 +273,7 @@ defmodule WandererKills.Subs.Preloader do
   # Private functions
 
   defp fetch_and_cache_fresh_kills(system_id, limit, since_hours) do
-    Logger.info("[INFO] Fetching fresh kills from ZKillboard",
+    Logger.debug("[DEBUG] Fetching fresh kills from ZKillboard",
       system_id: system_id,
       limit: limit,
       since_hours: since_hours
@@ -288,7 +288,7 @@ defmodule WandererKills.Subs.Preloader do
         # Only process the number of kills we need for preload
         kills_to_cache = Enum.take(fresh_kills, limit)
 
-        Logger.info("[INFO] Processing fresh kills through pipeline",
+        Logger.debug("[DEBUG] Processing fresh kills through pipeline",
           system_id: system_id,
           fetched_count: length(fresh_kills),
           processing_count: length(kills_to_cache)
@@ -297,7 +297,7 @@ defmodule WandererKills.Subs.Preloader do
         # Cache the kills through the pipeline
         KillmailProcessor.process_system_killmails(system_id, kills_to_cache)
 
-        Logger.info("[INFO] Fresh kills cached successfully",
+        Logger.debug("[DEBUG] Fresh kills cached successfully",
           system_id: system_id,
           cached_count: length(kills_to_cache)
         )

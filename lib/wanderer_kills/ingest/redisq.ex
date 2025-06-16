@@ -16,6 +16,7 @@ defmodule WandererKills.Ingest.RedisQ do
   alias WandererKills.Core.EtsOwner
   alias WandererKills.Ingest.ESI.Client, as: EsiClient
   alias WandererKills.Core.Support.Clock
+  alias WandererKills.Core.Support.Error
   alias WandererKills.Ingest.Http.Client, as: HttpClient
   alias WandererKills.Domain.Killmail
 
@@ -326,12 +327,14 @@ defmodule WandererKills.Ingest.RedisQ do
 
       # Legacy format: { "killID" => id, "zkb" => zkb }
       {:ok, %{body: %{"killID" => id, "zkb" => zkb}}} ->
-        process_legacy_kill(id, zkb)
+        process_legacy_kill(id, zkb, queue_id)
 
       # Anything else is unexpected
       {:ok, resp} ->
         Logger.warning("[RedisQ] Unexpected response shape: #{inspect(resp)}")
-        {:error, :unexpected_format}
+
+        {:error,
+         Error.invalid_format_error("Unexpected RedisQ response format", %{response: resp})}
 
       {:error, reason} ->
         Logger.warning("[RedisQ] HTTP request failed: #{inspect(reason)}")
@@ -383,7 +386,14 @@ defmodule WandererKills.Ingest.RedisQ do
   #   {:ok, :kill_older}      (if Coordinator returns :kill_older)
   #   {:ok, :kill_skipped}    (if Coordinator returns :kill_skipped)
   #   {:error, reason}
-  defp process_legacy_kill(id, zkb) do
+  defp process_legacy_kill(id, zkb, queue_id) do
+    Logger.warning("[RedisQ] Processing LEGACY kill format",
+      kill_id: id,
+      queue_id: queue_id,
+      zkb_has: Map.keys(zkb || %{}),
+      message: "Legacy kill format detected - this format may be deprecated"
+    )
+
     task =
       Task.Supervisor.async(WandererKills.TaskSupervisor, fn ->
         fetch_and_parse_full_kill(id, zkb)
@@ -393,6 +403,11 @@ defmodule WandererKills.Ingest.RedisQ do
     |> Task.await(@task_timeout_ms)
     |> case do
       {:ok, :kill_received} ->
+        Logger.warning("[RedisQ] Successfully processed LEGACY kill",
+          kill_id: id,
+          message: "Consider migrating to new kill format"
+        )
+
         {:ok, :legacy_kill}
 
       {:ok, :kill_older} ->
@@ -409,7 +424,18 @@ defmodule WandererKills.Ingest.RedisQ do
 
       other ->
         Logger.error("[RedisQ] Unexpected task result for legacy kill #{id}: #{inspect(other)}")
-        {:error, :unexpected_task_result}
+
+        {:error,
+         Error.system_error(
+           :unexpected_task_result,
+           "Unexpected task result for legacy kill",
+           false,
+           %{
+             kill_id: id,
+             result: other,
+             queue_id: queue_id
+           }
+         )}
     end
   end
 

@@ -29,7 +29,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   const channel = socket.channel("killmails:lobby", {
     systems: [30000142, 30002187],
-    characters: [95465499, 90379338],  // Optional character IDs
+    character_ids: [95465499, 90379338],  // Optional character IDs
     preload: {
       enabled: true,
       since_hours: 24,
@@ -50,11 +50,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   channel.push("subscribe_systems", {systems: [30000144]})
   channel.push("unsubscribe_systems", {systems: [30000142]})
 
-  // Add/remove character subscriptions (supports both formats)
-  channel.push("subscribe_characters", {characters: [12345678]})
-  channel.push("unsubscribe_characters", {characters: [95465499]})
-
-  // Alternative format also supported for backward compatibility
+  // Add/remove character subscriptions
   channel.push("subscribe_characters", {character_ids: [12345678]})
   channel.push("unsubscribe_characters", {character_ids: [95465499]})
 
@@ -76,16 +72,16 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   @impl true
   def join("killmails:lobby", %{"systems" => systems} = params, socket) when is_list(systems) do
-    characters = Map.get(params, "characters", [])
+    character_ids = Map.get(params, "character_ids", [])
     preload_config = Map.get(params, "preload", %{})
-    join_with_filters(socket, systems, characters, preload_config)
+    join_with_filters(socket, systems, character_ids, preload_config)
   end
 
-  def join("killmails:lobby", %{"characters" => characters} = params, socket)
-      when is_list(characters) do
+  def join("killmails:lobby", %{"character_ids" => character_ids} = params, socket)
+      when is_list(character_ids) do
     systems = Map.get(params, "systems", [])
     preload_config = Map.get(params, "preload", %{})
-    join_with_filters(socket, systems, characters, preload_config)
+    join_with_filters(socket, systems, character_ids, preload_config)
   end
 
   def join("killmails:lobby", params, socket) do
@@ -142,12 +138,15 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           updates = %{
             systems: MapSet.to_list(all_systems),
-            characters: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+            character_ids: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
           }
 
           update_subscription(socket.assigns.subscription_id, updates)
 
           socket = assign(socket, :subscribed_systems, all_systems)
+
+          # Check if we need to unsubscribe from all_systems topic
+          maybe_unsubscribe_from_all_systems(socket, current_systems, new_systems)
 
           Logger.debug("[DEBUG] Client subscribed to systems",
             user_id: socket.assigns.user_id,
@@ -185,7 +184,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           updates = %{
             systems: MapSet.to_list(remaining_systems),
-            characters: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+            character_ids: MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
           }
 
           update_subscription(socket.assigns.subscription_id, updates)
@@ -209,60 +208,22 @@ defmodule WandererKillsWeb.KillmailChannel do
     end
   end
 
-  # Handle subscribing to characters (also supports "character_ids" for backward compatibility)
-  def handle_in("subscribe_characters", %{"character_ids" => characters} = params, socket)
-      when is_list(characters) do
-    # Rewrite to standard format and delegate
-    handle_in("subscribe_characters", Map.put(params, "characters", characters), socket)
-  end
-
-  def handle_in("subscribe_characters", %{"characters" => characters}, socket)
-      when is_list(characters) do
-    case validate_characters(characters) do
+  # Handle subscribing to characters
+  def handle_in("subscribe_characters", %{"character_ids" => character_ids}, socket)
+      when is_list(character_ids) do
+    case validate_characters(character_ids) do
       {:ok, valid_characters} ->
-        current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
-        new_characters = MapSet.difference(MapSet.new(valid_characters), current_characters)
-
-        if MapSet.size(new_characters) > 0 do
-          # Update subscription
-          all_characters = MapSet.union(current_characters, new_characters)
-
-          updates = %{
-            systems: MapSet.to_list(socket.assigns.subscribed_systems),
-            characters: MapSet.to_list(all_characters)
-          }
-
-          update_subscription(socket.assigns.subscription_id, updates)
-
-          socket = assign(socket, :subscribed_characters, all_characters)
-
-          Logger.debug("[DEBUG] Client subscribed to characters",
-            user_id: socket.assigns.user_id,
-            subscription_id: socket.assigns.subscription_id,
-            new_characters_count: MapSet.size(new_characters),
-            total_characters_count: MapSet.size(all_characters)
-          )
-
-          {:reply, {:ok, %{subscribed_characters: MapSet.to_list(all_characters)}}, socket}
-        else
-          {:reply, {:ok, %{message: "Already subscribed to all requested characters"}}, socket}
-        end
+        process_character_subscription(socket, valid_characters)
 
       {:error, reason} ->
         {:reply, {:error, %{reason: reason}}, socket}
     end
   end
 
-  # Handle unsubscribing from characters (also supports "character_ids" for backward compatibility)
-  def handle_in("unsubscribe_characters", %{"character_ids" => characters} = params, socket)
-      when is_list(characters) do
-    # Rewrite to standard format and delegate
-    handle_in("unsubscribe_characters", Map.put(params, "characters", characters), socket)
-  end
-
-  def handle_in("unsubscribe_characters", %{"characters" => characters}, socket)
-      when is_list(characters) do
-    case validate_characters(characters) do
+  # Handle unsubscribing from characters
+  def handle_in("unsubscribe_characters", %{"character_ids" => character_ids}, socket)
+      when is_list(character_ids) do
+    case validate_characters(character_ids) do
       {:ok, valid_characters} ->
         current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
 
@@ -275,7 +236,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
           updates = %{
             systems: MapSet.to_list(socket.assigns.subscribed_systems),
-            characters: MapSet.to_list(remaining_characters)
+            character_ids: MapSet.to_list(remaining_characters)
           }
 
           update_subscription(socket.assigns.subscription_id, updates)
@@ -394,6 +355,7 @@ defmodule WandererKillsWeb.KillmailChannel do
         timestamp: timestamp
       )
 
+      # Use structs directly for lazy JSON encoding (Jason.Encoder is implemented)
       push(socket, "killmail_update", %{
         system_id: system_id,
         killmails: filtered_killmails,
@@ -550,9 +512,9 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Private helper functions
 
   # Helper function to handle join with filters
-  defp join_with_filters(socket, systems, characters, preload_config) do
+  defp join_with_filters(socket, systems, character_ids, preload_config) do
     with {:ok, valid_systems} <- validate_systems(systems),
-         {:ok, valid_characters} <- validate_characters(characters) do
+         {:ok, valid_characters} <- validate_characters(character_ids) do
       # Register this WebSocket connection as a subscriber
       subscription_id =
         create_subscription(socket, valid_systems, valid_characters, preload_config)
@@ -628,7 +590,7 @@ defmodule WandererKillsWeb.KillmailChannel do
           reason: reason,
           peer_data: socket.assigns.peer_data,
           systems: systems,
-          characters: characters
+          character_ids: character_ids
         )
 
         {:error, %{reason: Error.to_string(reason)}}
@@ -731,7 +693,7 @@ defmodule WandererKillsWeb.KillmailChannel do
       updates
       |> Enum.map(fn
         {:systems, value} -> {"system_ids", value}
-        {:characters, value} -> {"character_ids", value}
+        {:character_ids, value} -> {"character_ids", value}
         {key, value} -> {to_string(key), value}
       end)
       |> Enum.into(%{})
@@ -780,7 +742,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     current_systems = MapSet.size(socket.assigns.subscribed_systems)
     current_characters = MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
 
-    Logger.info("[INFO] Starting preload for WebSocket client",
+    Logger.info("[INFO] Starting preload for WebSocket client: #{length(systems)} systems",
       user_id: user_id,
       subscription_id: subscription_id,
       systems_to_preload: length(systems),
@@ -799,7 +761,8 @@ defmodule WandererKillsWeb.KillmailChannel do
           end)
           |> Enum.sum()
 
-        Logger.info("[INFO] Preload completed for WebSocket client",
+        Logger.info(
+          "[INFO] Preload completed: #{total_kills_sent} kills sent across #{length(systems)} systems",
           user_id: user_id,
           subscription_id: subscription_id,
           total_systems: length(systems),
@@ -825,21 +788,8 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp preload_system_kills_for_websocket(socket, system_id, limit) do
-    Logger.debug("[DEBUG] Starting preload for system",
-      user_id: socket.assigns.user_id,
-      system_id: system_id,
-      limit: limit
-    )
-
     # Use the shared preloader
     kills = Preloader.preload_kills_for_system(system_id, limit, 24)
-
-    Logger.debug("[DEBUG] Got kills from preload function",
-      user_id: socket.assigns.user_id,
-      system_id: system_id,
-      kills_count: length(kills)
-    )
-
     send_preload_kills_to_websocket(socket, system_id, kills)
   end
 
@@ -848,44 +798,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Helper function to send preload kills to WebSocket client
   defp send_preload_kills_to_websocket(socket, system_id, kills) when is_list(kills) do
     if length(kills) > 0 do
-      killmail_ids = Enum.map(kills, & &1["killmail_id"])
-      kill_times = Preloader.extract_kill_times(kills)
-      enriched_count = Preloader.count_enriched_kills(kills)
-
-      Logger.debug("[DEBUG] Sending preload kills to WebSocket client",
-        user_id: socket.assigns.user_id,
-        system_id: system_id,
-        killmail_count: length(kills),
-        killmail_ids: killmail_ids,
-        enriched_count: enriched_count,
-        unenriched_count: length(kills) - enriched_count,
-        kill_time_range:
-          if(length(kill_times) > 0,
-            do: "#{List.first(kill_times)} to #{List.last(kill_times)}",
-            else: "none"
-          )
-      )
-
-      # Log sample killmails to debug client issues
-      sample_kills = Enum.take(kills, 2)
-
-      Enum.each(sample_kills, fn kill ->
-        Logger.debug("[DEBUG] Sample killmail being sent",
-          killmail_id: kill["killmail_id"],
-          system_id: system_id,
-          has_victim: Map.has_key?(kill, "victim"),
-          has_attackers: Map.has_key?(kill, "attackers"),
-          has_zkb: Map.has_key?(kill, "zkb"),
-          victim_ship: get_in(kill, ["victim", "ship_type_id"]),
-          victim_character: get_in(kill, ["victim", "character_id"]),
-          attacker_count: length(Map.get(kill, "attackers", [])),
-          total_value: get_in(kill, ["zkb", "totalValue"]),
-          kill_time: kill["kill_time"],
-          available_keys: Map.keys(kill) |> Enum.sort()
-        )
-      end)
-
-      # Send killmail update to the WebSocket client
+      # Use structs directly for lazy JSON encoding (Jason.Encoder is implemented)
       push(socket, "killmail_update", %{
         system_id: system_id,
         killmails: kills,
@@ -898,12 +811,6 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       length(kills)
     else
-      Logger.debug("[DEBUG] No kills available for preload",
-        user_id: socket.assigns.user_id,
-        system_id: system_id,
-        reason: "no_kills_found"
-      )
-
       0
     end
   end
@@ -931,5 +838,67 @@ defmodule WandererKillsWeb.KillmailChannel do
   defp generate_random_id do
     :crypto.strong_rand_bytes(16)
     |> Base.url_encode64(padding: false)
+  end
+
+  defp process_character_subscription(socket, valid_characters) do
+    current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
+    new_characters = MapSet.difference(MapSet.new(valid_characters), current_characters)
+    all_characters = MapSet.union(current_characters, MapSet.new(valid_characters))
+
+    {updated_socket, message} =
+      if MapSet.size(new_characters) > 0 do
+        # Update subscription
+        updates = %{
+          systems: MapSet.to_list(socket.assigns.subscribed_systems),
+          character_ids: MapSet.to_list(all_characters)
+        }
+
+        update_subscription(socket.assigns.subscription_id, updates)
+
+        socket = assign(socket, :subscribed_characters, all_characters)
+
+        Logger.debug("[DEBUG] Client subscribed to characters",
+          user_id: socket.assigns.user_id,
+          subscription_id: socket.assigns.subscription_id,
+          new_characters_count: MapSet.size(new_characters),
+          total_characters_count: MapSet.size(all_characters)
+        )
+
+        {socket, %{subscribed_characters: MapSet.to_list(all_characters)}}
+      else
+        {socket, %{message: "Already subscribed to all requested characters"}}
+      end
+
+    # Check if we need to subscribe to all_systems topic (always run)
+    maybe_subscribe_to_all_systems(updated_socket, all_characters)
+
+    {:reply, {:ok, message}, updated_socket}
+  end
+
+  defp maybe_unsubscribe_from_all_systems(socket, current_systems, new_systems) do
+    # This happens when we go from 0 system subscriptions to >0 and we have character subscriptions
+    if MapSet.size(current_systems) == 0 and MapSet.size(new_systems) > 0 and
+         MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new()) > 0 do
+      Phoenix.PubSub.unsubscribe(
+        WandererKills.PubSub,
+        WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+      )
+
+      Logger.debug(
+        "[DEBUG] Unsubscribed from all_systems topic due to specific system subscription",
+        user_id: socket.assigns.user_id,
+        subscription_id: socket.assigns.subscription_id
+      )
+    end
+  end
+
+  defp maybe_subscribe_to_all_systems(socket, all_characters) do
+    if MapSet.size(socket.assigns.subscribed_systems) == 0 and
+         MapSet.size(all_characters) > 0 do
+      Phoenix.PubSub.subscribe(
+        WandererKills.PubSub,
+        WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+      )
+    end
   end
 end

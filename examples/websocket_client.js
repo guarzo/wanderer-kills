@@ -51,7 +51,7 @@ class WandererKillsClient {
    * Connect to the WebSocket server
    * @param {Object|number} options - Connection options object or timeout number (deprecated)
    * @param {number[]} options.systems - System IDs to subscribe to
-   * @param {number[]} options.characters - Character IDs to track
+   * @param {number[]} options.character_ids - Character IDs to track
    * @param {Object} options.preload - Extended preload configuration
    * @param {number} options.timeout - Connection timeout in milliseconds (default: 10000)
    * @returns {Promise} Resolves when connected, rejects on error or timeout
@@ -73,7 +73,7 @@ class WandererKillsClient {
     
     const {
       systems = [],
-      characters = [],
+      character_ids = [],
       preload = null,
       timeout = 10000
     } = options;
@@ -112,7 +112,7 @@ class WandererKillsClient {
       // Build channel params
       const channelParams = {};
       if (systems.length > 0) channelParams.systems = systems;
-      if (characters.length > 0) channelParams.characters = characters;
+      if (character_ids.length > 0) channelParams.character_ids = character_ids;
       if (preload) channelParams.preload = preload;
 
       // Join the killmails channel
@@ -128,8 +128,8 @@ class WandererKillsClient {
           if (systems.length > 0) {
             systems.forEach(id => this.systemSubscriptions.add(id));
           }
-          if (characters.length > 0) {
-            characters.forEach(id => this.characterSubscriptions.add(id));
+          if (character_ids.length > 0) {
+            character_ids.forEach(id => this.characterSubscriptions.add(id));
           }
 
           this.setupEventHandlers();
@@ -258,7 +258,7 @@ class WandererKillsClient {
    */
   async subscribeToCharacters(characterIds) {
     return new Promise((resolve, reject) => {
-      this.channel.push('subscribe_characters', { characters: characterIds })
+      this.channel.push('subscribe_characters', { character_ids: characterIds })
         .receive('ok', (response) => {
           console.log(`✅ Subscribed to characters: ${characterIds.join(', ')}`);
           console.log(`👤 Total character subscriptions: ${response.subscribed_characters.length}`);
@@ -277,7 +277,7 @@ class WandererKillsClient {
    */
   async unsubscribeFromCharacters(characterIds) {
     return new Promise((resolve, reject) => {
-      this.channel.push('unsubscribe_characters', { characters: characterIds })
+      this.channel.push('unsubscribe_characters', { character_ids: characterIds })
         .receive('ok', (response) => {
           console.log(`❌ Unsubscribed from characters: ${characterIds.join(', ')}`);
           console.log(`👤 Remaining character subscriptions: ${response.subscribed_characters.length}`);
@@ -392,7 +392,7 @@ async function extendedPreloadExample() {
     // Connect with initial systems and extended preload configuration
     await client.connect({
       systems: [30000142, 30002187], // Jita and Amarr
-      characters: [95465499],         // Track specific character
+      character_ids: [95465499],      // Track specific character
       preload: {
         enabled: true,
         limit_per_system: 50,     // Get up to 50 kills per system
@@ -468,8 +468,8 @@ async function advancedExample() {
     // - Any of the specified systems OR
     // - Any of the specified characters (as victim or attacker)
     const channel = client.socket.channel('killmails:lobby', {
-      systems: [30000142, 30002187], // Jita, Amarr
-      characters: [95465499, 90379338] // Example character IDs
+      systems: [30000142, 30002187],      // Jita, Amarr
+      character_ids: [95465499, 90379338] // Example character IDs
     });
 
     await new Promise((resolve, reject) => {

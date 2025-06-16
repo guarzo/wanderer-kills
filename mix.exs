@@ -4,7 +4,7 @@ defmodule WandererKills.MixProject do
   def project do
     [
       app: :wanderer_kills,
-      version: "0.1.3",
+      version: "1.0.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       compilers: Mix.compilers() ++ [:boundary],
@@ -91,7 +91,7 @@ defmodule WandererKills.MixProject do
       {:excoveralls, "~> 0.18", only: :test},
 
       # Property-based testing
-      {:stream_data, "~> 0.6", only: [:test, :dev]}
+      {:stream_data, "~> 1.2", only: [:test, :dev]}
     ]
   end
 

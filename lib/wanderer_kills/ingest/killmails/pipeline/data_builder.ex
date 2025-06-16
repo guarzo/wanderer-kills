@@ -9,9 +9,8 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
   require Logger
   alias WandererKills.Core.Support.Error
   alias WandererKills.Ingest.Killmails.Transformations
-  alias WandererKills.Domain.Killmail
 
-  @type killmail :: map() | Killmail.t()
+  @type killmail :: map()
 
   @doc """
   Builds the structured killmail data.
@@ -20,16 +19,12 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
   with normalized victim and attacker data.
   """
   @spec build_killmail_data(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
-  def build_killmail_data(%Killmail{} = killmail), do: {:ok, killmail}
-
   def build_killmail_data(killmail) do
-    # Use the original string time, not the parsed DateTime
-    kill_time = killmail["kill_time"] || killmail["killmail_time"]
-
+    # Trust normalized keys from earlier pipeline stage
     structured = %{
       "killmail_id" => killmail["killmail_id"],
-      "kill_time" => kill_time,
-      "system_id" => killmail["solar_system_id"] || killmail["system_id"],
+      "kill_time" => killmail["kill_time"],
+      "system_id" => killmail["system_id"],
       "victim" => Transformations.normalize_victim(killmail["victim"]),
       "attackers" => Transformations.normalize_attackers(killmail["attackers"]),
       "zkb" => killmail["zkb"] || %{},
@@ -54,18 +49,10 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.DataBuilder do
   Combines the full ESI data with zkillboard metadata to create
   a complete killmail record.
   """
-  @spec merge_killmail_data(killmail(), map()) :: {:ok, killmail()} | {:error, Error.t()}
-  def merge_killmail_data(%Killmail{} = killmail, %{"zkb" => zkb}) when is_map(zkb) do
-    # For structs, update the zkb field
-    case Killmail.new(Map.put(Killmail.to_map(killmail), "zkb", zkb)) do
-      {:ok, merged} -> {:ok, merged}
-      {:error, _} -> {:error, Error.killmail_error(:merge_failed, "Failed to merge zkb data")}
-    end
-  end
-
+  @spec merge_killmail_data(map(), map()) :: {:ok, map()} | {:error, Error.t()}
   def merge_killmail_data(%{"killmail_id" => id} = esi_data, %{"zkb" => zkb})
       when is_integer(id) and is_map(zkb) do
-    case Transformations.get_killmail_time(esi_data) do
+    case Transformations.get_killmail_time(esi_data) || esi_data["kill_time"] do
       kill_time when is_binary(kill_time) ->
         merged =
           esi_data

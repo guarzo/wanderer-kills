@@ -275,7 +275,7 @@ socket.connect();
 // Join the killmail lobby channel with systems and optional extended preload
 const channel = socket.channel('killmails:lobby', {
   systems: [30000142, 30000144],
-  characters: [95465499],  // Optional: track specific characters
+  character_ids: [95465499],  // Optional: track specific characters
   preload: {               // Optional: extended historical data preload
     enabled: true,
     limit_per_system: 100,
@@ -320,6 +320,21 @@ channel.push('subscribe_systems', { systems: [30000145] })
   .receive('ok', resp => console.log('Subscribed to additional systems', resp))
   .receive('error', resp => console.log('Failed to subscribe', resp));
 
+// Unsubscribe from systems
+channel.push('unsubscribe_systems', { systems: [30000144] })
+  .receive('ok', resp => console.log('Unsubscribed from systems', resp))
+  .receive('error', resp => console.log('Failed to unsubscribe', resp));
+
+// Subscribe to specific characters
+channel.push('subscribe_characters', { character_ids: [95465499, 90379338] })
+  .receive('ok', resp => console.log('Subscribed to characters', resp))
+  .receive('error', resp => console.log('Failed to subscribe', resp));
+
+// Unsubscribe from characters
+channel.push('unsubscribe_characters', { character_ids: [95465499] })
+  .receive('ok', resp => console.log('Unsubscribed from characters', resp))
+  .receive('error', resp => console.log('Failed to unsubscribe', resp));
+
 // Get current subscription status
 channel.push('get_status', {})
   .receive('ok', resp => {
@@ -332,27 +347,15 @@ channel.push('get_status', {})
 
 WandererKills supports character-based subscriptions, allowing you to track specific players as victims or attackers across all systems.
 
-#### Character Subscription Methods
+#### Subscription Limits
 
-```javascript
-// Subscribe to specific characters
-channel.push('subscribe_characters', { character_ids: [95465499, 90379338] })
-  .receive('ok', resp => console.log('Subscribed to characters', resp))
-  .receive('error', resp => console.log('Failed to subscribe to characters', resp));
+| Subscription Type | Limit | Notes |
+|------------------|-------|-------|
+| Systems per subscription | 50 | Maximum number of systems you can subscribe to |
+| Characters per subscription | 1000 | Maximum number of character IDs to track |
+| Maximum system ID | 32,000,000 | Valid EVE Online system ID range |
 
-// Mixed subscription (systems OR characters)
-channel.push('subscribe', { 
-  systems: [30000142], 
-  character_ids: [95465499, 90379338] 
-})
-  .receive('ok', resp => console.log('Mixed subscription active', resp));
-
-// Unsubscribe from specific characters
-channel.push('unsubscribe_characters', { character_ids: [95465499] })
-  .receive('ok', resp => console.log('Unsubscribed from characters', resp));
-```
-
-#### Character Subscription Features
+### Character Subscription Features
 
 - **OR Logic**: Killmails are delivered if they match **either** system IDs **or** character IDs
 - **Victim & Attacker Matching**: Characters are matched whether they appear as victims or attackers  
@@ -509,13 +512,41 @@ channel.join()
 // - The killmail occurred in system 30000142 (Jita), OR
 // - Character 95465499 appears as victim or attacker, OR  
 // - Character 90379338 appears as victim or attacker
-channel.push('subscribe', { 
-  systems: [30000142], 
-  character_ids: [95465499, 90379338] 
+const channel = socket.channel('killmails:lobby', {
+  systems: [30000142],
+  character_ids: [95465499, 90379338]
 });
 ```
 
+### WebSocket API Changes
+
+**Important**: API standardization update:
+- **All WebSocket parameters now use `_ids` suffix**: Use `character_ids` and `system_ids` consistently
+- **Join parameters**: Use `character_ids` (matching webhook API)
+- **Push method parameters**: Use `character_ids` (matching webhook API)
+- The mixed `subscribe` method with both systems and characters has been removed
+- Use dedicated `subscribe_systems` and `subscribe_characters` methods instead
+
+### Channel Methods Summary
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `join` | `{systems: [], character_ids: [], preload: {}}` | Join the channel with initial subscriptions |
+| `subscribe_systems` | `{systems: []}` | Add system subscriptions |
+| `unsubscribe_systems` | `{systems: []}` | Remove system subscriptions |
+| `subscribe_characters` | `{character_ids: []}` | Add character subscriptions |
+| `unsubscribe_characters` | `{character_ids: []}` | Remove character subscriptions |
+| `get_status` | `{}` | Get current subscription status |
+
 ### Channel Events
+
+| Event | Description | Payload |
+|-------|-------------|---------|
+| `killmail_update` | New killmails received (real-time or preload) | `{system_id, killmails, timestamp, preload}` |
+| `kill_count_update` | System kill count update | `{system_id, count, timestamp}` |
+| `preload_status` | Extended preload progress update | `{status, current_system, systems_complete, total_systems}` |
+| `preload_batch` | Batch of historical kills delivered | `{kills, batch_size}` |
+| `preload_complete` | Extended preload finished | `{total_kills, systems_processed, errors}` |
 
 #### killmail_update (Full Format)
 This is the primary event sent when new killmails are received. The format matches the REST API response but is delivered in real-time.
