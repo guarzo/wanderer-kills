@@ -527,7 +527,6 @@ The service is designed for high performance and has been thoroughly benchmarked
 | **Memory Usage** | System Index | **0.13MB** |
 
 > 🚀 **Production Ready**: Sub-microsecond operations with minimal memory footprint
-> 
 > Run benchmarks: `MIX_ENV=test mix test test/performance --include perf`
 
 ### Key Performance Features

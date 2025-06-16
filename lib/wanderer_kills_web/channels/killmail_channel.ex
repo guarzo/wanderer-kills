@@ -760,7 +760,8 @@ defmodule WandererKillsWeb.KillmailChannel do
           end)
           |> Enum.sum()
 
-        Logger.info("[INFO] Preload completed: #{total_kills_sent} kills sent across #{length(systems)} systems",
+        Logger.info(
+          "[INFO] Preload completed: #{total_kills_sent} kills sent across #{length(systems)} systems",
           user_id: user_id,
           subscription_id: subscription_id,
           total_systems: length(systems),
