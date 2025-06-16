@@ -1,0 +1,2 @@
+# WandererKills WebSocket Client Dependencies
+websockets>=10.0,<12.0

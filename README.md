@@ -33,7 +33,7 @@ docker run -p 4004:4004 guarzo/wanderer-kills
 # With environment variables
 docker run -p 4004:4004 \
   -e PORT=4004 \
-  -e ESI_BASE_URL=https://esi.evetech.net/latest \
+  -e MIX_ENV=prod \
   guarzo/wanderer-kills
 ```
 
@@ -58,8 +58,13 @@ docker-compose up -d
    ```bash
    git clone https://github.com/wanderer-industries/wanderer-kills.git
    cd wanderer-kills
+   
+   # Install dependencies
    mix deps.get
    mix compile
+   
+   # Optional: Copy environment template for customization
+   cp env.example .env
    ```
 
 3. **Start the Application**
@@ -290,33 +295,61 @@ curl "http://localhost:4004/api/v1/kills/system/30000142?since_hours=24&limit=50
 
 ### Environment Variables
 
+See `env.example` for all available environment variables. The primary ones are:
+
 ```bash
 # Port configuration
 PORT=4004
 
-# ESI configuration
-ESI_BASE_URL=https://esi.evetech.net/latest
-ESI_DATASOURCE=tranquility
+# CORS/WebSocket origin checking (production only)
+ORIGIN_HOST=https://yourdomain.com
 
-# Cache TTLs (in seconds)
-CACHE_KILLMAIL_TTL=300
-CACHE_SYSTEM_TTL=3600
-CACHE_ESI_TTL=86400
+# Application environment
+MIX_ENV=prod
 ```
 
+Most configuration is handled through compile-time config files rather than environment variables for better performance.
+
 ### Application Configuration
+
+Configuration is organized by functional area in `config/config.exs`:
 
 ```elixir
 # config/config.exs
 config :wanderer_kills,
-  port: 4004,
-  redisq_base_url: "https://zkillredisq.stream/listen.php",
-  storage: [
-    enable_event_streaming: true
-  ],
+  # Cache TTLs (in seconds)
   cache: [
-    default_ttl: :timer.minutes(5),
-    cleanup_interval: :timer.minutes(10)
+    killmails_ttl: 3600,
+    system_ttl: 1800,
+    esi_ttl: 3600,
+    esi_killmail_ttl: 86_400
+  ],
+  
+  # ESI configuration
+  esi: [
+    base_url: "https://esi.evetech.net/latest",
+    request_timeout_ms: 30_000,
+    batch_concurrency: 10
+  ],
+  
+  # RedisQ stream configuration
+  redisq: [
+    base_url: "https://zkillredisq.stream/listen.php",
+    fast_interval_ms: 1_000,
+    idle_interval_ms: 5_000
+  ],
+  
+  # Storage and event streaming
+  storage: [
+    enable_event_streaming: true,
+    gc_interval_ms: 60_000,
+    max_events_per_system: 10_000
+  ],
+  
+  # Monitoring intervals
+  monitoring: [
+    status_interval_ms: 300_000,  # 5 minutes
+    health_check_interval_ms: 60_000
   ]
 ```
 
@@ -366,11 +399,17 @@ The service provides comprehensive monitoring with 5-minute status reports:
 # Run all tests
 mix test
 
-# Run with coverage
+# Generate HTML coverage report  
 mix test.coverage
 
+# Generate JSON coverage for CI
+mix test.coverage.ci
+
+# Run performance tests (normally excluded)
+mix test --include perf
+
 # Run specific test file
-mix test test/wanderer_kills/killmails/store_test.exs
+mix test test/wanderer_kills/ingest/killmails/unified_processor_test.exs
 ```
 
 ### Code Quality
@@ -410,12 +449,12 @@ The development container includes all required tools and dependencies.
 
 ### Ship Type Data
 
-The service requires ship type data for enrichment:
+The service includes ship type data for enrichment:
 
 ```bash
-# Data is automatically loaded on first run
-# Manual update if needed:
-mix run -e "WandererKills.ShipTypes.Updater.update_all_ship_types()"
+# Ship type data is automatically loaded from CSV files on startup
+# Data files are located in priv/data/ship_types/
+# Validation ensures data integrity during loading
 ```
 
 ### Cache Management
@@ -424,11 +463,13 @@ The service uses an ETS-based caching system that is automatically managed. Cach
 
 ## Documentation
 
-Comprehensive documentation is available in the `/docs` directory:
+Comprehensive documentation is available:
 
 - [API & Integration Guide](docs/API_AND_INTEGRATION_GUIDE.md) - Complete API documentation and integration examples
 - [Examples](examples/README.md) - WebSocket client examples in multiple languages
-- [Architecture Overview](CLAUDE.md) - Detailed architecture documentation
+- [Architecture Overview](CLAUDE.md) - Detailed architecture documentation for developers
+- [Environment Configuration](env.example) - Complete list of environment variables and settings
+- [Docker Guide](DOCKER.md) - Docker deployment and development information
 
 ## Contributing
 
@@ -461,7 +502,8 @@ docker build -t wanderer-kills:latest .
 docker run -d \
   -p 4004:4004 \
   -e PORT=4004 \
-  -e ESI_BASE_URL=https://esi.evetech.net/latest \
+  -e MIX_ENV=prod \
+  -e ORIGIN_HOST=https://yourdomain.com \
   --name wanderer-kills \
   guarzo/wanderer-kills:latest
 ```

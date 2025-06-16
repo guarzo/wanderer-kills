@@ -34,8 +34,14 @@ http://localhost:4004/api/v1
 | GET    | `/kills/cached/{system_id}` | Get cached kills only       |
 | GET    | `/killmail/{killmail_id}`   | Get specific killmail       |
 | GET    | `/kills/count/{system_id}`  | Get kill count for system   |
+| POST   | `/subscriptions`            | Create webhook subscription |
+| GET    | `/subscriptions`            | List all subscriptions      |
+| GET    | `/subscriptions/stats`      | Get subscription statistics |
+| DELETE | `/subscriptions/{id}`       | Delete subscription         |
 | GET    | `/health`                   | Health check                |
 | GET    | `/status`                   | Service status              |
+| GET    | `/metrics`                  | Service metrics             |
+| GET    | `/websocket`                | WebSocket connection info   |
 
 ### System Kills
 
@@ -47,7 +53,7 @@ GET /api/v1/kills/system/{system_id}?since_hours={hours}&limit={limit}
 **Parameters:**
 - `system_id` (required) - EVE Online solar system ID
 - `since_hours` (required) - Hours to look back for kills
-- `limit` (optional) - Maximum kills to return (default: 100)
+- `limit` (optional) - Maximum kills to return (default: 50, max: 1000)
 
 **Example:**
 ```bash
@@ -151,6 +157,95 @@ GET /api/v1/kills/count/{system_id}
     "system_id": 30000142,
     "count": 47,
     "timestamp": "2024-01-15T15:00:00Z"
+  },
+  "timestamp": "2024-01-15T15:00:00Z"
+}
+```
+
+### Webhook Subscriptions
+
+#### Create Subscription
+```http
+POST /api/v1/subscriptions
+Content-Type: application/json
+
+{
+  "subscriber_id": "my-app-instance",
+  "system_ids": [30000142, 30002187],
+  "character_ids": [95465499, 90379338],
+  "callback_url": "https://myapp.com/webhooks/killmails"
+}
+```
+
+**Parameters:**
+- `subscriber_id` (required) - Unique identifier for your subscription
+- `system_ids` (optional) - Array of EVE Online system IDs to monitor
+- `character_ids` (optional) - Array of character IDs to track (as victim or attacker)
+- `callback_url` (required) - HTTPS URL where webhooks will be delivered
+
+**Response:**
+```json
+{
+  "data": {
+    "subscriber_id": "my-app-instance", 
+    "system_ids": [30000142, 30002187],
+    "character_ids": [95465499, 90379338],
+    "callback_url": "https://myapp.com/webhooks/killmails",
+    "created_at": "2024-01-15T15:00:00Z"
+  },
+  "timestamp": "2024-01-15T15:00:00Z"
+}
+```
+
+#### List Subscriptions
+```http
+GET /api/v1/subscriptions
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "subscriber_id": "my-app-instance",
+      "system_ids": [30000142, 30002187],
+      "character_ids": [95465499],
+      "callback_url": "https://myapp.com/webhooks/killmails",
+      "created_at": "2024-01-15T15:00:00Z"
+    }
+  ],
+  "timestamp": "2024-01-15T15:00:00Z"
+}
+```
+
+#### Delete Subscription
+```http
+DELETE /api/v1/subscriptions/{subscriber_id}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "message": "Subscription deleted successfully"
+  },
+  "timestamp": "2024-01-15T15:00:00Z"
+}
+```
+
+#### Subscription Statistics
+```http
+GET /api/v1/subscriptions/stats
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "total_subscriptions": 42,
+    "total_systems_monitored": 156,
+    "total_characters_monitored": 89,
+    "active_webhooks": 38
   },
   "timestamp": "2024-01-15T15:00:00Z"
 }
@@ -563,9 +658,9 @@ This is the primary event sent when new killmails are received. The format match
 For Elixir applications running in the same environment, subscribe directly to Phoenix PubSub topics:
 
 ### Topic Structure
-- `zkb:system:{system_id}` - All updates for system
-- `zkb:system:{system_id}:detailed` - Detailed kills for system
-- `zkb:all_systems` - Global kill updates
+- `system:{system_id}` - New killmails for system
+- `system:count:{system_id}` - Kill count updates for system  
+- `killmail:{killmail_id}` - Specific killmail events
 
 ### Example Implementation
 ```elixir
@@ -578,16 +673,16 @@ defmodule MyApp.KillSubscriber do
 
   def init(state) do
     # Subscribe to Jita system kills
-    Phoenix.PubSub.subscribe(WandererKills.PubSub, "zkb:system:30000142")
+    Phoenix.PubSub.subscribe(WandererKills.PubSub, "system:30000142")
     {:ok, state}
   end
 
-  def handle_info(%{type: :killmail_update, system_id: system_id, kills: kills}, state) do
-    IO.puts("Received #{length(kills)} new kills for system #{system_id}")
+  def handle_info({:new_killmail, system_id, killmail}, state) do
+    IO.puts("Received new killmail #{killmail["killmail_id"]} for system #{system_id}")
     {:noreply, state}
   end
 
-  def handle_info(%{type: :killmail_count_update, system_id: system_id, count: count}, state) do
+  def handle_info({:kill_count_update, system_id, count}, state) do
     IO.puts("System #{system_id} kill count updated to #{count}")
     {:noreply, state}
   end
@@ -598,38 +693,65 @@ end
 
 ## Client Library Integration (Elixir)
 
-### Using the Built-in Client
+### Using as a Dependency
+
+Include WandererKills as a dependency and use its modules directly:
+
 ```elixir
-# Add to your application's dependencies
-{:wanderer_kills, path: "../wanderer_kills"}
+# In your mix.exs
+defp deps do
+  [
+    {:wanderer_kills, "~> 0.1.0"}
+  ]
+end
 
-# Use the client directly
-alias WandererKills.Client
+# Use the core modules directly
+alias WandererKills.Core.Storage.KillmailStore
+alias WandererKills.Ingest.Killmails.UnifiedProcessor
 
-# Fetch system kills
-{:ok, kills} = Client.get_system_killmails(30000142, 24, 100)
+# Access stored killmails
+{:ok, killmail} = KillmailStore.get(123456789)
+system_kills = KillmailStore.list_by_system(30000142)
 
-# Fetch multiple systems
-{:ok, systems_kills} = Client.get_systems_killmails([30000142, 30000144], 24, 50)
-
-# Get cached data
-cached_kills = Client.get_cached_killmails(30000142)
+# Process killmail data
+cutoff_time = DateTime.utc_now() |> DateTime.add(-24, :hour)
+case UnifiedProcessor.process_killmail(raw_killmail, cutoff_time) do
+  {:ok, processed} -> IO.puts("Processed killmail: #{processed.killmail_id}")
+  {:error, reason} -> IO.puts("Processing failed: #{reason}")
+end
 ```
 
-### Custom Client Implementation
+### HTTP Client Integration
 ```elixir
 defmodule MyApp.KillsClient do
-  @behaviour WandererKills.ClientBehaviour
+  @moduledoc "HTTP client for WandererKills API"
 
-  @impl true
-  def get_system_killmails(system_id, since_hours, limit) do
-    url = "http://wanderer-kills:4004/api/v1/kills/system/#{system_id}"
-    params = %{since_hours: since_hours, limit: limit}
+  @base_url "http://localhost:4004/api/v1"
 
-    case HTTPoison.get(url, [], params: params) do
+  def get_system_killmails(system_id, since_hours, limit \\ 50) do
+    url = "#{@base_url}/kills/system/#{system_id}"
+    params = URI.encode_query(%{since_hours: since_hours, limit: limit})
+
+    case HTTPoison.get("#{url}?#{params}") do
       {:ok, %{status_code: 200, body: body}} ->
         %{"data" => %{"kills" => kills}} = Jason.decode!(body)
         {:ok, kills}
+      {:ok, %{status_code: status, body: body}} ->
+        {:error, "HTTP #{status}: #{body}"}
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def get_systems_killmails(system_ids, since_hours, limit \\ 50) do
+    url = "#{@base_url}/kills/systems"
+    payload = %{system_ids: system_ids, since_hours: since_hours, limit: limit}
+    headers = [{"Content-Type", "application/json"}]
+
+    case HTTPoison.post(url, Jason.encode!(payload), headers) do
+      {:ok, %{status_code: 200, body: body}} ->
+        %{"data" => data} = Jason.decode!(body)
+        {:ok, data}
       {:error, reason} ->
         {:error, reason}
     end
@@ -681,18 +803,17 @@ end
 
 ## Rate Limiting
 
-### Limits
-- **Per-IP**: 1000 requests/minute
-- **Burst**: 100 requests/10 seconds
-- **WebSocket**: 10 connections/IP
-- **Subscription Limit**: 100 systems per subscription
+### WebSocket Limits
+- **Max Systems per Subscription**: 50 (configurable)
+- **Max Characters per Subscription**: 1000
+- **Max System ID**: 32,000,000
+- **Connection timeout**: 45 seconds
 
-### Headers
-```
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 987
-X-RateLimit-Reset: 1642258800
-```
+### Parameter Limits
+- **limit**: 1-1000 (default: 50)
+- **system_id**: Must be positive integer ≤ 32,000,000
+- **killmail_id**: Must be positive integer
+- **since_hours**: Must be positive integer
 
 ---
 
@@ -706,7 +827,12 @@ GET /health
 **Response:**
 ```json
 {
-  "status": "ok",
+  "status": "healthy",
+  "components": {
+    "application": "healthy",
+    "cache": "healthy",
+    "websocket": "healthy"
+  },
   "timestamp": "2024-01-15T15:00:00Z"
 }
 ```
@@ -742,7 +868,7 @@ class WandererKillsClient {
     this.baseUrl = baseUrl;
   }
 
-  async getSystemKills(systemId, sinceHours = 24, limit = 100) {
+  async getSystemKills(systemId, sinceHours = 24, limit = 50) {
     try {
       const response = await axios.get(
         `${this.baseUrl}/kills/system/${systemId}`,
@@ -770,7 +896,7 @@ class WandererKillsClient:
     def __init__(self, base_url='http://localhost:4004/api/v1'):
         self.base_url = base_url
 
-    def get_system_kills(self, system_id, since_hours=24, limit=100):
+    def get_system_kills(self, system_id, since_hours=24, limit=50):
         url = f"{self.base_url}/kills/system/{system_id}"
         params = {'since_hours': since_hours, 'limit': limit}
 
@@ -791,17 +917,19 @@ print(f"Found {len(kills)} kills")
 
 ### Field Mapping
 The API normalizes field names for consistency:
-- `solar_system_id` → `system_id`
+- `solar_system_id` → `system_id` (in responses)
 - `killID` → `killmail_id`
-- `killmail_time` → `kill_time`
+- `killmail_time` → `kill_time` (internal processing)
 
 ### Timestamps
 All timestamps are in ISO 8601 format (UTC).
 
 ### Cache Behavior
-- **Killmails**: Cached for 5 minutes
-- **System data**: Cached for 1 hour  
-- **ESI enrichment**: Cached for 24 hours
+- **Killmails**: Cached for 5 minutes (300 seconds)
+- **System data**: Cached for 1 hour (3600 seconds)  
+- **ESI enrichment**: Cached for 1 hour (3600 seconds)
+- **ESI killmail data**: Cached for 24 hours (86400 seconds)
+- **Ship types**: Preloaded from CSV files (persistent cache)
 
 ---
 

@@ -1,0 +1,28 @@
+{
+  "name": "wanderer-kills-websocket-example",
+  "version": "1.0.0",
+  "description": "WandererKills WebSocket API client examples",
+  "main": "websocket_client.js",
+  "type": "module",
+  "scripts": {
+    "start": "node websocket_client.js",
+    "basic": "node websocket_client.js basic",
+    "preload": "node websocket_client.js preload", 
+    "advanced": "node websocket_client.js advanced"
+  },
+  "dependencies": {
+    "phoenix": "^1.7.12"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "eve-online",
+    "killmails",
+    "websocket",
+    "phoenix",
+    "realtime"
+  ],
+  "author": "WandererKills",
+  "license": "MIT"
+}
