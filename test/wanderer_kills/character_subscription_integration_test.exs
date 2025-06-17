@@ -9,9 +9,10 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
   use ExUnit.Case, async: false
   use WandererKills.Test.SharedContexts
 
-  alias WandererKills.Subs.SubscriptionManager
   alias WandererKills.Core.Storage.KillmailStore
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Subs.SubscriptionManager
+  alias WandererKills.Subs.Subscriptions.{CharacterIndex, SystemIndex}
 
   # Helper to create test killmail structs
   defp create_test_killmail(attrs) do
@@ -43,14 +44,14 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
   setup do
     # Clear all state without restarting the application
     WandererKills.TestHelpers.clear_all_caches()
-    WandererKills.Subs.Subscriptions.CharacterIndex.clear()
-    WandererKills.Subs.Subscriptions.SystemIndex.clear()
+    CharacterIndex.clear()
+    SystemIndex.clear()
     # Skip cache clearing - let it be handled by TestHelpers.clear_all_caches()
     # WandererKills.Ingest.Killmails.CharacterCache.clear_cache()
     KillmailStore.clear()
 
     # Clear all subscriptions to ensure clean state
-    WandererKills.Subs.SubscriptionManager.clear_all_subscriptions()
+    SubscriptionManager.clear_all_subscriptions()
 
     :ok
   end

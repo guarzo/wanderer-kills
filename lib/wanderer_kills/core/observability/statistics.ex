@@ -292,39 +292,37 @@ defmodule WandererKills.Core.Observability.Statistics do
   def aggregate_cache_stats([]), do: {:error, :empty_list}
 
   def aggregate_cache_stats(cache_stats_list) when is_list(cache_stats_list) do
-    try do
-      total_size = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :size, 0)))
-      total_operations = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :operations, 0)))
-      total_evictions = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :evictions, 0)))
+    total_size = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :size, 0)))
+    total_operations = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :operations, 0)))
+    total_evictions = Enum.sum(Enum.map(cache_stats_list, &Map.get(&1, :evictions, 0)))
 
-      # Calculate weighted average hit rate based on operations
-      hit_rates =
-        Enum.map(cache_stats_list, fn stats ->
-          {Map.get(stats, :hit_rate, 0.0), Map.get(stats, :operations, 0)}
-        end)
+    # Calculate weighted average hit rate based on operations
+    hit_rates =
+      Enum.map(cache_stats_list, fn stats ->
+        {Map.get(stats, :hit_rate, 0.0), Map.get(stats, :operations, 0)}
+      end)
 
-      avg_hit_rate =
-        hit_rates
-        |> calculate_weighted_average()
-        |> case do
-          {:ok, rate} -> rate
-          {:error, _} -> 0.0
-        end
+    avg_hit_rate =
+      hit_rates
+      |> calculate_weighted_average()
+      |> case do
+        {:ok, rate} -> rate
+        {:error, _} -> 0.0
+      end
 
-      aggregated = %{
-        total_size: total_size,
-        total_operations: total_operations,
-        total_evictions: total_evictions,
-        average_hit_rate: avg_hit_rate,
-        average_miss_rate: 100.0 - avg_hit_rate,
-        cache_count: length(cache_stats_list),
-        eviction_rate: calculate_percentage(total_evictions, total_operations)
-      }
+    aggregated = %{
+      total_size: total_size,
+      total_operations: total_operations,
+      total_evictions: total_evictions,
+      average_hit_rate: avg_hit_rate,
+      average_miss_rate: 100.0 - avg_hit_rate,
+      cache_count: length(cache_stats_list),
+      eviction_rate: calculate_percentage(total_evictions, total_operations)
+    }
 
-      {:ok, aggregated}
-    rescue
-      error -> {:error, error}
-    end
+    {:ok, aggregated}
+  rescue
+    error -> {:error, error}
   end
 
   @doc """

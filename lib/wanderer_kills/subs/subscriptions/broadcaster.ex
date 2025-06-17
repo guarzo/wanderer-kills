@@ -7,6 +7,7 @@ defmodule WandererKills.Subs.Subscriptions.Broadcaster do
   """
 
   require Logger
+
   alias WandererKills.Core.Support.PubSubTopics
 
   @pubsub_name WandererKills.PubSub

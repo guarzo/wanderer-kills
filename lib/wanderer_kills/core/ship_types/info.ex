@@ -8,6 +8,7 @@ defmodule WandererKills.Core.ShipTypes.Info do
 
   require Logger
   alias WandererKills.Core.Cache
+  alias WandererKills.Core.ShipTypes.Updater
   alias WandererKills.Core.Support.Error
 
   @doc """
@@ -36,7 +37,7 @@ defmodule WandererKills.Core.ShipTypes.Info do
     Logger.debug("Warming ship type cache with CSV data")
 
     # Use the updater which handles downloading missing CSV files
-    case WandererKills.Core.ShipTypes.Updater.update_with_csv() do
+    case Updater.update_with_csv() do
       :ok ->
         Logger.debug("Successfully warmed cache with CSV data")
         :ok

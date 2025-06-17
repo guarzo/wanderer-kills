@@ -38,9 +38,11 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
 
   use GenServer
   require Logger
-  alias WandererKills.Core.Support.Clock
-  alias WandererKills.Core.Observability.LogFormatter
+
   alias WandererKills.Core.EtsOwner
+  alias WandererKills.Core.Observability.LogFormatter
+  alias WandererKills.Core.Observability.Telemetry
+  alias WandererKills.Core.Support.Clock
 
   @stats_summary_interval :timer.minutes(5)
 
@@ -60,7 +62,7 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   @spec increment_kills_sent(:realtime | :preload, pos_integer()) :: :ok
   def increment_kills_sent(type, count \\ 1)
       when type in [:realtime, :preload] and is_integer(count) and count > 0 do
-    WandererKills.Core.Observability.Telemetry.websocket_kills_sent(type, count)
+    Telemetry.websocket_kills_sent(type, count)
     GenServer.cast(__MODULE__, {:increment_kills_sent, type, count})
   end
 
@@ -74,7 +76,7 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   @spec track_connection(:connected | :disconnected, map()) :: :ok
   def track_connection(event, metadata \\ %{})
       when event in [:connected, :disconnected] do
-    WandererKills.Core.Observability.Telemetry.websocket_connection(event, metadata)
+    Telemetry.websocket_connection(event, metadata)
     GenServer.cast(__MODULE__, {:track_connection, event, metadata})
   end
 
@@ -89,7 +91,7 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   @spec track_subscription(:added | :updated | :removed, non_neg_integer(), map()) :: :ok
   def track_subscription(event, system_count, metadata \\ %{})
       when event in [:added, :updated, :removed] and is_integer(system_count) do
-    WandererKills.Core.Observability.Telemetry.websocket_subscription(
+    Telemetry.websocket_subscription(
       event,
       system_count,
       metadata

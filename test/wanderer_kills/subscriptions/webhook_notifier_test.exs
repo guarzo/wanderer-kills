@@ -1,8 +1,8 @@
 defmodule WandererKills.Subs.Subscriptions.WebhookNotifierTest do
   use WandererKills.TestCase, async: false
 
-  alias WandererKills.Subs.Subscriptions.WebhookNotifier
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Subs.Subscriptions.WebhookNotifier
 
   setup do
     subscription = %{

@@ -28,6 +28,8 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
   - `:batch_lookup` - Multiple entity lookups
   """
 
+  alias WandererKills.Core.Observability.Telemetry
+
   defmacro __using__(opts) do
     entity_type = Keyword.fetch!(opts, :entity_type)
     entity_type_string = Atom.to_string(entity_type)
@@ -56,7 +58,9 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
       use GenServer
       require Logger
       alias WandererKills.Core.Observability.Telemetry
-      @behaviour WandererKills.Subs.Subscriptions.IndexBehaviour
+      alias WandererKills.Subs.Subscriptions.BaseIndex
+      alias WandererKills.Subs.Subscriptions.IndexBehaviour
+      @behaviour IndexBehaviour
     end
   end
 
@@ -113,7 +117,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
       """
       @spec find_subscriptions_for_entity(integer()) :: [String.t()]
       def find_subscriptions_for_entity(entity_id) when is_integer(entity_id) do
-        WandererKills.Subs.Subscriptions.BaseIndex.find_subscriptions_for_entity(
+        BaseIndex.find_subscriptions_for_entity(
           @table_name,
           entity_id,
           @entity_type
@@ -127,7 +131,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
       """
       @spec find_subscriptions_for_entities([integer()]) :: [String.t()]
       def find_subscriptions_for_entities(entity_ids) when is_list(entity_ids) do
-        WandererKills.Subs.Subscriptions.BaseIndex.find_subscriptions_for_entities(
+        BaseIndex.find_subscriptions_for_entities(
           @table_name,
           entity_ids,
           @entity_type
@@ -184,7 +188,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
 
       @impl true
       def handle_call({:add_subscription, subscription_id, entity_ids}, _from, state) do
-        WandererKills.Subs.Subscriptions.BaseIndex.handle_add_subscription(
+        BaseIndex.handle_add_subscription(
           @table_name,
           @entity_type,
           @entity_type_string,
@@ -196,7 +200,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
 
       @impl true
       def handle_call({:update_subscription, subscription_id, new_entity_ids}, _from, state) do
-        WandererKills.Subs.Subscriptions.BaseIndex.handle_update_subscription(
+        BaseIndex.handle_update_subscription(
           @table_name,
           @entity_type,
           @entity_type_string,
@@ -208,7 +212,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
 
       @impl true
       def handle_call({:remove_subscription, subscription_id}, _from, state) do
-        WandererKills.Subs.Subscriptions.BaseIndex.handle_remove_subscription(
+        BaseIndex.handle_remove_subscription(
           @table_name,
           @entity_type,
           @entity_type_string,
@@ -220,7 +224,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
       @impl true
       def handle_call(:get_stats, _from, state) do
         stats =
-          WandererKills.Subs.Subscriptions.BaseIndex.calculate_stats(
+          BaseIndex.calculate_stats(
             @table_name,
             @entity_type_string,
             state
@@ -238,7 +242,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
 
       @impl true
       def handle_info(:cleanup, state) do
-        WandererKills.Subs.Subscriptions.BaseIndex.cleanup_empty_entries(@table_name)
+        BaseIndex.cleanup_empty_entries(@table_name)
         Process.send_after(self(), :cleanup, @cleanup_interval)
         {:noreply, state}
       end
@@ -521,11 +525,11 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
 
   # Emits appropriate telemetry based on entity type
   defp emit_index_telemetry(:character, operation, duration, metadata) do
-    WandererKills.Core.Observability.Telemetry.character_index(operation, duration, metadata)
+    Telemetry.character_index(operation, duration, metadata)
   end
 
   defp emit_index_telemetry(:system, operation, duration, metadata) do
-    WandererKills.Core.Observability.Telemetry.system_index(operation, duration, metadata)
+    Telemetry.system_index(operation, duration, metadata)
   end
 
   # For test entities or other entity types, emit generic telemetry

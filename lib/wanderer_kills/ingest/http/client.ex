@@ -44,8 +44,9 @@ defmodule WandererKills.Ingest.Http.Client do
   """
 
   require Logger
-  alias WandererKills.Core.Support.{Error, Retry}
+
   alias WandererKills.Core.Observability.Telemetry
+  alias WandererKills.Core.Support.{Error, Retry}
 
   # Compile-time configuration
   @default_timeout_ms Application.compile_env(

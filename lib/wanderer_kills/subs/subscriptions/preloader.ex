@@ -8,9 +8,10 @@ defmodule WandererKills.Subs.Subscriptions.Preloader do
   """
 
   require Logger
+
+  alias WandererKills.Core.Support.SupervisedTask
   alias WandererKills.Subs.Preloader
   alias WandererKills.Subs.Subscriptions.{Broadcaster, WebhookNotifier}
-  alias WandererKills.Core.Support.SupervisedTask
 
   # Preload configuration
   @default_limit_per_system 5

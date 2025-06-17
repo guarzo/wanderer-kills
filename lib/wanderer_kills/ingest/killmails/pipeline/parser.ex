@@ -39,10 +39,10 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Parser do
   alias WandererKills.Core.Support.Error
 
   alias WandererKills.Ingest.Killmails.Pipeline.{
-    Enricher,
-    Validator,
     DataBuilder,
-    ESIFetcher
+    Enricher,
+    ESIFetcher,
+    Validator
   }
 
   alias WandererKills.Ingest.Killmails.Transformations

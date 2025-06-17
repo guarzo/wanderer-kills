@@ -4,8 +4,8 @@ defmodule WandererKillsWeb.Api.Validators do
   """
 
   import Plug.Conn
-  alias WandererKills.Core.Types
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Core.Types
   alias WandererKills.Domain.Killmail
 
   @doc """

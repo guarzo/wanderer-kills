@@ -43,8 +43,10 @@ defmodule WandererKills.Core.Observability.Monitoring do
 
   use GenServer
   require Logger
-  alias WandererKills.Core.Support.Clock
+  alias WandererKills.Core.Cache
   alias WandererKills.Core.EtsOwner
+  alias WandererKills.Core.Observability.Metrics
+  alias WandererKills.Core.Support.Clock
 
   @cache_names [:wanderer_cache]
   @health_check_interval :timer.minutes(5)
@@ -158,9 +160,9 @@ defmodule WandererKills.Core.Observability.Monitoring do
   Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_stored() :: :ok
-  def increment_stored() do
+  def increment_stored do
     GenServer.cast(__MODULE__, {:increment, :stored})
-    WandererKills.Core.Observability.Metrics.increment_stored()
+    Metrics.increment_stored()
   end
 
   @doc """
@@ -168,9 +170,9 @@ defmodule WandererKills.Core.Observability.Monitoring do
   Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_skipped() :: :ok
-  def increment_skipped() do
+  def increment_skipped do
     GenServer.cast(__MODULE__, {:increment, :skipped})
-    WandererKills.Core.Observability.Metrics.increment_skipped()
+    Metrics.increment_skipped()
   end
 
   @doc """
@@ -178,9 +180,9 @@ defmodule WandererKills.Core.Observability.Monitoring do
   Updates internal state and delegates to the unified Metrics module.
   """
   @spec increment_failed() :: :ok
-  def increment_failed() do
+  def increment_failed do
     GenServer.cast(__MODULE__, {:increment, :failed})
-    WandererKills.Core.Observability.Metrics.increment_failed()
+    Metrics.increment_failed()
   end
 
   @doc """
@@ -223,7 +225,7 @@ defmodule WandererKills.Core.Observability.Monitoring do
   @spec measure_cache_operations() :: :ok
   def measure_cache_operations do
     cache_metrics =
-      case WandererKills.Core.Cache.size() do
+      case Cache.size() do
         {:ok, size} -> size
         _ -> 0
       end
@@ -452,7 +454,7 @@ defmodule WandererKills.Core.Observability.Monitoring do
 
   @spec build_cache_health_check(atom()) :: map()
   defp build_cache_health_check(cache_name) do
-    case WandererKills.Core.Cache.health() do
+    case Cache.health() do
       {:ok, health} ->
         Map.put(health, :name, cache_name)
     end
@@ -467,7 +469,7 @@ defmodule WandererKills.Core.Observability.Monitoring do
 
   @spec build_cache_metrics(atom()) :: map()
   defp build_cache_metrics(cache_name) do
-    case WandererKills.Core.Cache.stats() do
+    case Cache.stats() do
       {:ok, stats} ->
         size = Map.get(stats, :size, 0)
 
@@ -493,7 +495,7 @@ defmodule WandererKills.Core.Observability.Monitoring do
   @spec get_cache_stats_internal(atom()) :: {:ok, map()} | {:error, term()}
   defp get_cache_stats_internal(_cache_name) do
     # Use unified cache API which already includes size in stats
-    WandererKills.Core.Cache.stats()
+    Cache.stats()
   end
 
   @spec get_system_info() :: map()

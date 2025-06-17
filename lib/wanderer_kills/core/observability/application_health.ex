@@ -10,9 +10,9 @@ defmodule WandererKills.Core.Observability.ApplicationHealth do
   alias WandererKills.Core.Support.Clock
 
   alias WandererKills.Core.Observability.{
-    HealthCheckBehaviour,
     CacheHealth,
     CharacterSubscriptionHealth,
+    HealthCheckBehaviour,
     SystemSubscriptionHealth
   }
 

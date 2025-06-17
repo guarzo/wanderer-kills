@@ -7,8 +7,10 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.ESIFetcher do
   """
 
   require Logger
+
   alias WandererKills.Core.Cache
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Ingest.ESI.Client
 
   @type killmail :: map()
 
@@ -25,7 +27,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.ESIFetcher do
          {:cache, {:error, %WandererKills.Core.Support.Error{type: :not_found}}} <-
            {:cache, Cache.get(:killmails, killmail_id)},
          {:esi, {:ok, esi_data}} when is_map(esi_data) <-
-           {:esi, WandererKills.Ingest.ESI.Client.get_killmail_raw(killmail_id, hash)} do
+           {:esi, Client.get_killmail_raw(killmail_id, hash)} do
       # Cache the result
       Cache.put(:killmails, killmail_id, esi_data)
       {:ok, esi_data}

@@ -218,7 +218,7 @@ defmodule WandererKills.Subs.Subscriptions.SystemIndexTest do
 
       assert length(result) == 1000
 
-      # Performance assertion only runs when PERF_TEST env var is set  
+      # Performance assertion only runs when PERF_TEST env var is set
       if System.get_env("PERF_TEST") do
         # Should still be fast even with many results - relaxed from 5ms to 10ms
         assert time < 10_000

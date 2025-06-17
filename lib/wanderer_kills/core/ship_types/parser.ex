@@ -83,26 +83,24 @@ defmodule WandererKills.Core.ShipTypes.Parser do
   @spec parse_csv_content(String.t(), parser_function(), boolean(), integer()) ::
           {:ok, {[term()], map()}} | {:error, Error.t()}
   def parse_csv_content(content, parser, skip_invalid, max_errors) do
-    try do
-      parsed_data = CSVParser.parse_string(content, skip_headers: false)
+    parsed_data = CSVParser.parse_string(content, skip_headers: false)
 
-      case parsed_data do
-        [] ->
-          {:error, Error.csv_error(:empty_file, "CSV file is empty")}
+    case parsed_data do
+      [] ->
+        {:error, Error.csv_error(:empty_file, "CSV file is empty")}
 
-        [headers | data_rows] ->
-          headers = Enum.map(headers, &String.trim/1)
-          process_rows(data_rows, headers, parser, skip_invalid, max_errors)
-      end
-    rescue
-      error ->
-        Logger.error("Failed to parse CSV content: #{inspect(error)}")
-
-        {:error,
-         Error.csv_error(:parse_failure, "CSV parsing failed", %{
-           error: inspect(error)
-         })}
+      [headers | data_rows] ->
+        headers = Enum.map(headers, &String.trim/1)
+        process_rows(data_rows, headers, parser, skip_invalid, max_errors)
     end
+  rescue
+    error ->
+      Logger.error("Failed to parse CSV content: #{inspect(error)}")
+
+      {:error,
+       Error.csv_error(:parse_failure, "CSV parsing failed", %{
+         error: inspect(error)
+       })}
   end
 
   # ============================================================================

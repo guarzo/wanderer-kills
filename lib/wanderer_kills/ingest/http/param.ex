@@ -147,15 +147,13 @@ defmodule WandererKills.Ingest.Http.Param do
 
   # Safely convert string to atom, preferring existing atoms to avoid dynamic atom creation
   defp safe_string_to_atom(string) when is_binary(string) do
-    try do
-      String.to_existing_atom(string)
-    rescue
-      ArgumentError ->
-        # If atom doesn't exist, create it (for controlled parameter names only)
-        # This is safe for HTTP parameter names which are controlled by our application
-        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-        String.to_atom(string)
-    end
+    String.to_existing_atom(string)
+  rescue
+    ArgumentError ->
+      # If atom doesn't exist, create it (for controlled parameter names only)
+      # This is safe for HTTP parameter names which are controlled by our application
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      String.to_atom(string)
   end
 
   # ZKB-specific parameter validation

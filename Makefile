@@ -8,26 +8,16 @@ evn e:
 
 install i:
 	mix deps.get
-	cd assets && yarn install
-
-deploy d:
-	mix assets.build && mix assets.deploy
 
 cleanup c:
-	-pkill -SIGTERM -f 'tailwind'
-
-yarn y:
-	cd assets && yarn
+	-pkill -SIGTERM -f 'beam'
 
 start server s:
 	make cleanup
 	source .env && MIX_ENV=dev iex -S mix phx.server
 
-migrate m:
-	MIX_ENV=dev mix ash.migrate
-
 format f:
-	mix format
+	mix format --migrate
 
 test t:
 	mix test

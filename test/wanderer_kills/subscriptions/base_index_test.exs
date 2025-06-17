@@ -1,6 +1,8 @@
 defmodule WandererKills.Subs.Subscriptions.BaseIndexTest do
   use ExUnit.Case, async: false
 
+  alias WandererKills.Subs.Subscriptions.BaseIndex
+
   # Create a test implementation of BaseIndex
   defmodule TestEntityIndex do
     use WandererKills.Subs.Subscriptions.BaseIndex,
@@ -40,20 +42,18 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndexTest do
   end
 
   defp safe_clear do
-    try do
-      if GenServer.whereis(TestEntityIndex) do
-        TestEntityIndex.clear()
-      end
-    rescue
-      _ ->
-        # If clear fails, just ensure it's running for next test
-        # Don't try to clear again to avoid infinite loop
-        ensure_test_index_running()
-    catch
-      :exit, _ ->
-        # Handle GenServer call timeouts/exits
-        ensure_test_index_running()
+    if GenServer.whereis(TestEntityIndex) do
+      TestEntityIndex.clear()
     end
+  rescue
+    _ ->
+      # If clear fails, just ensure it's running for next test
+      # Don't try to clear again to avoid infinite loop
+      ensure_test_index_running()
+  catch
+    :exit, _ ->
+      # Handle GenServer call timeouts/exits
+      ensure_test_index_running()
   end
 
   describe "BaseIndex behaviour compliance" do
@@ -365,9 +365,7 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndexTest do
       TestEntityIndex.remove_subscription("temp_sub")
 
       # Force cleanup
-      WandererKills.Subs.Subscriptions.BaseIndex.cleanup_empty_entries(
-        :test_entity_subscription_index
-      )
+      BaseIndex.cleanup_empty_entries(:test_entity_subscription_index)
 
       # Verify no entries remain
       stats = TestEntityIndex.get_stats()
