@@ -1,4 +1,6 @@
 defmodule WandererKills.Core.Observability.SubscriptionHealth do
+  require Logger
+
   @moduledoc """
   Unified health check implementation for subscription indexes.
 
@@ -165,6 +167,12 @@ defmodule WandererKills.Core.Observability.SubscriptionHealth do
     end
   rescue
     error ->
+      Logger.error("Subscription index health check failed",
+        index_module: index_module,
+        error: inspect(error),
+        error_type: error.__struct__
+      )
+
       %{
         status: :unhealthy,
         message: "#{inspect(index_module)} not available: #{inspect(error)}",

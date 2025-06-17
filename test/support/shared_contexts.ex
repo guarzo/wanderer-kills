@@ -31,6 +31,9 @@ defmodule WandererKills.Test.SharedContexts do
   alias WandererKills.Test.EtsHelpers
   alias WandererKills.TestHelpers
 
+  # Mock modules defined in test_helper.exs
+  alias EsiClientMock
+
   defmacro __using__(_opts) do
     quote do
       import WandererKills.Test.SharedContexts

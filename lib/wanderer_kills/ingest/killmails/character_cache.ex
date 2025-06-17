@@ -166,7 +166,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
   @spec batch_extract_cached([map()]) :: %{integer() => [integer()]}
   def batch_extract_cached(killmails) when is_list(killmails) do
     # Separate killmails with and without IDs
-    {with_ids, without_ids} = Enum.split_with(killmails, & &1["killmail_id"])
+    {with_ids, without_ids} = Enum.split_with(killmails, &(&1["killmail_id"] || &1[:killmail_id]))
 
     # Process killmails with IDs (cacheable)
     cached_results = process_cacheable_killmails(with_ids)
@@ -181,7 +181,20 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
 
     Map.merge(cached_results, uncached_results)
   rescue
-    _error ->
+    error ->
+      Logger.warning("Character cache unavailable, falling back to direct extraction",
+        error: inspect(error),
+        error_type: error.__struct__,
+        killmails_count: length(killmails)
+      )
+
+      # Emit telemetry for cache bypass
+      :telemetry.execute(
+        [:wanderer_kills, :character, :cache, :bypass],
+        %{count: length(killmails)},
+        %{reason: :cache_error}
+      )
+
       # Cache became unavailable during processing, fall back
       fallback_batch_extract(killmails)
   end
@@ -324,7 +337,8 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
     cache_checks =
       killmails
       |> Enum.map(fn km ->
-        {km["killmail_id"], km}
+        killmail_id = km["killmail_id"] || km[:killmail_id]
+        {killmail_id, km}
       end)
 
     # Optimized: Single cache operation per key instead of exists? + get

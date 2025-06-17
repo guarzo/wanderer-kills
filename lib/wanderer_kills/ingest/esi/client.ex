@@ -35,6 +35,7 @@ defmodule WandererKills.Ingest.ESI.Client do
                   "https://esi.evetech.net/latest"
                 )
   @esi_timeout_ms Application.compile_env(:wanderer_kills, [:esi, :request_timeout_ms], 30_000)
+  @http_client Application.compile_env(:wanderer_kills, [:http, :client], HttpClient)
 
   # ============================================================================
   # ESI.ClientBehaviour Implementation
@@ -228,7 +229,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   def get_killmail_raw(killmail_id, killmail_hash) do
     url = "#{esi_base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
 
-    case HttpClient.get_with_rate_limit(url) do
+    case http_client().get_with_rate_limit(url) do
       {:ok, %{body: body}} -> {:ok, body}
       {:error, reason} -> {:error, reason}
     end
@@ -491,9 +492,7 @@ defmodule WandererKills.Ingest.ESI.Client do
 
   defp esi_base_url, do: @esi_base_url
 
-  defp http_client do
-    Application.get_env(:wanderer_kills, :http, [])[:client] || HttpClient
-  end
+  defp http_client, do: @http_client
 
   defp default_headers do
     [

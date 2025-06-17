@@ -624,11 +624,12 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
         end
 
       # Emit telemetry event
-      Telemetry.zkb_format(format_type, %{
-        source: :zkb_api,
-        system_id: system_id,
-        count: length(killmails)
-      })
+      :ok =
+        Telemetry.zkb_format(format_type, %{
+          source: :zkb_api,
+          system_id: system_id,
+          count: length(killmails)
+        })
     end
   end
 end

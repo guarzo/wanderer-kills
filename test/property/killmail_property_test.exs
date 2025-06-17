@@ -8,12 +8,11 @@ defmodule WandererKills.Domain.KillmailPropertyTest do
   @moduletag performance: :medium
 
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Test.SimpleGenerators
 
   describe "killmail parsing properties" do
     @tag :property
     test "killmail conversion is consistent" do
-      alias WandererKills.Test.SimpleGenerators
-
       check all(killmail_data <- SimpleGenerators.simple_killmail()) do
         case Killmail.new(killmail_data) do
           {:ok, killmail} ->

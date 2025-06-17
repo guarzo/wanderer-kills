@@ -738,25 +738,9 @@ defmodule WandererKillsWeb.KillmailChannel do
       )
 
       # Check if we need to unsubscribe from all_systems topic
-      maybe_unsubscribe_all_systems(socket, remaining_characters)
+      maybe_unsubscribe_from_all_systems(socket, MapSet.new(), socket.assigns.subscribed_systems)
 
       {:ok, socket}
-    end
-  end
-
-  defp maybe_unsubscribe_all_systems(socket, remaining_characters) do
-    if MapSet.size(socket.assigns.subscribed_systems) == 0 and
-         MapSet.size(remaining_characters) == 0 do
-      Phoenix.PubSub.unsubscribe(
-        WandererKills.PubSub,
-        PubSubTopics.all_systems_topic()
-      )
-
-      Logger.debug(
-        "[DEBUG] Unsubscribed from all_systems topic (no subscriptions remaining)",
-        user_id: socket.assigns.user_id,
-        subscription_id: socket.assigns.subscription_id
-      )
     end
   end
 
@@ -905,19 +889,38 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp maybe_unsubscribe_from_all_systems(socket, current_systems, new_systems) do
-    # This happens when we go from 0 system subscriptions to >0 and we have character subscriptions
-    if MapSet.size(current_systems) == 0 and MapSet.size(new_systems) > 0 and
-         MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new()) > 0 do
-      Phoenix.PubSub.unsubscribe(
-        WandererKills.PubSub,
-        PubSubTopics.all_systems_topic()
-      )
+    current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
 
-      Logger.debug(
-        "[DEBUG] Unsubscribed from all_systems topic due to specific system subscription",
-        user_id: socket.assigns.user_id,
-        subscription_id: socket.assigns.subscription_id
-      )
+    cond do
+      # Case 1: Going from 0 system subscriptions to >0 and we have character subscriptions
+      MapSet.size(current_systems) == 0 and MapSet.size(new_systems) > 0 and
+          MapSet.size(current_characters) > 0 ->
+        Phoenix.PubSub.unsubscribe(
+          WandererKills.PubSub,
+          PubSubTopics.all_systems_topic()
+        )
+
+        Logger.debug(
+          "[DEBUG] Unsubscribed from all_systems topic due to specific system subscription",
+          user_id: socket.assigns.user_id,
+          subscription_id: socket.assigns.subscription_id
+        )
+
+      # Case 2: No subscriptions remaining at all
+      MapSet.size(new_systems) == 0 and MapSet.size(current_characters) == 0 ->
+        Phoenix.PubSub.unsubscribe(
+          WandererKills.PubSub,
+          PubSubTopics.all_systems_topic()
+        )
+
+        Logger.debug(
+          "[DEBUG] Unsubscribed from all_systems topic (no subscriptions remaining)",
+          user_id: socket.assigns.user_id,
+          subscription_id: socket.assigns.subscription_id
+        )
+
+      true ->
+        :ok
     end
   end
 

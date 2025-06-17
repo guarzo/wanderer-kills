@@ -381,7 +381,7 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   end
 
   defp count_active_preload_tasks do
-    case Process.whereis(Support.SupervisedTask.TaskSupervisor) do
+    case Process.whereis(WandererKills.Core.Support.SupervisedTask.TaskSupervisor) do
       nil ->
         0
 
