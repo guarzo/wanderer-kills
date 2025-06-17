@@ -1,7 +1,7 @@
 defmodule WandererKills.Domain.JsonEncoderTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Domain.{Killmail, Victim, Attacker, ZkbMetadata}
+  alias WandererKills.Domain.{Attacker, Killmail, Victim, ZkbMetadata}
 
   describe "Killmail JSON encoding" do
     test "encodes a complete killmail struct to JSON" do

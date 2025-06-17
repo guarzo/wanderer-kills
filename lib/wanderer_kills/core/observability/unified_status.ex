@@ -11,9 +11,10 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   use GenServer
   require Logger
 
+  alias WandererKills.Core.Cache
+  alias WandererKills.Core.EtsOwner
   alias WandererKills.Core.Observability.{ApiTracker, WebSocketStats}
   alias WandererKills.Ingest.RateLimiter
-  alias WandererKills.Core.EtsOwner
 
   @report_interval_ms 5 * 60 * 1_000
 
@@ -242,7 +243,7 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   ### Cache
 
   defp collect_cache_metrics do
-    case WandererKills.Core.Cache.stats() do
+    case Cache.stats() do
       {:ok, stats} ->
         size = Map.get(stats, :size, 0)
         hits = Map.get(stats, :hits, 0)
@@ -380,21 +381,19 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   end
 
   defp count_active_preload_tasks do
-    try do
-      case Process.whereis(Support.SupervisedTask.TaskSupervisor) do
-        nil ->
-          0
+    case Process.whereis(Support.SupervisedTask.TaskSupervisor) do
+      nil ->
+        0
 
-        supervisor_pid ->
-          children = Supervisor.which_children(supervisor_pid)
+      supervisor_pid ->
+        children = Supervisor.which_children(supervisor_pid)
 
-          Enum.count(children, fn {_, pid, _, _} ->
-            is_pid(pid) and Process.alive?(pid)
-          end)
-      end
-    rescue
-      _ -> 0
+        Enum.count(children, fn {_, pid, _, _} ->
+          is_pid(pid) and Process.alive?(pid)
+        end)
     end
+  rescue
+    _ -> 0
   end
 
   defp webhook_success_rate(%{webhooks_sent: sent, webhooks_failed: failed}) when sent > 0 do
@@ -433,6 +432,8 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
       true ->
         try do
           apply(mod, fun, args)
+        rescue
+          _ -> default
         catch
           _, _ -> default
         end
@@ -447,15 +448,13 @@ defmodule WandererKills.Core.Observability.UnifiedStatus do
   end
 
   defp safe_ets_info(tab, field) do
-    try do
-      case :ets.info(tab, field) do
-        :undefined -> 0
-        n when is_integer(n) -> n
-        _ -> 0
-      end
-    rescue
+    case :ets.info(tab, field) do
+      :undefined -> 0
+      n when is_integer(n) -> n
       _ -> 0
     end
+  rescue
+    _ -> 0
   end
 
   defp hit_rate(part, whole) do

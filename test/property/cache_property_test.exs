@@ -8,13 +8,14 @@ defmodule WandererKills.Core.CachePropertyTest do
   @moduletag performance: :medium
 
   alias WandererKills.Core.Cache
+  alias WandererKills.Test.SimpleGenerators
 
   describe "cache operation properties" do
     @tag :property
     test "cache put and get operations maintain consistency" do
       check all(
-              key <- WandererKills.Test.SimpleGenerators.cache_key(),
-              value <- WandererKills.Test.SimpleGenerators.cache_value(),
+              key <- SimpleGenerators.cache_key(),
+              value <- SimpleGenerators.cache_value(),
               max_runs: 20
             ) do
         # Start with a clean cache

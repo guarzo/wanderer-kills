@@ -22,6 +22,7 @@ defmodule WandererKills.Ingest.ESI.Client do
 
   alias WandererKills.Core.Cache
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Ingest.Http.Client, as: HttpClient
 
   # Default ship group IDs that contain ship types
   @ship_group_ids [6, 7, 9, 11, 16, 17, 23]
@@ -227,7 +228,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   def get_killmail_raw(killmail_id, killmail_hash) do
     url = "#{esi_base_url()}/killmails/#{killmail_id}/#{killmail_hash}/"
 
-    case WandererKills.Ingest.Http.Client.get_with_rate_limit(url) do
+    case HttpClient.get_with_rate_limit(url) do
       {:ok, %{body: body}} -> {:ok, body}
       {:error, reason} -> {:error, reason}
     end
@@ -491,7 +492,7 @@ defmodule WandererKills.Ingest.ESI.Client do
   defp esi_base_url, do: @esi_base_url
 
   defp http_client do
-    Application.get_env(:wanderer_kills, :http, [])[:client] || WandererKills.Ingest.Http.Client
+    Application.get_env(:wanderer_kills, :http, [])[:client] || HttpClient
   end
 
   defp default_headers do

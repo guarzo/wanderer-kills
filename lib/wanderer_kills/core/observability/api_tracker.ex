@@ -22,7 +22,7 @@ defmodule WandererKills.Core.Observability.ApiTracker do
   @services [:zkillboard, :esi]
 
   # Pre-compile match spec for cleanup efficiency
-  # Note: we can't use the cutoff value in a module attribute, 
+  # Note: we can't use the cutoff value in a module attribute,
   # so we'll create a function that returns the compiled spec
 
   @type service :: :zkillboard | :esi
@@ -172,11 +172,8 @@ defmodule WandererKills.Core.Observability.ApiTracker do
     end
   end
 
-  # TODO: Make service detection configuration-driven
-  # This could be improved by reading service patterns from config:
-  # config :wanderer_kills, :api_services,
-  #   zkillboard: [patterns: ["zkillboard.com"]],
-  #   esi: [patterns: ["esi.evetech.net", "esi.tech.ccp.is"]]
+  # Service detection based on URL patterns
+  # Future enhancement: Make this configuration-driven by reading patterns from config
   defp determine_service(%{url: url}) when is_binary(url) do
     cond do
       String.contains?(url, "zkillboard.com") -> :zkillboard

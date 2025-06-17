@@ -67,7 +67,7 @@ defmodule WandererKills.Core.Observability.SubscriptionHealth do
       """
       @impl true
       def check_health(_opts \\ []) do
-        WandererKills.Core.Observability.SubscriptionHealth.check_health(
+        unquote(__MODULE__).check_health(
           @index_module,
           @entity_type,
           @entity_type_string,
@@ -80,7 +80,7 @@ defmodule WandererKills.Core.Observability.SubscriptionHealth do
       """
       @impl true
       def get_metrics(_opts \\ []) do
-        WandererKills.Core.Observability.SubscriptionHealth.get_metrics(
+        unquote(__MODULE__).get_metrics(
           @index_module,
           @entity_type,
           @entity_type_string,
@@ -142,215 +142,205 @@ defmodule WandererKills.Core.Observability.SubscriptionHealth do
   # ============================================================================
 
   defp check_index_availability(index_module) do
-    try do
-      # Measure response time while getting stats to avoid duplicate calls
-      {time_microseconds, stats} =
-        :timer.tc(fn ->
-          index_module.get_stats()
-        end)
+    # Measure response time while getting stats to avoid duplicate calls
+    {time_microseconds, stats} =
+      :timer.tc(fn ->
+        index_module.get_stats()
+      end)
 
-      response_time_ms = Float.round(time_microseconds / 1000, 2)
+    response_time_ms = Float.round(time_microseconds / 1000, 2)
 
-      if is_map(stats) and Map.has_key?(stats, :total_subscriptions) do
-        %{
-          status: :healthy,
-          message: "#{inspect(index_module)} responding normally",
-          response_time_ms: response_time_ms
-        }
-      else
-        %{
-          status: :unhealthy,
-          message: "#{inspect(index_module)} returning invalid stats",
-          invalid_stats: inspect(stats)
-        }
-      end
-    rescue
-      error ->
-        %{
-          status: :unhealthy,
-          message: "#{inspect(index_module)} not available: #{inspect(error)}",
-          error_type: error.__struct__
-        }
+    if is_map(stats) and Map.has_key?(stats, :total_subscriptions) do
+      %{
+        status: :healthy,
+        message: "#{inspect(index_module)} responding normally",
+        response_time_ms: response_time_ms
+      }
+    else
+      %{
+        status: :unhealthy,
+        message: "#{inspect(index_module)} returning invalid stats",
+        invalid_stats: inspect(stats)
+      }
     end
+  rescue
+    error ->
+      %{
+        status: :unhealthy,
+        message: "#{inspect(index_module)} not available: #{inspect(error)}",
+        error_type: error.__struct__
+      }
   end
 
   defp check_index_performance(index_module, entity_type_string) do
-    try do
-      # Use real entity ID from index stats for more realistic performance measurement
-      test_entity_id = get_realistic_test_entity_id(index_module, entity_type_string)
+    # Use real entity ID from index stats for more realistic performance measurement
+    test_entity_id = get_realistic_test_entity_id(index_module, entity_type_string)
 
-      {time_microseconds, _result} =
-        :timer.tc(fn ->
-          index_module.find_subscriptions_for_entity(test_entity_id)
-        end)
+    {time_microseconds, _result} =
+      :timer.tc(fn ->
+        index_module.find_subscriptions_for_entity(test_entity_id)
+      end)
 
-      cond do
-        # > 10ms
-        time_microseconds > 10_000 ->
-          %{
-            status: :unhealthy,
-            message:
-              "#{entity_type_string |> String.capitalize()} lookup took #{time_microseconds}μs (>10ms)",
-            duration_us: time_microseconds,
-            threshold: "10ms"
-          }
-
-        # > 1ms
-        time_microseconds > 1_000 ->
-          %{
-            status: :degraded,
-            message:
-              "#{entity_type_string |> String.capitalize()} lookup took #{time_microseconds}μs (>1ms)",
-            duration_us: time_microseconds,
-            threshold: "1ms"
-          }
-
-        true ->
-          %{
-            status: :healthy,
-            message: "#{entity_type_string |> String.capitalize()} lookup performance normal",
-            duration_us: time_microseconds
-          }
-      end
-    rescue
-      error ->
+    cond do
+      # > 10ms
+      time_microseconds > 10_000 ->
         %{
           status: :unhealthy,
-          message: "Performance test failed: #{inspect(error)}",
-          error_type: error.__struct__
+          message:
+            "#{entity_type_string |> String.capitalize()} lookup took #{time_microseconds}μs (>10ms)",
+          duration_us: time_microseconds,
+          threshold: "10ms"
+        }
+
+      # > 1ms
+      time_microseconds > 1_000 ->
+        %{
+          status: :degraded,
+          message:
+            "#{entity_type_string |> String.capitalize()} lookup took #{time_microseconds}μs (>1ms)",
+          duration_us: time_microseconds,
+          threshold: "1ms"
+        }
+
+      true ->
+        %{
+          status: :healthy,
+          message: "#{entity_type_string |> String.capitalize()} lookup performance normal",
+          duration_us: time_microseconds
         }
     end
+  rescue
+    error ->
+      %{
+        status: :unhealthy,
+        message: "Performance test failed: #{inspect(error)}",
+        error_type: error.__struct__
+      }
   end
 
   defp check_memory_usage(index_module) do
-    try do
-      stats = index_module.get_stats()
-      memory_bytes = Map.get(stats, :memory_usage_bytes, 0)
-      memory_mb = Float.round(memory_bytes / (1024 * 1024), 2)
+    stats = index_module.get_stats()
+    memory_bytes = Map.get(stats, :memory_usage_bytes, 0)
+    memory_mb = Float.round(memory_bytes / (1024 * 1024), 2)
 
-      cond do
-        # > 500MB
-        memory_mb > 500 ->
-          %{
-            status: :unhealthy,
-            message: "Excessive memory usage: #{memory_mb}MB",
-            memory_mb: memory_mb,
-            threshold: "500MB"
-          }
-
-        # > 100MB
-        memory_mb > 100 ->
-          %{
-            status: :degraded,
-            message: "High memory usage: #{memory_mb}MB",
-            memory_mb: memory_mb,
-            threshold: "100MB"
-          }
-
-        true ->
-          %{
-            status: :healthy,
-            message: "Memory usage normal: #{memory_mb}MB",
-            memory_mb: memory_mb
-          }
-      end
-    rescue
-      error ->
+    cond do
+      # > 500MB
+      memory_mb > 500 ->
         %{
           status: :unhealthy,
-          message: "Memory check failed: #{inspect(error)}",
-          error_type: error.__struct__
+          message: "Excessive memory usage: #{memory_mb}MB",
+          memory_mb: memory_mb,
+          threshold: "500MB"
+        }
+
+      # > 100MB
+      memory_mb > 100 ->
+        %{
+          status: :degraded,
+          message: "High memory usage: #{memory_mb}MB",
+          memory_mb: memory_mb,
+          threshold: "100MB"
+        }
+
+      true ->
+        %{
+          status: :healthy,
+          message: "Memory usage normal: #{memory_mb}MB",
+          memory_mb: memory_mb
         }
     end
+  rescue
+    error ->
+      %{
+        status: :unhealthy,
+        message: "Memory check failed: #{inspect(error)}",
+        error_type: error.__struct__
+      }
   end
 
   defp check_subscription_counts(index_module, entity_type_string) do
-    try do
-      stats = index_module.get_stats()
-      subscription_count = Map.get(stats, :total_subscriptions, 0)
+    stats = index_module.get_stats()
+    subscription_count = Map.get(stats, :total_subscriptions, 0)
 
-      # Get entity-specific entry count
-      entity_entries_key =
-        case entity_type_string do
-          "character" -> :total_character_entries
-          "system" -> :total_system_entries
-          _ -> :total_entity_entries
-        end
-
-      entity_entry_count = Map.get(stats, entity_entries_key, 0)
-
-      cond do
-        subscription_count > 50_000 ->
-          %{
-            status: :unhealthy,
-            message: "Excessive subscription count: #{subscription_count}",
-            subscription_count: subscription_count,
-            entity_entry_count: entity_entry_count,
-            threshold: "50k subscriptions"
-          }
-
-        subscription_count > 10_000 ->
-          %{
-            status: :degraded,
-            message: "High subscription count: #{subscription_count}",
-            subscription_count: subscription_count,
-            entity_entry_count: entity_entry_count,
-            threshold: "10k subscriptions"
-          }
-
-        true ->
-          %{
-            status: :healthy,
-            message: "Subscription counts normal",
-            subscription_count: subscription_count,
-            entity_entry_count: entity_entry_count
-          }
+    # Get entity-specific entry count
+    entity_entries_key =
+      case entity_type_string do
+        "character" -> :total_character_entries
+        "system" -> :total_system_entries
+        _ -> :total_entity_entries
       end
-    rescue
-      error ->
+
+    entity_entry_count = Map.get(stats, entity_entries_key, 0)
+
+    cond do
+      subscription_count > 50_000 ->
         %{
           status: :unhealthy,
-          message: "Subscription count check failed: #{inspect(error)}",
-          error_type: error.__struct__
+          message: "Excessive subscription count: #{subscription_count}",
+          subscription_count: subscription_count,
+          entity_entry_count: entity_entry_count,
+          threshold: "50k subscriptions"
+        }
+
+      subscription_count > 10_000 ->
+        %{
+          status: :degraded,
+          message: "High subscription count: #{subscription_count}",
+          subscription_count: subscription_count,
+          entity_entry_count: entity_entry_count,
+          threshold: "10k subscriptions"
+        }
+
+      true ->
+        %{
+          status: :healthy,
+          message: "Subscription counts normal",
+          subscription_count: subscription_count,
+          entity_entry_count: entity_entry_count
         }
     end
+  rescue
+    error ->
+      %{
+        status: :unhealthy,
+        message: "Subscription count check failed: #{inspect(error)}",
+        error_type: error.__struct__
+      }
   end
 
   defp collect_metrics(index_module, entity_type_string) do
-    try do
-      stats = index_module.get_stats()
+    stats = index_module.get_stats()
 
-      # Get entity-specific keys based on entity type
-      {entity_entries_key, entity_subscriptions_key} =
-        case entity_type_string do
-          "character" -> {:total_character_entries, :total_character_subscriptions}
-          "system" -> {:total_system_entries, :total_system_subscriptions}
-          _ -> {:total_entity_entries, :total_entity_subscriptions}
-        end
+    # Get entity-specific keys based on entity type
+    {entity_entries_key, entity_subscriptions_key} =
+      case entity_type_string do
+        "character" -> {:total_character_entries, :total_character_subscriptions}
+        "system" -> {:total_system_entries, :total_system_subscriptions}
+        _ -> {:total_entity_entries, :total_entity_subscriptions}
+      end
 
+    %{
+      total_subscriptions: Map.get(stats, :total_subscriptions, 0),
+      total_entity_entries: Map.get(stats, entity_entries_key, 0),
+      total_entity_subscriptions: Map.get(stats, entity_subscriptions_key, 0),
+      memory_usage_bytes: Map.get(stats, :memory_usage_bytes, 0),
+      memory_usage_mb: Float.round(Map.get(stats, :memory_usage_bytes, 0) / (1024 * 1024), 2),
+      avg_entities_per_subscription:
+        calculate_avg_entities_per_subscription(stats, entity_subscriptions_key),
+      index_efficiency: calculate_index_efficiency(stats, entity_entries_key)
+    }
+  rescue
+    _error ->
       %{
-        total_subscriptions: Map.get(stats, :total_subscriptions, 0),
-        total_entity_entries: Map.get(stats, entity_entries_key, 0),
-        total_entity_subscriptions: Map.get(stats, entity_subscriptions_key, 0),
-        memory_usage_bytes: Map.get(stats, :memory_usage_bytes, 0),
-        memory_usage_mb: Float.round(Map.get(stats, :memory_usage_bytes, 0) / (1024 * 1024), 2),
-        avg_entities_per_subscription:
-          calculate_avg_entities_per_subscription(stats, entity_subscriptions_key),
-        index_efficiency: calculate_index_efficiency(stats, entity_entries_key)
+        total_subscriptions: 0,
+        total_entity_entries: 0,
+        total_entity_subscriptions: 0,
+        memory_usage_bytes: 0,
+        memory_usage_mb: 0.0,
+        avg_entities_per_subscription: 0.0,
+        index_efficiency: 0.0,
+        error: "Failed to collect metrics"
       }
-    rescue
-      _error ->
-        %{
-          total_subscriptions: 0,
-          total_entity_entries: 0,
-          total_entity_subscriptions: 0,
-          memory_usage_bytes: 0,
-          memory_usage_mb: 0.0,
-          avg_entities_per_subscription: 0.0,
-          index_efficiency: 0.0,
-          error: "Failed to collect metrics"
-        }
-    end
   end
 
   # ============================================================================
@@ -391,20 +381,18 @@ defmodule WandererKills.Core.Observability.SubscriptionHealth do
   end
 
   defp get_realistic_test_entity_id(index_module, entity_type_string) do
-    try do
-      # Try to get real entity ID from index stats for more realistic performance
-      case index_module.get_stats() do
-        %{most_frequent_entity_id: entity_id} when not is_nil(entity_id) ->
-          entity_id
+    # Try to get real entity ID from index stats for more realistic performance
+    case index_module.get_stats() do
+      %{most_frequent_entity_id: entity_id} when not is_nil(entity_id) ->
+        entity_id
 
-        _ ->
-          # Fallback to synthetic ID if stats unavailable
-          get_fallback_test_entity_id(entity_type_string)
-      end
-    rescue
-      # If get_stats fails, fallback to synthetic ID
-      _ -> get_fallback_test_entity_id(entity_type_string)
+      _ ->
+        # Fallback to synthetic ID if stats unavailable
+        get_fallback_test_entity_id(entity_type_string)
     end
+  rescue
+    # If get_stats fails, fallback to synthetic ID
+    _ -> get_fallback_test_entity_id(entity_type_string)
   end
 
   defp get_fallback_test_entity_id(entity_type_string) do

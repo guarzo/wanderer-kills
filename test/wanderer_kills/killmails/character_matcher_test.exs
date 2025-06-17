@@ -1,8 +1,8 @@
 defmodule WandererKills.Ingest.Killmails.CharacterMatcherTest do
   use ExUnit.Case, async: true
 
-  alias WandererKills.Ingest.Killmails.CharacterMatcher
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Ingest.Killmails.CharacterMatcher
 
   # Helper to create a valid Killmail struct from test data
   defp create_test_killmail(attrs) do
@@ -232,7 +232,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterMatcherTest do
     test "handles atom keys" do
       # For extract_character_ids, we need a proper Killmail struct
       {:ok, killmail} =
-        WandererKills.Domain.Killmail.new(%{
+        Killmail.new(%{
           killmail_id: 1,
           kill_time: "2024-01-01T12:00:00Z",
           system_id: 30_000_142,

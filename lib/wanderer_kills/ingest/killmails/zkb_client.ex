@@ -43,10 +43,11 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
 
   require Logger
 
+  alias WandererKills.Core.Cache
+  alias WandererKills.Core.Observability.Telemetry
   alias WandererKills.Core.Support.Error
   alias WandererKills.Ingest.Http.Client
   alias WandererKills.Ingest.Http.Param
-  alias WandererKills.Core.Observability.Telemetry
 
   # Compile-time configuration
   @zkb_timeout_ms Application.compile_env(:wanderer_kills, [:zkb, :request_timeout_ms], 15_000)
@@ -436,8 +437,6 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   end
 
   defp fetch_from_cache do
-    alias WandererKills.Core.Cache
-
     case Cache.get_active_systems() do
       {:ok, systems} when is_list(systems) ->
         {:ok, systems}
@@ -625,7 +624,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
         end
 
       # Emit telemetry event
-      WandererKills.Core.Observability.Telemetry.zkb_format(format_type, %{
+      Telemetry.zkb_format(format_type, %{
         source: :zkb_api,
         system_id: system_id,
         count: length(killmails)

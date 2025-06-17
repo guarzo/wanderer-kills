@@ -9,6 +9,7 @@ defmodule WandererKills.Ingest.RateLimiter do
 
   use GenServer
   require Logger
+
   alias WandererKills.Core.Support.Error
 
   @type service :: :zkillboard | :esi

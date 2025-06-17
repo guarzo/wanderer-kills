@@ -30,7 +30,9 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   """
 
   require Logger
+  alias WandererKills.Core.ShipTypes.Info
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Ingest.ESI.Client
 
   # Field name mappings for normalization
   @field_mappings %{
@@ -369,7 +371,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
 
   # Try to get ship data from cache first
   defp get_ship_from_cache(ship_type_id) do
-    case WandererKills.Core.ShipTypes.Info.get_ship_type(ship_type_id) do
+    case Info.get_ship_type(ship_type_id) do
       {:ok, ship_data} -> extract_ship_name(ship_data)
       error -> error
     end
@@ -394,7 +396,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
   defp fallback_to_esi(result, _ship_type_id), do: result
 
   defp do_esi_fallback(ship_type_id) do
-    case WandererKills.Ingest.ESI.Client.get_type(ship_type_id) do
+    case Client.get_type(ship_type_id) do
       {:ok, %{"name" => name}} when is_binary(name) ->
         {:ok, name}
 
@@ -407,7 +409,7 @@ defmodule WandererKills.Ingest.Killmails.Transformations do
     end
   end
 
-  # ============================================================================  
+  # ============================================================================
   # Common Normalization Patterns
   # ============================================================================
 

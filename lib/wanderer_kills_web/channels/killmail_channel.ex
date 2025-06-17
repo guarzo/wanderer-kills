@@ -63,11 +63,14 @@ defmodule WandererKillsWeb.KillmailChannel do
   use WandererKillsWeb, :channel
 
   require Logger
-  alias WandererKills.Subs.Preloader
 
-  alias WandererKills.Subs.SubscriptionManager
   alias WandererKills.Core.Observability.WebSocketStats
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Core.Support.PubSubTopics
+  alias WandererKills.Core.Support.SupervisedTask
+  alias WandererKills.Ingest.HistoricalFetcher
+  alias WandererKills.Subs.Preloader
+  alias WandererKills.Subs.SubscriptionManager
   alias WandererKills.Subs.Subscriptions.Filter
 
   @impl true
@@ -223,56 +226,16 @@ defmodule WandererKillsWeb.KillmailChannel do
   # Handle unsubscribing from characters
   def handle_in("unsubscribe_characters", %{"character_ids" => character_ids}, socket)
       when is_list(character_ids) do
-    case validate_characters(character_ids) do
-      {:ok, valid_characters} ->
-        current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
-
-        characters_to_remove =
-          MapSet.intersection(current_characters, MapSet.new(valid_characters))
-
-        if MapSet.size(characters_to_remove) > 0 do
-          # Update subscription
-          remaining_characters = MapSet.difference(current_characters, characters_to_remove)
-
-          updates = %{
-            systems: MapSet.to_list(socket.assigns.subscribed_systems),
-            character_ids: MapSet.to_list(remaining_characters)
-          }
-
-          update_subscription(socket.assigns.subscription_id, updates)
-
-          socket = assign(socket, :subscribed_characters, remaining_characters)
-
-          Logger.debug("[DEBUG] Client unsubscribed from characters",
-            user_id: socket.assigns.user_id,
-            subscription_id: socket.assigns.subscription_id,
-            removed_characters_count: MapSet.size(characters_to_remove),
-            remaining_characters_count: MapSet.size(remaining_characters)
-          )
-
-          # Check if we need to unsubscribe from all_systems topic
-          # This happens when we have no system subscriptions and no character subscriptions left
-          if MapSet.size(socket.assigns.subscribed_systems) == 0 and
-               MapSet.size(remaining_characters) == 0 do
-            Phoenix.PubSub.unsubscribe(
-              WandererKills.PubSub,
-              WandererKills.Core.Support.PubSubTopics.all_systems_topic()
-            )
-
-            Logger.debug(
-              "[DEBUG] Unsubscribed from all_systems topic (no subscriptions remaining)",
-              user_id: socket.assigns.user_id,
-              subscription_id: socket.assigns.subscription_id
-            )
-          end
-
-          {:reply, {:ok, %{subscribed_characters: MapSet.to_list(remaining_characters)}}, socket}
-        else
-          {:reply, {:ok, %{message: "Not subscribed to any of the requested characters"}}, socket}
-        end
-
+    with {:ok, valid_characters} <- validate_characters(character_ids),
+         {:ok, socket} <- process_character_unsubscription(socket, valid_characters) do
+      remaining_characters = socket.assigns.subscribed_characters
+      {:reply, {:ok, %{subscribed_characters: MapSet.to_list(remaining_characters)}}, socket}
+    else
       {:error, reason} ->
         {:reply, {:error, %{reason: reason}}, socket}
+
+      {:noop, _} ->
+        {:reply, {:ok, %{message: "Not subscribed to any of the requested characters"}}, socket}
     end
   end
 
@@ -302,7 +265,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     # Check if extended preload is requested
     if preload_config["enabled"] != false && map_size(preload_config) > 0 do
       # Request extended historical preload
-      case WandererKills.Ingest.HistoricalFetcher.request_preload(
+      case HistoricalFetcher.request_preload(
              socket.assigns.subscription_id,
              preload_config
            ) do
@@ -581,7 +544,7 @@ defmodule WandererKillsWeb.KillmailChannel do
         if length(valid_characters) > 0 do
           Phoenix.PubSub.subscribe(
             WandererKills.PubSub,
-            WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+            PubSubTopics.all_systems_topic()
           )
         end
       end
@@ -725,12 +688,12 @@ defmodule WandererKillsWeb.KillmailChannel do
     Enum.each(systems, fn system_id ->
       Phoenix.PubSub.subscribe(
         WandererKills.PubSub,
-        WandererKills.Core.Support.PubSubTopics.system_topic(system_id)
+        PubSubTopics.system_topic(system_id)
       )
 
       Phoenix.PubSub.subscribe(
         WandererKills.PubSub,
-        WandererKills.Core.Support.PubSubTopics.system_detailed_topic(system_id)
+        PubSubTopics.system_detailed_topic(system_id)
       )
     end)
   end
@@ -739,14 +702,62 @@ defmodule WandererKillsWeb.KillmailChannel do
     Enum.each(systems, fn system_id ->
       Phoenix.PubSub.unsubscribe(
         WandererKills.PubSub,
-        WandererKills.Core.Support.PubSubTopics.system_topic(system_id)
+        PubSubTopics.system_topic(system_id)
       )
 
       Phoenix.PubSub.unsubscribe(
         WandererKills.PubSub,
-        WandererKills.Core.Support.PubSubTopics.system_detailed_topic(system_id)
+        PubSubTopics.system_detailed_topic(system_id)
       )
     end)
+  end
+
+  defp process_character_unsubscription(socket, valid_characters) do
+    current_characters = socket.assigns[:subscribed_characters] || MapSet.new()
+    characters_to_remove = MapSet.intersection(current_characters, MapSet.new(valid_characters))
+
+    if MapSet.size(characters_to_remove) == 0 do
+      {:noop, socket}
+    else
+      # Update subscription
+      remaining_characters = MapSet.difference(current_characters, characters_to_remove)
+
+      updates = %{
+        systems: MapSet.to_list(socket.assigns.subscribed_systems),
+        character_ids: MapSet.to_list(remaining_characters)
+      }
+
+      update_subscription(socket.assigns.subscription_id, updates)
+      socket = assign(socket, :subscribed_characters, remaining_characters)
+
+      Logger.debug("[DEBUG] Client unsubscribed from characters",
+        user_id: socket.assigns.user_id,
+        subscription_id: socket.assigns.subscription_id,
+        removed_characters_count: MapSet.size(characters_to_remove),
+        remaining_characters_count: MapSet.size(remaining_characters)
+      )
+
+      # Check if we need to unsubscribe from all_systems topic
+      maybe_unsubscribe_all_systems(socket, remaining_characters)
+
+      {:ok, socket}
+    end
+  end
+
+  defp maybe_unsubscribe_all_systems(socket, remaining_characters) do
+    if MapSet.size(socket.assigns.subscribed_systems) == 0 and
+         MapSet.size(remaining_characters) == 0 do
+      Phoenix.PubSub.unsubscribe(
+        WandererKills.PubSub,
+        PubSubTopics.all_systems_topic()
+      )
+
+      Logger.debug(
+        "[DEBUG] Unsubscribed from all_systems topic (no subscriptions remaining)",
+        user_id: socket.assigns.user_id,
+        subscription_id: socket.assigns.subscription_id
+      )
+    end
   end
 
   defp preload_kills_for_systems(socket, systems, reason) do
@@ -768,7 +779,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     )
 
     # Use SupervisedTask to track WebSocket preload operations
-    WandererKills.Core.Support.SupervisedTask.start_child(
+    SupervisedTask.start_child(
       fn ->
         total_kills_sent =
           systems
@@ -899,7 +910,7 @@ defmodule WandererKillsWeb.KillmailChannel do
          MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new()) > 0 do
       Phoenix.PubSub.unsubscribe(
         WandererKills.PubSub,
-        WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+        PubSubTopics.all_systems_topic()
       )
 
       Logger.debug(
@@ -915,7 +926,7 @@ defmodule WandererKillsWeb.KillmailChannel do
          MapSet.size(all_characters) > 0 do
       Phoenix.PubSub.subscribe(
         WandererKills.PubSub,
-        WandererKills.Core.Support.PubSubTopics.all_systems_topic()
+        PubSubTopics.all_systems_topic()
       )
     end
   end

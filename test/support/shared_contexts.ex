@@ -24,6 +24,12 @@ defmodule WandererKills.Test.SharedContexts do
   """
 
   import Cachex.Spec
+  import ExUnit.Callbacks
+
+  alias WandererKills.Core.Storage.KillmailStore
+  alias WandererKills.Ingest.Http.Client.Mock, as: HttpClientMock
+  alias WandererKills.Test.EtsHelpers
+  alias WandererKills.TestHelpers
 
   defmacro __using__(_opts) do
     quote do
@@ -87,8 +93,6 @@ defmodule WandererKills.Test.SharedContexts do
     :ok
   end
 
-  import ExUnit.Callbacks
-
   @doc """
   Sets up a clean cache instance for testing.
 
@@ -116,7 +120,7 @@ defmodule WandererKills.Test.SharedContexts do
   """
   def with_clean_environment(_context \\ %{}) do
     ensure_cache_available()
-    WandererKills.TestHelpers.clear_all_caches()
+    TestHelpers.clear_all_caches()
     %{}
   end
 
@@ -128,8 +132,8 @@ defmodule WandererKills.Test.SharedContexts do
   """
   def with_kill_store(_context \\ %{}) do
     # Ensure tables exist before clearing
-    WandererKills.Core.Storage.KillmailStore.init_tables!()
-    WandererKills.Core.Storage.KillmailStore.clear()
+    KillmailStore.init_tables!()
+    KillmailStore.clear()
     %{}
   end
 
@@ -191,7 +195,7 @@ defmodule WandererKills.Test.SharedContexts do
     setup_default_esi_stubs()
 
     %{
-      http_mock: WandererKills.Ingest.Http.Client.Mock,
+      http_mock: HttpClientMock,
       esi_mock: EsiClientMock
     }
   end
@@ -277,7 +281,7 @@ defmodule WandererKills.Test.SharedContexts do
     args = context[:args] || []
 
     # Create unique name for this test
-    test_id = WandererKills.Test.EtsHelpers.get_test_id()
+    test_id = EtsHelpers.get_test_id()
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     unique_name = String.to_atom("#{base_name}_test_#{test_id}")
 
@@ -303,7 +307,7 @@ defmodule WandererKills.Test.SharedContexts do
   - `%{pubsub: pubsub_name}` - The PubSub instance name
   """
   def with_pubsub(_context \\ %{}) do
-    test_id = WandererKills.Test.EtsHelpers.get_test_id()
+    test_id = EtsHelpers.get_test_id()
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     pubsub_name = String.to_atom("TestPubSub_#{test_id}")
 

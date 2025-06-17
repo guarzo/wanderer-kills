@@ -8,13 +8,14 @@ defmodule WandererKills.Ingest.Killmails.UnifiedProcessor do
   """
 
   require Logger
-  alias WandererKills.Core.Support.Error
-  alias WandererKills.Ingest.Killmails.Transformations
-  alias WandererKills.Ingest.Killmails.Pipeline.{Validator, DataBuilder, ESIFetcher}
-  alias WandererKills.Ingest.Killmails.Enrichment.BatchEnricher
-  alias WandererKills.Core.Storage.KillmailStore
+
   alias WandererKills.Core.Observability.Monitoring
+  alias WandererKills.Core.Storage.KillmailStore
+  alias WandererKills.Core.Support.Error
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Ingest.Killmails.Enrichment.BatchEnricher
+  alias WandererKills.Ingest.Killmails.Pipeline.{DataBuilder, ESIFetcher, Validator}
+  alias WandererKills.Ingest.Killmails.Transformations
 
   @type process_options :: [
           store: boolean(),

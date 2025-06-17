@@ -53,13 +53,15 @@ defmodule WandererKills.HeadlessTestCase do
 
     # Clear any existing processes and caches if helper is available
     if Code.ensure_loaded?(WandererKills.Test.CacheHelpers) do
-      WandererKills.Test.CacheHelpers.clear_all_caches()
+      alias WandererKills.Test.CacheHelpers
+      CacheHelpers.clear_all_caches()
     end
 
     # Clean up unique test tables on exit
     on_exit(fn ->
       if Code.ensure_loaded?(WandererKills.Test.EtsHelpers) do
-        WandererKills.Test.EtsHelpers.cleanup_test_tables(test_id)
+        alias WandererKills.Test.EtsHelpers
+        EtsHelpers.cleanup_test_tables(test_id)
       end
     end)
 

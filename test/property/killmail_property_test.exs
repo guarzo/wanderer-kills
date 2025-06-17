@@ -12,7 +12,9 @@ defmodule WandererKills.Domain.KillmailPropertyTest do
   describe "killmail parsing properties" do
     @tag :property
     test "killmail conversion is consistent" do
-      check all(killmail_data <- WandererKills.Test.SimpleGenerators.simple_killmail()) do
+      alias WandererKills.Test.SimpleGenerators
+
+      check all(killmail_data <- SimpleGenerators.simple_killmail()) do
         case Killmail.new(killmail_data) do
           {:ok, killmail} ->
             # Verify that a valid killmail can be converted back

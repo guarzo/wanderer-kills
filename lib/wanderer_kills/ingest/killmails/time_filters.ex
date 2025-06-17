@@ -32,6 +32,7 @@ defmodule WandererKills.Ingest.Killmails.TimeFilters do
   """
 
   require Logger
+  alias WandererKills.Core.Cache
   alias WandererKills.Core.Support.Error
 
   @type killmail :: map()
@@ -250,7 +251,7 @@ defmodule WandererKills.Ingest.Killmails.TimeFilters do
   def is_recent_fetch?(system_id, opts \\ []) when is_integer(system_id) do
     threshold_hours = Keyword.get(opts, :hours, @default_recent_threshold_hours)
 
-    case WandererKills.Core.Cache.get(:systems, system_id) do
+    case Cache.get(:systems, system_id) do
       {:ok, system_data} when is_map(system_data) ->
         check_last_fetched_timestamp(system_data, threshold_hours)
 
@@ -299,23 +300,21 @@ defmodule WandererKills.Ingest.Killmails.TimeFilters do
           {:ok, [killmail()]} | {:error, term()}
   def filter_by_time_range(killmails, start_time, end_time)
       when is_list(killmails) do
-    try do
-      filtered =
-        Enum.filter(killmails, fn killmail ->
-          case extract_killmail_time(killmail) do
-            {:ok, kill_time} ->
-              DateTime.compare(kill_time, start_time) != :lt and
-                DateTime.compare(kill_time, end_time) != :gt
+    filtered =
+      Enum.filter(killmails, fn killmail ->
+        case extract_killmail_time(killmail) do
+          {:ok, kill_time} ->
+            DateTime.compare(kill_time, start_time) != :lt and
+              DateTime.compare(kill_time, end_time) != :gt
 
-            {:error, _} ->
-              false
-          end
-        end)
+          {:error, _} ->
+            false
+        end
+      end)
 
-      {:ok, filtered}
-    rescue
-      error -> {:error, error}
-    end
+    {:ok, filtered}
+  rescue
+    error -> {:error, error}
   end
 
   @doc """

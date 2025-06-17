@@ -8,8 +8,9 @@ defmodule WandererKills.Core.Observability.CacheHealth do
   """
 
   require Logger
-  alias WandererKills.Core.Support.Clock
+  alias WandererKills.Core.Cache
   alias WandererKills.Core.Observability.HealthCheckBehaviour
+  alias WandererKills.Core.Support.Clock
 
   @behaviour HealthCheckBehaviour
 
@@ -69,7 +70,7 @@ defmodule WandererKills.Core.Observability.CacheHealth do
 
   @spec check_cache_health(atom()) :: %{healthy: boolean(), name: atom(), status: String.t()}
   defp check_cache_health(cache_name) do
-    case WandererKills.Core.Cache.health() do
+    case Cache.health() do
       {:ok, health} ->
         Map.put(health, :name, cache_name)
     end
@@ -90,7 +91,7 @@ defmodule WandererKills.Core.Observability.CacheHealth do
     base_metrics = %{name: cache_name}
 
     try do
-      case WandererKills.Core.Cache.stats() do
+      case Cache.stats() do
         {:ok, stats} ->
           Map.merge(base_metrics, %{
             size: Map.get(stats, :size, 0),

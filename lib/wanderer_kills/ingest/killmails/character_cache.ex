@@ -63,8 +63,9 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
   # Compile-time configuration
   @ttl_ms Application.compile_env(:wanderer_kills, [:character_cache, :ttl_ms], :timer.minutes(5))
   require Logger
-  alias WandererKills.Core.Observability.Telemetry
+
   alias WandererKills.Core.Cache
+  alias WandererKills.Core.Observability.Telemetry
   alias WandererKills.Domain.Killmail
   alias WandererKills.Ingest.Killmails.CharacterMatcher
 
@@ -78,7 +79,7 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
 
   # Helper function to get cache stats that works with different adapters
   defp get_cache_stats_internal do
-    WandererKills.Core.Cache.stats()
+    Cache.stats()
   end
 
   @doc """
@@ -164,27 +165,25 @@ defmodule WandererKills.Ingest.Killmails.CharacterCache do
   """
   @spec batch_extract_cached([map()]) :: %{integer() => [integer()]}
   def batch_extract_cached(killmails) when is_list(killmails) do
-    try do
-      # Separate killmails with and without IDs
-      {with_ids, without_ids} = Enum.split_with(killmails, & &1["killmail_id"])
+    # Separate killmails with and without IDs
+    {with_ids, without_ids} = Enum.split_with(killmails, & &1["killmail_id"])
 
-      # Process killmails with IDs (cacheable)
-      cached_results = process_cacheable_killmails(with_ids)
+    # Process killmails with IDs (cacheable)
+    cached_results = process_cacheable_killmails(with_ids)
 
-      # Process killmails without IDs (non-cacheable)
-      uncached_results =
-        without_ids
-        |> Enum.map(fn km ->
-          {System.unique_integer(), extract_character_ids_from_map(km)}
-        end)
-        |> Map.new()
+    # Process killmails without IDs (non-cacheable)
+    uncached_results =
+      without_ids
+      |> Enum.map(fn km ->
+        {System.unique_integer(), extract_character_ids_from_map(km)}
+      end)
+      |> Map.new()
 
-      Map.merge(cached_results, uncached_results)
-    rescue
-      _error ->
-        # Cache became unavailable during processing, fall back
-        fallback_batch_extract(killmails)
-    end
+    Map.merge(cached_results, uncached_results)
+  rescue
+    _error ->
+      # Cache became unavailable during processing, fall back
+      fallback_batch_extract(killmails)
   end
 
   # Fallback function for when cache is not available

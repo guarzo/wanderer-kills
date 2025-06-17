@@ -17,9 +17,9 @@ defmodule WandererKills.Subs.Preloader do
   require Logger
 
   alias WandererKills.Core.Cache
-  alias WandererKills.Ingest.Killmails.ZkbClient
   alias WandererKills.Core.Systems.KillmailProcessor
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Ingest.Killmails.ZkbClient
 
   @type system_id :: integer()
   @type killmail :: Killmail.t()

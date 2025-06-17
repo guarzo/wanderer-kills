@@ -55,11 +55,14 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Coordinator do
   """
 
   require Logger
+
+  alias WandererKills.Core.Storage.KillmailStore
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Core.Support.SupervisedTask
+  alias WandererKills.Ingest.ESI.Client
+  alias WandererKills.Ingest.Killmails.Pipeline.Enricher
   alias WandererKills.Ingest.Killmails.Pipeline.Parser
   alias WandererKills.Ingest.Killmails.Transformations
-  alias WandererKills.Core.Storage.KillmailStore
-  alias WandererKills.Core.Support.SupervisedTask
 
   @type killmail :: map()
   @type raw_killmail :: map()
@@ -248,7 +251,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Coordinator do
 
   @spec enrich_killmail(killmail()) :: {:ok, killmail()} | {:error, Error.t()}
   defp enrich_killmail(killmail) do
-    WandererKills.Ingest.Killmails.Pipeline.Enricher.enrich_killmail(killmail)
+    Enricher.enrich_killmail(killmail)
   end
 
   @doc """
@@ -298,7 +301,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Coordinator do
       step: :start
     })
 
-    case WandererKills.Ingest.ESI.Client.get_killmail_raw(id, hash) do
+    case Client.get_killmail_raw(id, hash) do
       {:ok, full} ->
         Logger.debug("Successfully fetched full killmail from ESI", %{
           killmail_id: id,
@@ -519,7 +522,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Coordinator do
     enriched =
       parsed_killmails
       |> Enum.map(fn killmail ->
-        case WandererKills.Ingest.Killmails.Pipeline.Enricher.enrich_killmail(killmail) do
+        case Enricher.enrich_killmail(killmail) do
           {:ok, enriched} ->
             enriched
 
@@ -570,7 +573,7 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Coordinator do
   # Private helper functions
 
   defp maybe_enrich_killmail(parsed) do
-    case WandererKills.Ingest.Killmails.Pipeline.Enricher.enrich_killmail(parsed) do
+    case Enricher.enrich_killmail(parsed) do
       {:ok, enriched} -> {:ok, enriched}
       # Fall back to basic data
       {:error, _reason} -> {:ok, parsed}

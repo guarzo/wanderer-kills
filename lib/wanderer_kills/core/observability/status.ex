@@ -6,6 +6,7 @@ defmodule WandererKills.Core.Observability.Status do
   previously scattered across controllers.
   """
 
+  alias WandererKills.Core.Observability.UnifiedStatus
   alias WandererKills.Subs.SubscriptionManager
 
   @doc """
@@ -14,7 +15,7 @@ defmodule WandererKills.Core.Observability.Status do
   @spec get_service_status() :: map()
   def get_service_status do
     # Get comprehensive metrics from UnifiedStatus
-    metrics = WandererKills.Core.Observability.UnifiedStatus.get_status()
+    metrics = UnifiedStatus.get_status()
 
     %{
       metrics: metrics,

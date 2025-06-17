@@ -8,9 +8,10 @@ defmodule WandererKills.Ingest.Killmails.Enrichment.BatchEnricher do
   """
 
   require Logger
-  alias WandererKills.Ingest.ESI.Client
-  alias WandererKills.Core.ShipTypes.Info, as: ShipInfo
+
   alias WandererKills.Core.Cache
+  alias WandererKills.Core.ShipTypes.Info, as: ShipInfo
+  alias WandererKills.Ingest.ESI.Client
   alias WandererKills.Ingest.Killmails.Transformations
 
   @type entity_id :: integer()
@@ -45,52 +46,46 @@ defmodule WandererKills.Ingest.Killmails.Enrichment.BatchEnricher do
   end
 
   defp safely_fetch_entities_batch(entity_ids) do
-    try do
-      {:ok, fetch_entities_batch(entity_ids)}
-    rescue
-      error ->
-        Logger.error("Failed to fetch entities batch",
-          error: Exception.format(:error, error, __STACKTRACE__),
-          entity_ids: entity_ids
-        )
+    {:ok, fetch_entities_batch(entity_ids)}
+  rescue
+    error ->
+      Logger.error("Failed to fetch entities batch",
+        error: Exception.format(:error, error, __STACKTRACE__),
+        entity_ids: entity_ids
+      )
 
-        {:error,
-         %{type: :enrichment_error, reason: Exception.format(:error, error, __STACKTRACE__)}}
-    catch
-      kind, reason ->
-        Logger.error("Failed to fetch entities batch",
-          error: Exception.format(kind, reason, __STACKTRACE__),
-          entity_ids: entity_ids
-        )
+      {:error,
+       %{type: :enrichment_error, reason: Exception.format(:error, error, __STACKTRACE__)}}
+  catch
+    kind, reason ->
+      Logger.error("Failed to fetch entities batch",
+        error: Exception.format(kind, reason, __STACKTRACE__),
+        entity_ids: entity_ids
+      )
 
-        {:error,
-         %{type: :enrichment_error, reason: Exception.format(kind, reason, __STACKTRACE__)}}
-    end
+      {:error, %{type: :enrichment_error, reason: Exception.format(kind, reason, __STACKTRACE__)}}
   end
 
   defp safely_apply_enrichment(killmails, entity_cache) do
-    try do
-      enriched = Enum.map(killmails, &enrich_killmail_with_cache(&1, entity_cache))
-      {:ok, enriched}
-    rescue
-      error ->
-        Logger.error("Failed to apply enrichment",
-          error: Exception.format(:error, error, __STACKTRACE__),
-          killmail_count: length(killmails)
-        )
+    enriched = Enum.map(killmails, &enrich_killmail_with_cache(&1, entity_cache))
+    {:ok, enriched}
+  rescue
+    error ->
+      Logger.error("Failed to apply enrichment",
+        error: Exception.format(:error, error, __STACKTRACE__),
+        killmail_count: length(killmails)
+      )
 
-        {:error,
-         %{type: :enrichment_error, reason: Exception.format(:error, error, __STACKTRACE__)}}
-    catch
-      kind, reason ->
-        Logger.error("Failed to apply enrichment",
-          error: Exception.format(kind, reason, __STACKTRACE__),
-          killmail_count: length(killmails)
-        )
+      {:error,
+       %{type: :enrichment_error, reason: Exception.format(:error, error, __STACKTRACE__)}}
+  catch
+    kind, reason ->
+      Logger.error("Failed to apply enrichment",
+        error: Exception.format(kind, reason, __STACKTRACE__),
+        killmail_count: length(killmails)
+      )
 
-        {:error,
-         %{type: :enrichment_error, reason: Exception.format(kind, reason, __STACKTRACE__)}}
-    end
+      {:error, %{type: :enrichment_error, reason: Exception.format(kind, reason, __STACKTRACE__)}}
   end
 
   @doc """

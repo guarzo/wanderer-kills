@@ -10,8 +10,8 @@ defmodule WandererKillsWeb.SubscriptionController do
 
   use WandererKillsWeb, :controller
 
-  alias WandererKills.Subs.SubscriptionManager
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Subs.SubscriptionManager
 
   @doc """
   Create a new webhook subscription.

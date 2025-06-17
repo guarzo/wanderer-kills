@@ -63,11 +63,11 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
   - **Telemetry**: Comprehensive performance monitoring and alerting
   """
 
+  require Logger
+
+  alias WandererKills.Domain.Killmail
   alias WandererKills.Ingest.Killmails.{CharacterCache, CharacterMatcher}
   alias WandererKills.Subs.Subscriptions.{CharacterIndex, Filter}
-  alias WandererKills.Domain.Killmail
-
-  require Logger
 
   @type killmail :: Killmail.t()
   @type character_id :: integer()
@@ -322,32 +322,28 @@ defmodule WandererKills.Ingest.Killmails.BatchProcessor do
   # Private functions
 
   defp extract_characters_from_killmail_cached(%Killmail{} = killmail) do
-    try do
-      MapSet.new(CharacterCache.extract_characters_cached(killmail))
-    rescue
-      ArgumentError ->
-        # Cache not available, fall back to direct extraction
-        MapSet.new(CharacterMatcher.extract_character_ids(killmail))
-    end
+    MapSet.new(CharacterCache.extract_characters_cached(killmail))
+  rescue
+    ArgumentError ->
+      # Cache not available, fall back to direct extraction
+      MapSet.new(CharacterMatcher.extract_character_ids(killmail))
   end
 
   defp build_killmail_character_map_cached(killmails) do
-    try do
-      # Use batch extraction with caching for better performance
-      CharacterCache.batch_extract_cached(killmails)
-      |> Map.new(fn {killmail_id, characters} ->
+    # Use batch extraction with caching for better performance
+    CharacterCache.batch_extract_cached(killmails)
+    |> Map.new(fn {killmail_id, characters} ->
+      {killmail_id, MapSet.new(characters)}
+    end)
+  rescue
+    ArgumentError ->
+      # Cache not available, fall back to direct extraction
+      killmails
+      |> Map.new(fn killmail ->
+        killmail_id = get_killmail_id(killmail)
+        characters = CharacterMatcher.extract_character_ids(killmail)
         {killmail_id, MapSet.new(characters)}
       end)
-    rescue
-      ArgumentError ->
-        # Cache not available, fall back to direct extraction
-        killmails
-        |> Map.new(fn killmail ->
-          killmail_id = get_killmail_id(killmail)
-          characters = CharacterMatcher.extract_character_ids(killmail)
-          {killmail_id, MapSet.new(characters)}
-        end)
-    end
   end
 
   defp find_matching_killmails(killmails, killmail_characters, character_set) do

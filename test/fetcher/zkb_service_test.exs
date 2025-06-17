@@ -3,8 +3,8 @@ defmodule WandererKills.Ingest.Killmails.ZkbClientTest do
 
   @moduletag :external
 
-  alias WandererKills.Ingest.Killmails.ZkbClient, as: ZKB
   alias WandererKills.Ingest.Http.Client.Mock, as: HttpClientMock
+  alias WandererKills.Ingest.Killmails.ZkbClient, as: ZKB
 
   # Get base URL from config
   @base_url Application.compile_env(:wanderer_kills, :zkb)[:base_url]

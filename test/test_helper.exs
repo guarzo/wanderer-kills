@@ -39,8 +39,8 @@ defmodule WandererKills.TestCase do
 
       # Make common aliases available
       alias WandererKills.Core.Cache
-      alias WandererKills.TestHelpers
       alias WandererKills.TestFactory
+      alias WandererKills.TestHelpers
     end
   end
 end
@@ -68,6 +68,9 @@ defmodule WandererKills.TestSetup do
   Sets up a data case environment with additional features.
   """
   def setup_data_environment(context) do
+    alias WandererKills.Subs.SubscriptionManager
+    alias WandererKills.Subs.Subscriptions.{CharacterIndex, SystemIndex}
+
     # Set Mox to private mode for this test process
     Mox.set_mox_private()
 
@@ -86,8 +89,8 @@ defmodule WandererKills.TestSetup do
     # Clear subscription indexes if needed
     if context[:clear_indexes] do
       try do
-        WandererKills.Subs.Subscriptions.CharacterIndex.clear()
-        WandererKills.Subs.Subscriptions.SystemIndex.clear()
+        CharacterIndex.clear()
+        SystemIndex.clear()
       rescue
         _ -> :ok
       catch
@@ -98,7 +101,7 @@ defmodule WandererKills.TestSetup do
     # Clear all subscriptions if needed
     if context[:clear_subscriptions] do
       try do
-        WandererKills.Subs.SubscriptionManager.clear_all_subscriptions()
+        SubscriptionManager.clear_all_subscriptions()
       rescue
         # Ignore if the function doesn't exist
         UndefinedFunctionError -> :ok
@@ -112,6 +115,8 @@ defmodule WandererKills.TestSetup do
   Sets up an integration test environment with all features enabled.
   """
   def setup_integration_environment(_context) do
+    alias WandererKills.Subs.Subscriptions.{CharacterIndex, SystemIndex}
+
     # Set Mox to private mode
     Mox.set_mox_private()
 
@@ -127,8 +132,8 @@ defmodule WandererKills.TestSetup do
 
     # Clear indexes and subscriptions
     try do
-      WandererKills.Subs.Subscriptions.CharacterIndex.clear()
-      WandererKills.Subs.Subscriptions.SystemIndex.clear()
+      CharacterIndex.clear()
+      SystemIndex.clear()
     rescue
       _ -> :ok
     catch
@@ -165,8 +170,8 @@ defmodule WandererKills.DataCase do
 
       # Make common aliases available
       alias WandererKills.Core.Cache
-      alias WandererKills.TestHelpers
       alias WandererKills.TestFactory
+      alias WandererKills.TestHelpers
     end
   end
 end
@@ -190,8 +195,8 @@ defmodule WandererKills.IntegrationCase do
 
       # Make all aliases available
       alias WandererKills.Core.Cache
-      alias WandererKills.TestHelpers
       alias WandererKills.TestFactory
+      alias WandererKills.TestHelpers
     end
   end
 end

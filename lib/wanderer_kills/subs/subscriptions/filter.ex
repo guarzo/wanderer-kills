@@ -46,9 +46,9 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
       Filter.matches_subscription?(killmail, subscription) # => true (character match)
   """
 
-  alias WandererKills.Ingest.Killmails.CharacterMatcher
   alias WandererKills.Core.Observability.Telemetry
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Ingest.Killmails.CharacterMatcher
 
   require Logger
 

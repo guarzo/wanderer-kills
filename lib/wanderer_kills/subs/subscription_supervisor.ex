@@ -15,7 +15,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
   @type subscription_id :: String.t()
 
   # ============================================================================
-  # Client API  
+  # Client API
   # ============================================================================
 
   @doc """

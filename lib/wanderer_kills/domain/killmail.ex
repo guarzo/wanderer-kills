@@ -6,8 +6,8 @@ defmodule WandererKills.Domain.Killmail do
   replacing loose maps with a typed struct for better type safety and documentation.
   """
 
-  alias WandererKills.Domain.{Victim, Attacker, ZkbMetadata}
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Domain.{Attacker, Victim, ZkbMetadata}
 
   @type t :: %__MODULE__{
           killmail_id: integer(),
