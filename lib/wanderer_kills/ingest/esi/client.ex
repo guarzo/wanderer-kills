@@ -35,7 +35,6 @@ defmodule WandererKills.Ingest.ESI.Client do
                   "https://esi.evetech.net/latest"
                 )
   @esi_timeout_ms Application.compile_env(:wanderer_kills, [:esi, :request_timeout_ms], 30_000)
-  @http_client Application.compile_env(:wanderer_kills, [:http, :client], HttpClient)
 
   # ============================================================================
   # ESI.ClientBehaviour Implementation
@@ -492,7 +491,9 @@ defmodule WandererKills.Ingest.ESI.Client do
 
   defp esi_base_url, do: @esi_base_url
 
-  defp http_client, do: @http_client
+  defp http_client do
+    Application.get_env(:wanderer_kills, :http, [])[:client] || HttpClient
+  end
 
   defp default_headers do
     [
