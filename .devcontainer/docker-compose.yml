@@ -17,10 +17,6 @@ services:
     volumes:
       # Mount source code for development
       - ..:/app:delegated
-      # Mount git configuration for development workflow
-      - ~/.gitconfig:/root/.gitconfig
-      - ~/.gitignore:/root/.gitignore
-      - ~/.ssh:/root/.ssh
       # Cache Elixir artifacts for faster rebuilds
       - elixir-artifacts:/opt/elixir-artifacts
     # Keep container running for development

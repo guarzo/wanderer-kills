@@ -1,8 +1,9 @@
 # WandererKills
 
-[![CI/CD](https://github.com/guarzo/wanderer-kills/actions/workflows/ci.yml/badge.svg)](https://github.com/wanderer-industries/wanderer-kills/actions/workflows/ci.yml)
-[![Credo](https://img.shields.io/badge/credo-0%20issues-brightgreen.svg)](https://github.com/rrrene/credo)
-[![Dialyzer](https://img.shields.io/badge/dialyzer-0%20warnings-brightgreen.svg)](https://www.erlang.org/doc/man/dialyzer.html)
+[![CI/CD](https://github.com/guarzo/wanderer-kills/actions/workflows/ci.yml/badge.svg)](https://github.com/guarzo/wanderer-kills/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/guarzo/wanderer-kills/ci.yml?branch=main&label=tests)](https://github.com/guarzo/wanderer-kills/actions/workflows/ci.yml)
+[![Credo](https://img.shields.io/github/actions/workflow/status/guarzo/wanderer-kills/ci.yml?branch=main&label=credo)](https://github.com/guarzo/wanderer-kills/actions/workflows/ci.yml)
+[![Dialyzer](https://img.shields.io/github/actions/workflow/status/guarzo/wanderer-kills/ci.yml?branch=main&label=dialyzer)](https://github.com/guarzo/wanderer-kills/actions/workflows/ci.yml)
 [![Elixir](https://img.shields.io/badge/elixir-1.18%2B-purple.svg)](https://elixir-lang.org/)
 [![Phoenix Framework](https://img.shields.io/badge/phoenix-1.7-orange.svg)](https://www.phoenixframework.org/)
 
