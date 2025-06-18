@@ -10,5 +10,4 @@ services:
       MIX_ENV: prod
     ports:
       - "4004:4004"
-    command: ["bin/wanderer_kills", "start"]
     restart: unless-stopped
