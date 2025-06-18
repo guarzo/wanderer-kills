@@ -14,7 +14,7 @@ cleanup c:
 
 start server s:
 	make cleanup
-	source .env && MIX_ENV=dev iex -S mix phx.server
+	MIX_ENV=dev iex -S mix phx.server
 
 format f:
 	mix format --migrate

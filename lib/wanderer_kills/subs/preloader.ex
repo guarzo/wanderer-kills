@@ -157,10 +157,21 @@ defmodule WandererKills.Subs.Preloader do
 
   Handles both `kill_time` and legacy `killmail_time` fields.
   """
-  @spec extract_kill_times([Killmail.t()]) :: [String.t()]
+  @spec extract_kill_times([Killmail.t() | map()]) :: [String.t()]
   def extract_kill_times(kills) do
-    Enum.map(kills, fn %Killmail{kill_time: time} ->
-      if time, do: to_string(time), else: "unknown"
+    Enum.map(kills, fn
+      %Killmail{kill_time: time} ->
+        if time, do: to_string(time), else: "unknown"
+
+      kill_map when is_map(kill_map) ->
+        # Handle map case - try to extract kill_time directly
+        case kill_map["kill_time"] || kill_map[:kill_time] do
+          nil -> "unknown"
+          time -> to_string(time)
+        end
+
+      _ ->
+        "unknown"
     end)
   end
 
@@ -171,22 +182,50 @@ defmodule WandererKills.Subs.Preloader do
   - Victim character name, OR
   - At least one attacker with a character name
   """
-  @spec count_enriched_kills([Killmail.t()]) :: non_neg_integer()
+  @spec count_enriched_kills([Killmail.t() | map()]) :: non_neg_integer()
   def count_enriched_kills(kills) do
-    Enum.count(kills, fn %Killmail{victim: victim, attackers: attackers} ->
-      victim_name = victim && victim.character_name
+    Enum.count(kills, &enriched_kill?/1)
+  end
 
-      victim_name != nil or
-        Enum.any?(attackers, fn attacker ->
-          attacker.character_name != nil
-        end)
-    end)
+  defp enriched_kill?(kill) do
+    case ensure_killmail_struct(kill) do
+      %Killmail{} = killmail -> has_character_names?(killmail)
+      _ -> false
+    end
+  end
+
+  defp has_character_names?(%Killmail{victim: victim, attackers: attackers}) do
+    has_victim_name?(victim) or has_attacker_with_name?(attackers)
+  end
+
+  defp has_victim_name?(nil), do: false
+  defp has_victim_name?(victim), do: victim.character_name != nil
+
+  defp has_attacker_with_name?(attackers) do
+    Enum.any?(attackers, fn attacker -> attacker.character_name != nil end)
   end
 
   @doc """
   Checks if a killmail is recent enough based on cutoff time.
   """
-  @spec killmail_recent?(Killmail.t(), DateTime.t()) :: boolean()
+  @spec killmail_recent?(Killmail.t() | map(), DateTime.t()) :: boolean()
+
+  # Handle map input by converting to struct first
+  def killmail_recent?(killmail_map, cutoff_time)
+      when is_map(killmail_map) and not is_struct(killmail_map) do
+    case ensure_killmail_struct(killmail_map) do
+      %Killmail{} = killmail ->
+        killmail_recent?(killmail, cutoff_time)
+
+      _ ->
+        Logger.warning("[WARNING] Failed to convert killmail map to struct in killmail_recent?",
+          killmail_id: killmail_map["killmail_id"] || killmail_map[:killmail_id]
+        )
+
+        false
+    end
+  end
+
   def killmail_recent?(%Killmail{killmail_id: killmail_id, kill_time: kill_time}, cutoff_time) do
     case kill_time do
       %DateTime{} = dt ->
@@ -271,6 +310,25 @@ defmodule WandererKills.Subs.Preloader do
   end
 
   # Private functions
+
+  defp ensure_killmail_struct(%Killmail{} = killmail), do: killmail
+
+  defp ensure_killmail_struct(killmail_map) when is_map(killmail_map) do
+    case Killmail.new(killmail_map) do
+      {:ok, killmail} ->
+        killmail
+
+      {:error, reason} ->
+        Logger.warning("[WARNING] Failed to convert killmail map to struct",
+          killmail_id: killmail_map["killmail_id"] || killmail_map[:killmail_id],
+          error: inspect(reason)
+        )
+
+        nil
+    end
+  end
+
+  defp ensure_killmail_struct(_), do: nil
 
   defp fetch_and_cache_fresh_kills(system_id, limit, since_hours) do
     Logger.debug("[DEBUG] Fetching fresh kills from ZKillboard",
@@ -374,7 +432,14 @@ defmodule WandererKills.Subs.Preloader do
 
   defp maybe_filter_recent(kills, cutoff_time) do
     Enum.filter(kills, fn killmail ->
-      killmail_recent?(killmail, cutoff_time)
+      # Convert map to struct if needed
+      killmail_struct = ensure_killmail_struct(killmail)
+
+      case killmail_struct do
+        %Killmail{} = km -> killmail_recent?(km, cutoff_time)
+        # Skip if conversion fails
+        _ -> false
+      end
     end)
   end
 
@@ -386,14 +451,23 @@ defmodule WandererKills.Subs.Preloader do
 
   defp log_sample_kill([]), do: :ok
 
-  defp log_sample_kill([%Killmail{} = sample | _]) do
-    Logger.debug("[DEBUG] Sample kill data",
-      killmail_id: sample.killmail_id,
-      victim_character: sample.victim.character_name,
-      victim_corp: sample.victim.corporation_name,
-      attacker_count: length(sample.attackers),
-      solar_system_id: sample.system_id,
-      total_value: sample.zkb && sample.zkb.total_value
-    )
+  defp log_sample_kill([sample | _]) do
+    # Convert to struct if needed
+    case ensure_killmail_struct(sample) do
+      %Killmail{} = killmail ->
+        Logger.debug("[DEBUG] Sample kill data",
+          killmail_id: killmail.killmail_id,
+          victim_character: killmail.victim.character_name,
+          victim_corp: killmail.victim.corporation_name,
+          attacker_count: length(killmail.attackers),
+          solar_system_id: killmail.system_id,
+          total_value: killmail.zkb && killmail.zkb.total_value
+        )
+
+      _ ->
+        Logger.debug("[DEBUG] Sample kill data (raw map)",
+          data: inspect(sample, limit: 200)
+        )
+    end
   end
 end
