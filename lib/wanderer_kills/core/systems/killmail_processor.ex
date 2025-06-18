@@ -127,24 +127,22 @@ defmodule WandererKills.Core.Systems.KillmailProcessor do
   end
 
   defp process_single_killmail(killmail, cutoff_time, system_id) do
-    try do
-      case UnifiedProcessor.process_killmail(killmail, cutoff_time) do
-        {:ok, :kill_older} ->
-          log_killmail_too_old(killmail, system_id)
-          nil
+    case UnifiedProcessor.process_killmail(killmail, cutoff_time) do
+      {:ok, :kill_older} ->
+        log_killmail_too_old(killmail, system_id)
+        nil
 
-        {:ok, enriched} ->
-          enriched
+      {:ok, enriched} ->
+        enriched
 
-        {:error, reason} ->
-          log_killmail_processing_failed(killmail, system_id, reason)
-          nil
-      end
-    catch
-      kind, error ->
-        log_killmail_exception(killmail, system_id, kind, error)
+      {:error, reason} ->
+        log_killmail_processing_failed(killmail, system_id, reason)
         nil
     end
+  catch
+    kind, error ->
+      log_killmail_exception(killmail, system_id, kind, error)
+      nil
   end
 
   defp log_killmail_too_old(killmail, system_id) do

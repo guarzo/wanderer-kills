@@ -39,7 +39,7 @@
           # Priority values are: `low, normal, high, higher`
           #
           {Credo.Check.Design.AliasUsage,
-           [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0]},
+           [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0, excluded_namespaces: ["WandererKills.Domain.JsonEncoder"]]},
           # This is disabled by default
           # {Credo.Check.Design.DuplicatedCode, []},
           {Credo.Check.Design.TagFIXME, []},

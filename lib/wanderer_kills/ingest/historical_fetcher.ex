@@ -11,8 +11,10 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
   require Logger
 
   # Removed unused aliases
-  alias WandererKills.Ingest.Killmails.{ZkbClient, UnifiedProcessor}
-  alias WandererKills.Core.Support.{SupervisedTask, Error}
+  alias WandererKills.Core.Support.{Error, SupervisedTask}
+  alias WandererKills.Ingest.Killmails.{UnifiedProcessor, ZkbClient}
+  alias WandererKills.Ingest.RateLimiter
+  alias WandererKills.Subs.SubscriptionManager
   # Conditional web dependency
 
   @type preload_request :: %{
@@ -479,7 +481,7 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
 
   defp process_page_with_rate_limit(request, system_id, page_kills, buffer_pid) do
     # Check rate limit before each page
-    case WandererKills.Ingest.RateLimiter.check_rate_limit(:zkillboard) do
+    case RateLimiter.check_rate_limit(:zkillboard) do
       :ok ->
         handle_page_processing(request, page_kills, buffer_pid)
 
@@ -583,7 +585,7 @@ defmodule WandererKills.Ingest.HistoricalFetcher do
 
   defp get_subscription_from_manager(subscription_id) do
     # Get all subscriptions and find the matching one
-    all_subs = WandererKills.Subs.SubscriptionManager.list_subscriptions()
+    all_subs = SubscriptionManager.list_subscriptions()
 
     sub =
       Enum.find(all_subs, fn s ->

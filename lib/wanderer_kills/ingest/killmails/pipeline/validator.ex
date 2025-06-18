@@ -7,9 +7,10 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Validator do
   """
 
   require Logger
+
   alias WandererKills.Core.Support.Error
-  alias WandererKills.Ingest.Killmails.TimeFilters
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Ingest.Killmails.TimeFilters
 
   @type killmail :: map() | Killmail.t()
   @type validation_result :: %{

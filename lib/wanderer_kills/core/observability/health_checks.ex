@@ -35,6 +35,8 @@ defmodule WandererKills.Core.Observability.HealthChecks do
     HealthAggregator
   }
 
+  alias WandererKills.Core.Support.Clock
+
   @type health_opts :: keyword()
   @type health_component :: :application | :cache | :character_subscriptions
 
@@ -103,7 +105,7 @@ defmodule WandererKills.Core.Observability.HealthChecks do
       healthy: false,
       status: "error",
       details: %{error: "Invalid component specification"},
-      timestamp: WandererKills.Core.Support.Clock.now_iso8601()
+      timestamp: Clock.now_iso8601()
     }
   end
 
@@ -123,7 +125,7 @@ defmodule WandererKills.Core.Observability.HealthChecks do
             component: Atom.to_string(component),
             error_reason: inspect(reason)
           },
-          timestamp: WandererKills.Core.Support.Clock.now_iso8601()
+          timestamp: Clock.now_iso8601()
         }
     end
   end
@@ -170,7 +172,7 @@ defmodule WandererKills.Core.Observability.HealthChecks do
   defp handle_metrics_request(_invalid_components, _timeout) do
     %{
       component: "unknown",
-      timestamp: WandererKills.Core.Support.Clock.now_iso8601(),
+      timestamp: Clock.now_iso8601(),
       metrics: %{error: "Invalid component specification"}
     }
   end
@@ -186,7 +188,7 @@ defmodule WandererKills.Core.Observability.HealthChecks do
 
         %{
           component: Atom.to_string(component),
-          timestamp: WandererKills.Core.Support.Clock.now_iso8601(),
+          timestamp: Clock.now_iso8601(),
           metrics: %{
             error: "Failed to collect metrics",
             error_reason: inspect(reason)

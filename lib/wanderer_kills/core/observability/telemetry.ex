@@ -74,7 +74,9 @@ defmodule WandererKills.Core.Observability.Telemetry do
   """
 
   require Logger
+  alias WandererKills.Core.Observability.BatchTelemetry
   alias WandererKills.Core.Observability.LogFormatter
+  alias __MODULE__
 
   # -------------------------------------------------
   # Helper functions for telemetry execution
@@ -419,7 +421,7 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :cache, :miss],
         [:wanderer_kills, :cache, :error]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_cache_event/4,
+      &Telemetry.handle_cache_event/4,
       nil
     )
 
@@ -431,7 +433,7 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :http, :request, :stop],
         [:wanderer_kills, :http, :request, :error]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_http_event/4,
+      &Telemetry.handle_http_event/4,
       nil
     )
 
@@ -446,7 +448,7 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :fetch, :system, :success],
         [:wanderer_kills, :fetch, :system, :error]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_fetch_event/4,
+      &Telemetry.handle_fetch_event/4,
       nil
     )
 
@@ -459,7 +461,7 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :parser, :failed],
         [:wanderer_kills, :parser, :summary]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_parser_event/4,
+      &Telemetry.handle_parser_event/4,
       nil
     )
 
@@ -471,17 +473,17 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :websocket, :connection],
         [:wanderer_kills, :websocket, :subscription]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_websocket_event/4,
+      &Telemetry.handle_websocket_event/4,
       nil
     )
 
-    # ZKB handlers  
+    # ZKB handlers
     :telemetry.attach_many(
       "wanderer-kills-zkb-handler",
       [
         [:wanderer_kills, :zkb, :format]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_zkb_event/4,
+      &Telemetry.handle_zkb_event/4,
       nil
     )
 
@@ -493,7 +495,7 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :task, :stop],
         [:wanderer_kills, :task, :error]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_task_event/4,
+      &Telemetry.handle_task_event/4,
       nil
     )
 
@@ -506,7 +508,7 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :character, :index],
         [:wanderer_kills, :character, :cache]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_character_event/4,
+      &Telemetry.handle_character_event/4,
       nil
     )
 
@@ -519,12 +521,12 @@ defmodule WandererKills.Core.Observability.Telemetry do
         [:wanderer_kills, :system, :filter],
         [:wanderer_kills, :system, :index]
       ],
-      &WandererKills.Core.Observability.Telemetry.handle_system_event/4,
+      &Telemetry.handle_system_event/4,
       nil
     )
 
     # Attach batch processing telemetry handlers
-    WandererKills.Core.Observability.BatchTelemetry.attach_handlers()
+    BatchTelemetry.attach_handlers()
 
     :ok
   end
@@ -548,7 +550,7 @@ defmodule WandererKills.Core.Observability.Telemetry do
     :telemetry.detach("wanderer-kills-system-handler")
 
     # Detach batch processing telemetry handlers
-    WandererKills.Core.Observability.BatchTelemetry.detach_handlers()
+    BatchTelemetry.detach_handlers()
 
     :ok
   end

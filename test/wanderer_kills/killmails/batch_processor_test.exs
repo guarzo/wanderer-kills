@@ -1,8 +1,8 @@
 defmodule WandererKills.Ingest.Killmails.BatchProcessorTest do
   use WandererKills.DataCase, async: false
 
-  alias WandererKills.Ingest.Killmails.BatchProcessor
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Ingest.Killmails.BatchProcessor
   alias WandererKills.TestFactory
 
   describe "extract_all_characters/1" do

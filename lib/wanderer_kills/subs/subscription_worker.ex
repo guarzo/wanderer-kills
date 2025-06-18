@@ -16,11 +16,11 @@ defmodule WandererKills.Subs.SubscriptionWorker do
   require Logger
 
   alias WandererKills.Subs.Subscriptions.{
-    WebhookNotifier,
     Broadcaster,
-    Filter,
     CharacterIndex,
-    SystemIndex
+    Filter,
+    SystemIndex,
+    WebhookNotifier
   }
 
   alias WandererKills.Core.Support.SupervisedTask
@@ -108,11 +108,9 @@ defmodule WandererKills.Subs.SubscriptionWorker do
   """
   @spec get_subscription_id(pid()) :: {:ok, subscription_id()} | {:error, term()}
   def get_subscription_id(pid) do
-    try do
-      GenServer.call(pid, :get_subscription_id)
-    catch
-      :exit, _ -> {:error, :process_dead}
-    end
+    GenServer.call(pid, :get_subscription_id)
+  catch
+    :exit, _ -> {:error, :process_dead}
   end
 
   @doc """
@@ -120,11 +118,9 @@ defmodule WandererKills.Subs.SubscriptionWorker do
   """
   @spec get_subscription_type(pid()) :: {:ok, :webhook | :websocket} | {:error, term()}
   def get_subscription_type(pid) do
-    try do
-      GenServer.call(pid, :get_subscription_type)
-    catch
-      :exit, _ -> {:error, :process_dead}
-    end
+    GenServer.call(pid, :get_subscription_type)
+  catch
+    :exit, _ -> {:error, :process_dead}
   end
 
   # ============================================================================
@@ -282,7 +278,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
       SystemIndex.add_subscription(subscription_id, system_ids)
     end
 
-    # Register with character index  
+    # Register with character index
     if character_ids = subscription["character_ids"] do
       CharacterIndex.add_subscription(subscription_id, character_ids)
     end

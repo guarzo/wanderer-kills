@@ -18,7 +18,11 @@ defmodule WandererKills.Application do
 
   use Application
   require Logger
+
   alias WandererKills.Config
+  alias WandererKills.Core.Observability.Telemetry
+  alias WandererKills.Core.ShipTypes.Updater
+  alias WandererKills.Core.Storage.KillmailStore
   alias WandererKills.Core.Support.SupervisedTask
   import Cachex.Spec
 
@@ -28,10 +32,10 @@ defmodule WandererKills.Application do
   @impl true
   def start(_type, _args) do
     # 1) Initialize ETS for our unified KillmailStore
-    WandererKills.Core.Storage.KillmailStore.init_tables!()
+    KillmailStore.init_tables!()
 
     # 2) Attach telemetry handlers
-    WandererKills.Core.Observability.Telemetry.attach_handlers()
+    Telemetry.attach_handlers()
 
     # 3) Build children list
     children =
@@ -161,7 +165,7 @@ defmodule WandererKills.Application do
   end
 
   defp execute_ship_type_update do
-    case WandererKills.Core.ShipTypes.Updater.update_ship_types() do
+    case Updater.update_ship_types() do
       :ok ->
         :ok
 

@@ -9,8 +9,9 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Enricher do
   """
 
   require Logger
-  alias WandererKills.Ingest.ESI.Client, as: EsiClient
+
   alias WandererKills.Core.ShipTypes.Info, as: ShipTypeInfo
+  alias WandererKills.Ingest.ESI.Client, as: EsiClient
   alias WandererKills.Ingest.Killmails.Transformations
 
   # Compile-time configuration
@@ -179,22 +180,20 @@ defmodule WandererKills.Ingest.Killmails.Pipeline.Enricher do
   defp get_alliance_info_safe(_), do: nil
 
   defp flatten_enriched_data(killmail) do
-    try do
-      flattened =
-        killmail
-        |> Transformations.flatten_enriched_data()
-        |> Transformations.add_attacker_count()
+    flattened =
+      killmail
+      |> Transformations.flatten_enriched_data()
+      |> Transformations.add_attacker_count()
 
-      {:ok, flattened}
-    rescue
-      error ->
-        Logger.warning("Failed to flatten enriched data",
-          error: inspect(error),
-          killmail_id: killmail["killmail_id"]
-        )
+    {:ok, flattened}
+  rescue
+    error ->
+      Logger.warning("Failed to flatten enriched data",
+        error: inspect(error),
+        killmail_id: killmail["killmail_id"]
+      )
 
-        # Return original killmail if flattening fails
-        {:ok, killmail}
-    end
+      # Return original killmail if flattening fails
+      {:ok, killmail}
   end
 end

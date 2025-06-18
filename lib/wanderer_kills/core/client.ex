@@ -11,10 +11,12 @@ defmodule WandererKills.Core.Client do
   @behaviour WandererKills.Core.ClientBehaviour
 
   require Logger
-  alias WandererKills.{Subs.SubscriptionManager, Core.Types}
-  alias WandererKills.Ingest.Killmails.ZkbClient
+
   alias WandererKills.Core.Cache
   alias WandererKills.Core.Support.Error
+  alias WandererKills.Core.Types
+  alias WandererKills.Ingest.Killmails.ZkbClient
+  alias WandererKills.Subs.SubscriptionManager
 
   @impl true
   def fetch_system_killmails(system_id, since_hours, limit) do

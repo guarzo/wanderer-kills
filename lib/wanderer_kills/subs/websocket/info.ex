@@ -6,8 +6,8 @@ defmodule WandererKills.WebSocket.Info do
   previously embedded in the WebSocketController.
   """
 
-  alias WandererKillsWeb.Endpoint
   alias WandererKills.Subs.SubscriptionManager
+  alias WandererKillsWeb.Endpoint
 
   @config %{
     max_systems_per_subscription: 100,
@@ -82,19 +82,15 @@ defmodule WandererKills.WebSocket.Info do
   defp get_active_connection_count do
     # In a real implementation, this would query the Phoenix socket transport
     # For now, return a placeholder
-    try do
-      Registry.count(WandererKills.Registry)
-    rescue
-      _ -> 0
-    end
+    Registry.count(WandererKills.Registry)
+  rescue
+    _ -> 0
   end
 
   defp get_active_subscription_count do
-    try do
-      SubscriptionManager.list_subscriptions() |> length()
-    rescue
-      _ -> 0
-    end
+    SubscriptionManager.list_subscriptions() |> length()
+  rescue
+    _ -> 0
   end
 
   defp get_uptime_seconds do

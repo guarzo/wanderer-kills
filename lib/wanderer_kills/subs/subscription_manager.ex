@@ -21,11 +21,12 @@ defmodule WandererKills.Subs.SubscriptionManager do
   """
 
   require Logger
-  alias WandererKills.Subs.{SubscriptionSupervisor, SubscriptionWorker}
-  alias WandererKills.Subs.Subscriptions.{SystemIndex, CharacterIndex}
+
+  alias WandererKills.Core.Support.Error
   alias WandererKills.Core.Types
   alias WandererKills.Domain.Killmail
-  alias WandererKills.Core.Support.Error
+  alias WandererKills.Subs.{SubscriptionSupervisor, SubscriptionWorker}
+  alias WandererKills.Subs.Subscriptions.{CharacterIndex, SystemIndex}
 
   @type subscription_id :: String.t()
   @type subscriber_id :: String.t()

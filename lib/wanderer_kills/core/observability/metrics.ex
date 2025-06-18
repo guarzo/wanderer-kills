@@ -37,7 +37,7 @@ defmodule WandererKills.Core.Observability.Metrics do
   use GenServer
   require Logger
 
-  alias WandererKills.Core.Observability.{Telemetry, Statistics}
+  alias WandererKills.Core.Observability.{Statistics, Telemetry}
   alias WandererKills.Core.Support.Clock
 
   # Metric types
@@ -322,14 +322,13 @@ defmodule WandererKills.Core.Observability.Metrics do
 
   # Safe atom creation - only use for known metric patterns
   defp safe_atom(string) when is_binary(string) do
-    try do
-      String.to_existing_atom(string)
-    rescue
-      ArgumentError ->
-        # If atom doesn't exist, create it but log for monitoring
-        Logger.debug("Creating new metric atom", atom_string: string)
-        # credo:disable-next-line Credo.Check.Warning.UnsafeToAtom\n        String.to_atom(string)
-    end
+    String.to_existing_atom(string)
+  rescue
+    ArgumentError ->
+      # If atom doesn't exist, create it but log for monitoring
+      Logger.debug("Creating new metric atom", atom_string: string)
+      # credo:disable-for-next-line
+      String.to_atom(string)
   end
 
   # ============================================================================

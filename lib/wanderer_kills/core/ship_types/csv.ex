@@ -22,8 +22,9 @@ defmodule WandererKills.Core.ShipTypes.CSV do
   """
 
   require Logger
+
+  alias WandererKills.Core.ShipTypes.{Cache, Parser, Validator}
   alias WandererKills.Core.Support.Error
-  alias WandererKills.Core.ShipTypes.{Parser, Validator, Cache}
   alias WandererKills.Ingest.Http.Client, as: HttpClient
 
   @required_files ["invTypes.csv", "invGroups.csv"]

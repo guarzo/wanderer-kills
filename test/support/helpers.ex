@@ -1,4 +1,6 @@
 defmodule WandererKills.TestHelpers do
+  alias WandererKills.Test.DataHelpers
+
   @moduledoc """
   Unified test helper interface for the WandererKills application.
 
@@ -44,7 +46,7 @@ defmodule WandererKills.TestHelpers do
   Creates a test killmail with the given ID.
   """
   def create_test_killmail(id) do
-    WandererKills.Test.DataHelpers.generate_test_data(:killmail, id)
+    DataHelpers.generate_test_data(:killmail, id)
   end
 
   @doc """

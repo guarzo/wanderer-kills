@@ -7,6 +7,7 @@ defmodule WandererKills.Subs.Subscriptions.WebhookNotifier do
   """
 
   require Logger
+
   alias WandererKills.Ingest.Http.Client
 
   @webhook_timeout 10_000

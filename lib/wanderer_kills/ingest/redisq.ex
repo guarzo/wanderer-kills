@@ -12,13 +12,14 @@ defmodule WandererKills.Ingest.RedisQ do
   use GenServer
   require Logger
 
-  alias WandererKills.Ingest.Killmails.UnifiedProcessor
   alias WandererKills.Core.EtsOwner
-  alias WandererKills.Ingest.ESI.Client, as: EsiClient
   alias WandererKills.Core.Support.Clock
   alias WandererKills.Core.Support.Error
-  alias WandererKills.Ingest.Http.Client, as: HttpClient
   alias WandererKills.Domain.Killmail
+  alias WandererKills.Ingest.ESI.Client, as: EsiClient
+  alias WandererKills.Ingest.Http.Client, as: HttpClient
+  alias WandererKills.Ingest.Killmails.UnifiedProcessor
+  alias WandererKills.Subs.SubscriptionManager
 
   @user_agent "(wanderer-kills@proton.me; +https://github.com/wanderer-industries/wanderer-kills)"
 
@@ -536,11 +537,11 @@ defmodule WandererKills.Ingest.RedisQ do
     # Broadcast detailed kill update - convert to map for compatibility
     killmail_map = Killmail.to_map(killmail)
 
-    WandererKills.Subs.SubscriptionManager.broadcast_killmail_update_async(system_id, [
+    SubscriptionManager.broadcast_killmail_update_async(system_id, [
       killmail_map
     ])
 
     # Also broadcast kill count update (increment by 1)
-    WandererKills.Subs.SubscriptionManager.broadcast_killmail_count_update_async(system_id, 1)
+    SubscriptionManager.broadcast_killmail_count_update_async(system_id, 1)
   end
 end
