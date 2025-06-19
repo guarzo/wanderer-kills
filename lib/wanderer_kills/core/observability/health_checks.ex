@@ -349,8 +349,19 @@ defmodule WandererKills.Core.Observability.HealthChecks do
       case WandererKills.Ingest.SmartRateLimiter.get_stats() do
         {:ok, %{circuit_state: :open}} ->
           %{healthy: false, message: "Rate limiter circuit is open"}
-        {:ok, %{queue_size: size}} when size > 1000 ->
-          %{healthy: false, message: "Rate limiter queue is large (#{size})"}
+def check_rate_limiter_health(_opts) do
+  features = Application.get_env(:wanderer_kills, :features, [])
++ health_config = Application.get_env(:wanderer_kills, :health_checks, [])
++ max_queue_size = Keyword.get(health_config, :max_rate_limiter_queue_size, 1000)
++ max_pending_requests = Keyword.get(health_config, :max_pending_requests, 100)
+
+  # ... later in the function ...
+- {:ok, %{queue_size: size}} when size > 1000 ->
++ {:ok, %{queue_size: size}} when size > max_queue_size ->
+    %{healthy: false, message: "Rate limiter queue is large (#{size})"}
+  
+  # (you'd similarly replace the hard-coded pending_requests > 100 clause with max_pending_requests)
+end
         {:ok, _} ->
           %{healthy: true, message: "Rate limiter operating normally"}
         {:error, reason} ->
