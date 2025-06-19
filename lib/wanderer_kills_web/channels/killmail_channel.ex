@@ -616,6 +616,10 @@ defmodule WandererKillsWeb.KillmailChannel do
       |> Keyword.get(:max_system_id, 32_000_000)
 
     cond do
+      # Empty list is valid - allows clients to join without initial system subscriptions
+      systems == [] ->
+        {:ok, []}
+
       length(systems) > max_systems ->
         {:error,
          Error.validation_error(:too_many_systems, "Too many systems (max: #{max_systems})", %{
@@ -652,6 +656,10 @@ defmodule WandererKillsWeb.KillmailChannel do
       |> Keyword.get(:max_character_id, 3_000_000_000)
 
     cond do
+      # Empty list is valid - allows clients to join without initial character subscriptions
+      characters == [] ->
+        {:ok, []}
+
       length(characters) > max_characters ->
         {:error,
          Error.validation_error(
