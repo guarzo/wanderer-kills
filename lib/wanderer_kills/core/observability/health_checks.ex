@@ -322,4 +322,77 @@ defmodule WandererKills.Core.Observability.HealthChecks do
       Logger.error("Character subscription metrics collection failed: #{inspect(error)}")
       {:error, error}
   end
+
+  @doc """
+  Checks the health of the smart rate limiting system.
+
+  ## Options
+  - `:timeout` - Timeout for health checks (default: 5_000)
+
+  ## Returns
+  - `{:ok, health_status}` - Rate limiter health status
+  - `{:error, reason}` - If health check fails
+  """
+  @spec check_rate_limiter_health(health_opts()) :: {:ok, map()} | {:error, term()}
+  def check_rate_limiter_health(_opts) do
+    features = Application.get_env(:wanderer_kills, :features, [])
+
+    base_health = %{
+      smart_rate_limiting_enabled: features[:smart_rate_limiting] || false,
+      request_coalescing_enabled: features[:request_coalescing] || false,
+      healthy: true,
+      message: "Rate limiting features available"
+    }
+
+    # Check SmartRateLimiter health if enabled
+    smart_limiter_health = if features[:smart_rate_limiting] do
+      case WandererKills.Ingest.SmartRateLimiter.get_stats() do
+        {:ok, %{circuit_state: :open}} ->
+          %{healthy: false, message: "Rate limiter circuit is open"}
+        {:ok, %{queue_size: size}} when size > 1000 ->
+          %{healthy: false, message: "Rate limiter queue is large (#{size})"}
+        {:ok, _} ->
+          %{healthy: true, message: "Rate limiter operating normally"}
+        {:error, reason} ->
+          %{healthy: false, message: "Rate limiter unreachable: #{inspect(reason)}"}
+      end
+    else
+      %{healthy: true, message: "Smart rate limiting disabled"}
+    end
+
+    # Check RequestCoalescer health if enabled
+    coalescer_health = if features[:request_coalescing] do
+      case WandererKills.Ingest.RequestCoalescer.get_stats() do
+        {:ok, %{pending_requests: pending}} when pending > 100 ->
+          %{healthy: false, message: "Request coalescer has many pending requests (#{pending})"}
+        {:ok, _} ->
+          %{healthy: true, message: "Request coalescer operating normally"}
+        {:error, reason} ->
+          %{healthy: false, message: "Request coalescer unreachable: #{inspect(reason)}"}
+      end
+    else
+      %{healthy: true, message: "Request coalescing disabled"}
+    end
+
+    # Combine health statuses
+    overall_healthy = base_health.healthy &&
+                     smart_limiter_health.healthy &&
+                     coalescer_health.healthy
+
+    health_status = %{
+      healthy: overall_healthy,
+      message: if(overall_healthy, do: "All rate limiting components healthy", else: "Some rate limiting components unhealthy"),
+      components: %{
+        smart_rate_limiter: smart_limiter_health,
+        request_coalescer: coalescer_health
+      },
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    {:ok, health_status}
+  rescue
+    error ->
+      Logger.error("Rate limiter health check failed: #{inspect(error)}")
+      {:error, error}
+  end
 end

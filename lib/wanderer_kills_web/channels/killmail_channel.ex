@@ -178,7 +178,8 @@ defmodule WandererKillsWeb.KillmailChannel do
           WebSocketStats.track_subscription(:updated, MapSet.size(new_systems), %{
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
-            operation: :add_systems
+            operation: :add_systems,
+            character_count: 0
           })
 
           Logger.info("[INFO] Client subscribed to systems",
@@ -230,7 +231,8 @@ defmodule WandererKillsWeb.KillmailChannel do
           WebSocketStats.track_subscription(:updated, -MapSet.size(systems_to_remove), %{
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
-            operation: :remove_systems
+            operation: :remove_systems,
+            character_count: 0
           })
 
           Logger.debug("[DEBUG] Client unsubscribed from systems",
@@ -500,10 +502,12 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       # Track subscription removal
       subscribed_systems_count = MapSet.size(socket.assigns.subscribed_systems || MapSet.new())
+      subscribed_characters_count = MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
 
       WebSocketStats.track_subscription(:removed, subscribed_systems_count, %{
         user_id: socket.assigns.user_id,
-        subscription_id: subscription_id
+        subscription_id: subscription_id,
+        character_count: subscribed_characters_count
       })
 
       # Clean up subscription
@@ -663,8 +667,13 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp validate_characters(characters) do
-    # Default to 1000 max characters per subscription
-    max_characters = 1000
+    max_characters =
+      Application.get_env(:wanderer_kills, :validation, [])
+      |> Keyword.get(:max_subscribed_characters, 1000)
+
+    max_character_id =
+      Application.get_env(:wanderer_kills, :validation, [])
+      |> Keyword.get(:max_character_id, 3_000_000_000)
 
     cond do
       length(characters) > max_characters ->
@@ -679,8 +688,8 @@ defmodule WandererKillsWeb.KillmailChannel do
          )}
 
       Enum.all?(characters, &is_integer/1) ->
-        # Character IDs should be positive integers
-        valid_characters = Enum.filter(characters, &(&1 > 0))
+        # Character IDs should be positive integers within valid range
+        valid_characters = Enum.filter(characters, &(&1 > 0 and &1 <= max_character_id))
 
         if length(valid_characters) == length(characters) do
           {:ok, Enum.uniq(valid_characters)}
@@ -851,8 +860,24 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp preload_system_kills_for_websocket(socket, system_id, limit) do
-    # Use the shared preloader
-    kills = Preloader.preload_kills_for_system(system_id, limit, 24)
+    # Use request coalescing for WebSocket preloads if enabled
+    features = Application.get_env(:wanderer_kills, :features, [])
+    
+    kills = if features[:request_coalescing] do
+      # Use coalescing to avoid duplicate preloads for same system
+      request_key = {:websocket_preload, system_id, limit, 24}
+      
+      case WandererKills.Ingest.RequestCoalescer.request(request_key, fn ->
+        Preloader.preload_kills_for_system(system_id, limit, 24)
+      end) do
+        {:ok, kills} -> kills
+        {:error, _} -> []
+      end
+    else
+      # Use the shared preloader directly
+      Preloader.preload_kills_for_system(system_id, limit, 24)
+    end
+    
     send_preload_kills_to_websocket(socket, system_id, kills)
   end
 
