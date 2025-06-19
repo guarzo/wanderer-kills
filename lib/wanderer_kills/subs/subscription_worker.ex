@@ -154,12 +154,12 @@ defmodule WandererKills.Subs.SubscriptionWorker do
       socket_monitor_ref: socket_monitor_ref
     }
 
-    Logger.info("[INFO] Subscription worker started",
+    Logger.debug("[DEBUG] Subscription worker started",
       subscription_id: subscription_id,
       type: type,
       subscriber_id: subscription["subscriber_id"],
-      system_ids: subscription["system_ids"] || [],
-      character_ids: subscription["character_ids"] || []
+      system_count: length(subscription["system_ids"] || []),
+      character_count: length(subscription["character_ids"] || [])
     )
 
     {:ok, state}
@@ -203,8 +203,8 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
   @impl true
   def handle_cast({:killmail_update, system_id, kills}, state) do
-    Logger.info(
-      "[INFO] SubscriptionWorker received killmail update - " <>
+    Logger.debug(
+      "[SubscriptionWorker] Received killmail update - " <>
         "subscription_id: #{state.subscription_id}, system_id: #{system_id}, " <>
         "kills_received: #{length(kills)}, " <>
         "subscription_systems: #{inspect(state.subscription["system_ids"])}, " <>
@@ -214,8 +214,8 @@ defmodule WandererKills.Subs.SubscriptionWorker do
     # Filter kills that match this subscription
     matching_kills = Filter.filter_killmails(kills, state.subscription)
 
-    Logger.info(
-      "[INFO] SubscriptionWorker filtered killmails - " <>
+    Logger.debug(
+      "[SubscriptionWorker] Filtered killmails - " <>
         "subscription_id: #{state.subscription_id}, system_id: #{system_id}, " <>
         "original_count: #{length(kills)}, filtered_count: #{length(matching_kills)}, " <>
         "has_matches: #{length(matching_kills) > 0}"
@@ -231,8 +231,8 @@ defmodule WandererKills.Subs.SubscriptionWorker do
           send_to_websocket_channel(state, system_id, matching_kills)
       end
 
-      Logger.info(
-        "[INFO] Delivered killmails to subscription - " <>
+      Logger.debug(
+        "[SubscriptionWorker] Delivered killmails - " <>
           "subscription_id: #{state.subscription_id}, type: #{state.type}, " <>
           "system_id: #{system_id}, killmail_count: #{length(matching_kills)}"
       )
@@ -243,7 +243,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{socket_monitor_ref: ref} = state) do
-    Logger.info("[INFO] WebSocket process terminated, stopping subscription worker",
+    Logger.debug("[DEBUG] WebSocket process terminated, stopping subscription worker",
       subscription_id: state.subscription_id,
       reason: inspect(reason)
     )
@@ -264,7 +264,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
   @impl true
   def terminate(reason, state) do
-    Logger.info("[INFO] Subscription worker terminating",
+    Logger.debug("[DEBUG] Subscription worker terminating",
       subscription_id: state.subscription_id,
       reason: inspect(reason)
     )
@@ -288,9 +288,9 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
     # Register with system index
     if system_ids = subscription["system_ids"] do
-      Logger.info(
-        "[INFO] Registering subscription with SystemIndex - " <>
-          "subscription_id: #{subscription_id}, systems: #{inspect(system_ids)}"
+      Logger.debug(
+        "[DEBUG] Registering subscription with SystemIndex - " <>
+          "subscription_id: #{subscription_id}, systems: #{length(system_ids)} total"
       )
 
       SystemIndex.add_subscription(subscription_id, system_ids)
@@ -298,9 +298,9 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
     # Register with character index
     if character_ids = subscription["character_ids"] do
-      Logger.info(
-        "[INFO] Registering subscription with CharacterIndex - " <>
-          "subscription_id: #{subscription_id}, characters: #{inspect(character_ids)}"
+      Logger.debug(
+        "[DEBUG] Registering subscription with CharacterIndex - " <>
+          "subscription_id: #{subscription_id}, characters: #{length(character_ids)} total"
       )
 
       CharacterIndex.add_subscription(subscription_id, character_ids)
@@ -359,8 +359,8 @@ defmodule WandererKills.Subs.SubscriptionWorker do
     if Process.alive?(socket_pid) do
       send(socket_pid, message)
 
-      Logger.info(
-        "[INFO] Sent killmail update directly to WebSocket - " <>
+      Logger.debug(
+        "[SubscriptionWorker] Sent to WebSocket - " <>
           "subscription_id: #{state.subscription_id}, system_id: #{system_id}, " <>
           "killmail_count: #{length(matching_kills)}, " <>
           "socket_pid: #{inspect(socket_pid)}, user_id: #{state.subscription["user_id"]}"

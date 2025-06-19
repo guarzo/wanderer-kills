@@ -73,7 +73,9 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
       :requester_pid,
       :reply_ref,
       :created_at,
-      :timeout_ref
+      :timeout_ref,
+      # Timeout in milliseconds for this request
+      :timeout
     ]
   end
 
@@ -103,7 +105,8 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
       priority: priority,
       requester_pid: self(),
       reply_ref: make_ref(),
-      created_at: System.monotonic_time(:millisecond)
+      created_at: System.monotonic_time(:millisecond),
+      timeout: timeout
     }
 
     GenServer.call(__MODULE__, {:request, request, coalesce}, timeout)

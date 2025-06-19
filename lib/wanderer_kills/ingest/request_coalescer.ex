@@ -104,9 +104,9 @@ defmodule WandererKills.Ingest.RequestCoalescer do
 
       pending ->
         # Reply to all waiters
-        Enum.each(pending.requesters, fn {_pid, ref} ->
+        Enum.each(pending.requesters, fn from ->
           try do
-            GenServer.reply(ref, result)
+            GenServer.reply(from, result)
           catch
             # Requester process died, ignore
             :exit, _ -> :ok
@@ -149,9 +149,9 @@ defmodule WandererKills.Ingest.RequestCoalescer do
         # Reply with timeout error to all waiters
         timeout_error = {:error, :timeout}
 
-        Enum.each(pending.requesters, fn {_pid, ref} ->
+        Enum.each(pending.requesters, fn from ->
           try do
-            GenServer.reply(ref, timeout_error)
+            GenServer.reply(from, timeout_error)
           catch
             # Requester process died, ignore
             :exit, _ -> :ok
@@ -167,6 +167,18 @@ defmodule WandererKills.Ingest.RequestCoalescer do
 
         {:noreply, %{state | pending_requests: new_pending}}
     end
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    # Find and clean up any pending requests for this process
+    new_pending_requests =
+      state.pending_requests
+      |> Enum.reject(fn {_key, pending} ->
+        pending.executing_pid == pid
+      end)
+      |> Enum.into(%{})
+
+    {:noreply, %{state | pending_requests: new_pending_requests}}
   end
 
   ## Private Functions
