@@ -20,6 +20,7 @@ defmodule WandererKills.Subs.Preloader do
   alias WandererKills.Core.Systems.KillmailProcessor
   alias WandererKills.Domain.Killmail
   alias WandererKills.Ingest.Killmails.ZkbClient
+  alias WandererKills.Ingest.{SmartRateLimiter, RequestCoalescer}
 
   @type system_id :: integer()
   @type killmail :: Killmail.t()
@@ -341,7 +342,7 @@ defmodule WandererKills.Subs.Preloader do
     past_seconds = since_hours * 3600
     opts = [past_seconds: past_seconds, limit: 50]
 
-    case ZkbClient.fetch_system_killmails(system_id, opts) do
+    case fetch_system_kills_smart(system_id, opts, :preload) do
       {:ok, fresh_kills} when is_list(fresh_kills) ->
         # Only process the number of kills we need for preload
         kills_to_cache = Enum.take(fresh_kills, limit)
@@ -404,6 +405,25 @@ defmodule WandererKills.Subs.Preloader do
         )
 
         []
+    end
+  end
+
+  defp fetch_system_kills_smart(system_id, opts, priority) do
+    features = Application.get_env(:wanderer_kills, :features, [])
+
+    if features[:smart_rate_limiting] do
+      request_key = {:preload, system_id, opts}
+
+      RequestCoalescer.request(request_key, fn ->
+        SmartRateLimiter.request_system_killmails(
+          system_id,
+          opts,
+          priority: priority,
+          timeout: 30_000
+        )
+      end)
+    else
+      ZkbClient.fetch_system_killmails(system_id, opts)
     end
   end
 

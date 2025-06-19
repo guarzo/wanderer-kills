@@ -75,7 +75,7 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
       iex> Filter.matches_subscription?(killmail, subscription)
       true
   """
-  @spec matches_subscription?(Killmail.t(), map()) :: boolean()
+  @spec matches_subscription?(Killmail.t() | map(), map()) :: boolean()
   def matches_subscription?(%Killmail{} = killmail, subscription) do
     system_ids = subscription["system_ids"] || []
     character_ids = subscription["character_ids"] || []
@@ -88,6 +88,30 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
       character_match = check_character_match(killmail, subscription)
 
       system_match or character_match
+    end
+  end
+
+  # Handle plain map killmails (convert to struct first)
+  def matches_subscription?(killmail, subscription) when is_map(killmail) do
+    case Killmail.new(killmail) do
+      {:ok, killmail_struct} ->
+        matches_subscription?(killmail_struct, subscription)
+
+      {:error, _reason} ->
+        # If we can't convert to struct, try basic matching with the map
+        system_ids = subscription["system_ids"] || []
+        character_ids = subscription["character_ids"] || []
+
+        if Enum.empty?(system_ids) and Enum.empty?(character_ids) do
+          true
+        else
+          system_match = killmail["system_id"] in system_ids
+
+          character_match =
+            check_character_match_in_map(killmail, character_ids)
+
+          system_match or character_match
+        end
     end
   end
 
@@ -189,6 +213,24 @@ defmodule WandererKills.Subs.Subscriptions.Filter do
   end
 
   # Private functions
+
+  defp check_character_match_in_map(killmail, character_ids) when is_list(character_ids) do
+    victim_id = get_in(killmail, ["victim", "character_id"])
+
+    # Check victim
+    victim_match = victim_id && victim_id in character_ids
+
+    # Check attackers
+    attackers = killmail["attackers"] || []
+
+    attacker_match =
+      Enum.any?(attackers, fn attacker ->
+        attacker_id = attacker["character_id"]
+        attacker_id && attacker_id in character_ids
+      end)
+
+    victim_match or attacker_match
+  end
 
   defp check_system_match(%Killmail{system_id: system_id}, subscription) do
     case subscription["system_ids"] do

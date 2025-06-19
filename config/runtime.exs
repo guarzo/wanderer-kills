@@ -20,6 +20,14 @@ port =
 
 config :wanderer_kills, WandererKillsWeb.Endpoint, http: [port: port]
 
+# Configure feature flags from environment variables
+smart_rate_limiting = System.get_env("SMART_RATE_LIMITING", "true") == "true"
+request_coalescing = System.get_env("REQUEST_COALESCING", "true") == "true"
+
+config :wanderer_kills, :features,
+  smart_rate_limiting: smart_rate_limiting,
+  request_coalescing: request_coalescing
+
 # Configure CORS/WebSocket origin checking
 # In production, set ORIGIN_HOST to your actual domain
 check_origin =

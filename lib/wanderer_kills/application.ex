@@ -67,7 +67,7 @@ defmodule WandererKills.Application do
 
   # Core OTP processes that don't depend on web functionality
   defp core_children do
-    [
+    base_children = [
       WandererKills.Core.EtsOwner,
       Task.Supervisor.child_spec(name: WandererKills.TaskSupervisor),
       {Phoenix.PubSub, name: WandererKills.PubSub},
@@ -78,7 +78,32 @@ defmodule WandererKills.Application do
       WandererKills.Ingest.RateLimiter,
       WandererKills.Ingest.HistoricalFetcher
     ]
+
+    # Add smart rate limiting components if enabled
+    base_children ++ maybe_smart_rate_limiting_children()
   end
+
+  defp maybe_smart_rate_limiting_children do
+    features = Application.get_env(:wanderer_kills, :features, [])
+
+    []
+    |> maybe_add_request_coalescer(features[:request_coalescing])
+    |> maybe_add_smart_rate_limiter(features[:smart_rate_limiting])
+  end
+
+  defp maybe_add_request_coalescer(children, true) do
+    config = Application.get_env(:wanderer_kills, :request_coalescer, [])
+    [{WandererKills.Ingest.RequestCoalescer, config} | children]
+  end
+
+  defp maybe_add_request_coalescer(children, _), do: children
+
+  defp maybe_add_smart_rate_limiter(children, true) do
+    config = Application.get_env(:wanderer_kills, :smart_rate_limiter, [])
+    [{WandererKills.Ingest.SmartRateLimiter, config} | children]
+  end
+
+  defp maybe_add_smart_rate_limiter(children, _), do: children
 
   # Observability and monitoring processes
   defp observability_children do

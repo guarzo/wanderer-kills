@@ -58,53 +58,16 @@ defmodule WandererKills.Subs.SubscriptionManager do
   """
   @spec add_subscription(map(), atom()) :: {:ok, subscription_id()} | {:error, term()}
   def add_subscription(attrs, type \\ :webhook) do
-    case validate_subscription_attrs(attrs) do
-      :ok ->
-        subscription_id = generate_subscription_id()
-
-        base_subscription = %{
-          "id" => subscription_id,
-          "subscriber_id" => attrs["subscriber_id"],
-          "system_ids" => attrs["system_ids"] || [],
-          "character_ids" => attrs["character_ids"] || [],
-          "created_at" => DateTime.utc_now()
-        }
-
-        subscription =
-          case type do
-            :webhook ->
-              Map.put(base_subscription, "callback_url", attrs["callback_url"])
-
-            :websocket ->
-              Map.merge(base_subscription, %{
-                "socket_pid" => attrs["socket_pid"],
-                "user_id" => attrs["user_id"]
-              })
-          end
-
-        case SubscriptionSupervisor.start_subscription(subscription) do
-          {:ok, _pid} ->
-            Logger.info("[INFO] New subscription created via add_subscription",
-              subscription_id: subscription_id,
-              subscriber_id: attrs["subscriber_id"],
-              type: type,
-              system_ids: subscription["system_ids"],
-              character_ids: subscription["character_ids"]
-            )
-
-            {:ok, subscription_id}
-
-          {:error, reason} ->
-            Logger.error("[ERROR] Failed to create subscription",
-              subscription_id: subscription_id,
-              error: inspect(reason)
-            )
-
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    with :ok <- validate_subscription_attrs(attrs),
+         subscription_id <- generate_subscription_id(),
+         subscription <- build_subscription(subscription_id, attrs, type),
+         {:ok, _pid} <- SubscriptionSupervisor.start_subscription(subscription) do
+      log_subscription_created(subscription_id, attrs, type, subscription)
+      {:ok, subscription_id}
+    else
+      {:error, reason} = error ->
+        Logger.error("[ERROR] Failed to create subscription", error: inspect(reason))
+        error
     end
   end
 
@@ -297,12 +260,8 @@ defmodule WandererKills.Subs.SubscriptionManager do
   """
   @spec add_websocket_subscription(map()) :: {:ok, subscription_id()} | {:error, term()}
   def add_websocket_subscription(attrs) do
-    Logger.info(
-      "[INFO] Adding WebSocket subscription - user_id: #{attrs["user_id"]}, " <>
-        "subscriber_id: #{attrs["subscriber_id"] || attrs["user_id"]}, " <>
-        "systems: #{inspect(attrs["system_ids"])}, " <>
-        "characters: #{inspect(attrs["character_ids"])}, " <>
-        "socket_pid: #{inspect(attrs["socket_pid"])}"
+    Logger.debug(
+      "[SubscriptionManager] Adding WebSocket subscription - user_id: #{attrs["user_id"]}"
     )
 
     add_subscription(attrs, :websocket)
@@ -355,5 +314,36 @@ defmodule WandererKills.Subs.SubscriptionManager do
 
   defp generate_subscription_id do
     :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+  end
+
+  defp build_subscription(subscription_id, attrs, type) do
+    base_subscription = %{
+      "id" => subscription_id,
+      "subscriber_id" => attrs["subscriber_id"],
+      "system_ids" => attrs["system_ids"] || [],
+      "character_ids" => attrs["character_ids"] || [],
+      "created_at" => DateTime.utc_now()
+    }
+
+    case type do
+      :webhook ->
+        Map.put(base_subscription, "callback_url", attrs["callback_url"])
+
+      :websocket ->
+        Map.merge(base_subscription, %{
+          "socket_pid" => attrs["socket_pid"],
+          "user_id" => attrs["user_id"]
+        })
+    end
+  end
+
+  defp log_subscription_created(subscription_id, attrs, type, subscription) do
+    Logger.debug("[DEBUG] New subscription created via add_subscription",
+      subscription_id: subscription_id,
+      subscriber_id: attrs["subscriber_id"],
+      type: type,
+      system_count: length(subscription["system_ids"] || []),
+      character_count: length(subscription["character_ids"] || [])
+    )
   end
 end
