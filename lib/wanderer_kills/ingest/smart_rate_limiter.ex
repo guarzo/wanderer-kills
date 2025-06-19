@@ -245,7 +245,8 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     })
 
     # Set timeout for request
-    _timeout_ref = Process.send_after(self(), {:request_timeout, request.id}, 30_000)
+    timeout_ms = min(30_000, request.timeout || 30_000)
+    _timeout_ref = Process.send_after(self(), {:request_timeout, request.id}, timeout_ms)
 
     # Execute the actual request asynchronously
     Task.start(fn ->
