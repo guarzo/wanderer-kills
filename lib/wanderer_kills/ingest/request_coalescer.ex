@@ -144,8 +144,15 @@ defmodule WandererKills.Ingest.RequestCoalescer do
     )
     
     # Start async execution
-    executing_pid = spawn_link(fn ->
-      result = executor_fun.()
+    # Start async execution with monitoring
+    {executing_pid, monitor_ref} = spawn_monitor(fn ->
+      result = try do
+        executor_fun.()
+      rescue
+        error -> {:error, error}
+      catch
+        :exit, reason -> {:error, {:exit, reason}}
+      end
       send(__MODULE__, {:request_complete, request_key, result})
     end)
     
