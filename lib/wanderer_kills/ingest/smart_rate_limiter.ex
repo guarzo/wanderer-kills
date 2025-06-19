@@ -250,7 +250,13 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
 
     # Execute the actual request asynchronously
     Task.start(fn ->
-      result = perform_zkb_request(request)
+      result = try do
+        perform_zkb_request(request)
+      rescue
+        error -> {:error, error}
+      catch
+        :exit, reason -> {:error, {:exit, reason}}
+      end
       GenServer.cast(__MODULE__, {:request_complete, request.id, result})
     end)
 
