@@ -260,6 +260,7 @@ class WandererKillsClient {
     return new Promise((resolve, reject) => {
       this.channel.push('subscribe_characters', { character_ids: characterIds })
         .receive('ok', (response) => {
+          characterIds.forEach(id => this.characterSubscriptions.add(id));
           console.log(`✅ Subscribed to characters: ${characterIds.join(', ')}`);
           console.log(`👤 Total character subscriptions: ${response.subscribed_characters.length}`);
           resolve(response);
@@ -279,6 +280,7 @@ class WandererKillsClient {
     return new Promise((resolve, reject) => {
       this.channel.push('unsubscribe_characters', { character_ids: characterIds })
         .receive('ok', (response) => {
+          characterIds.forEach(id => this.characterSubscriptions.delete(id));
           console.log(`❌ Unsubscribed from characters: ${characterIds.join(', ')}`);
           console.log(`👤 Remaining character subscriptions: ${response.subscribed_characters.length}`);
           resolve(response);
@@ -461,21 +463,9 @@ async function advancedExample() {
 
   try {
     // Connect with initial subscriptions
-    await client.connect();
-
-    // Join with both systems and characters at once
-    // This creates an OR filter - you'll receive kills that match:
-    // - Any of the specified systems OR
-    // - Any of the specified characters (as victim or attacker)
-    const channel = client.socket.channel('killmails:lobby', {
+    await client.connect({
       systems: [30000142, 30002187],      // Jita, Amarr
       character_ids: [95465499, 90379338] // Example character IDs
-    });
-
-    await new Promise((resolve, reject) => {
-      channel.join()
-        .receive('ok', resolve)
-        .receive('error', reject);
     });
 
     console.log('✅ Connected with mixed subscriptions');
@@ -486,9 +476,45 @@ async function advancedExample() {
     // 3. Any system where character 95465499 gets a kill or dies
     // 4. Any system where character 90379338 gets a kill or dies
 
+    // Demonstrate dynamic subscription management
+    setTimeout(async () => {
+      console.log('\n📝 Adding more subscriptions...');
+      
+      // Add more systems
+      await client.subscribeToSystems([30002659]); // Dodixie
+      
+      // Add more characters
+      await client.subscribeToCharacters([12345678]); // Example character
+      
+      // Get updated status
+      await client.getStatus();
+    }, 30000); // After 30 seconds
+
+    // Demonstrate unsubscribing
+    setTimeout(async () => {
+      console.log('\n📝 Removing some subscriptions...');
+      
+      // Remove a system
+      await client.unsubscribeFromSystems([30000142]); // Remove Jita
+      
+      // Remove a character
+      await client.unsubscribeFromCharacters([90379338]);
+      
+      // Get final status
+      await client.getStatus();
+    }, 60000); // After 1 minute
+
+    // Keep running for 5 minutes
+    setTimeout(async () => {
+      console.log('\n📍 Disconnecting...');
+      await client.disconnect();
+      process.exit(0);
+    }, 5 * 60 * 1000);
+
   } catch (error) {
     console.error('Advanced example error:', error);
     await client.disconnect();
+    process.exit(1);
   }
 }
 
@@ -520,4 +546,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 }
 
-export default WandererKillsClient; 
+export default WandererKillsClient;
