@@ -122,7 +122,8 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
       refill_rate: Keyword.get(opts, :refill_rate, 50),
       refill_interval_ms: Keyword.get(opts, :refill_interval_ms, 1000),
       circuit_failure_threshold: Keyword.get(opts, :circuit_failure_threshold, 5),
-      circuit_timeout_ms: Keyword.get(opts, :circuit_timeout_ms, 30_000)
+      circuit_timeout_ms: Keyword.get(opts, :circuit_timeout_ms, 30_000),
+      queue_timeout_ms: Keyword.get(opts, :queue_timeout_ms, 60_000)
     }
 
     state = %State{
@@ -179,13 +180,24 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
         {:noreply, %{state | pending_requests: pending_requests}}
 
       {pending_request, pending_requests} ->
+        # Cancel timeout if it exists
+        if pending_request[:timeout_ref] do
+          Process.cancel_timer(pending_request.timeout_ref)
+        end
+
         # Reply to all waiters
         Enum.each(pending_request.waiters, fn waiter ->
           GenServer.reply(waiter, result)
         end)
 
-        new_state = %{state | pending_requests: pending_requests}
-        {:noreply, new_state}
+        # Update circuit breaker state based on result
+        updated_state =
+          update_circuit_breaker_state(result, %{state | pending_requests: pending_requests})
+
+        # Try to process more requests from queue
+        final_state = process_queue(updated_state)
+
+        {:noreply, final_state}
     end
   end
 
@@ -200,6 +212,12 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     schedule_token_refill(state.config.refill_interval_ms)
 
     {:noreply, final_state}
+  end
+
+  def handle_info(:process_queue, state) do
+    # Process queued requests after delay
+    new_state = process_queue(state)
+    {:noreply, new_state}
   end
 
   def handle_info(:check_circuit, state) do
@@ -251,16 +269,17 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     # Add to pending requests
     request_key = request_key(request)
 
+    # Set timeout for request
+    timeout_ms = request.timeout || 30_000
+    timeout_ref = Process.send_after(self(), {:request_timeout, request.id}, timeout_ms)
+
     pending_requests =
       Map.put(state.pending_requests, request_key, %{
         request: request,
         waiters: [from],
-        started_at: System.monotonic_time(:millisecond)
+        started_at: System.monotonic_time(:millisecond),
+        timeout_ref: timeout_ref
       })
-
-    # Set timeout for request
-    timeout_ms = min(30_000, request.timeout || 30_000)
-    _timeout_ref = Process.send_after(self(), {:request_timeout, request.id}, timeout_ms)
 
     # Execute the actual request asynchronously
     Task.start(fn ->
@@ -283,7 +302,8 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
 
   defp queue_request(request, from, state) do
     # Add timeout for queued request
-    timeout_ref = Process.send_after(self(), {:request_timeout, request.id}, 60_000)
+    timeout_ref =
+      Process.send_after(self(), {:request_timeout, request.id}, state.config.queue_timeout_ms)
 
     # Create priority queue item
     queue_item = {priority_value(request.priority), request, from, timeout_ref}
@@ -301,9 +321,19 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     {:noreply, new_state}
   end
 
-  defp process_queue(state) do
+  defp process_queue(state), do: process_queue(state, 0)
+
+  defp process_queue(state, depth) when depth >= 10 do
+    # Prevent infinite recursion - schedule another process later
+    Process.send_after(self(), :process_queue, 10)
+    state
+  end
+
+  defp process_queue(state, depth) do
     if state.current_tokens > 0 and not :queue.is_empty(state.request_queue) do
-      execute_next_queued_request(state)
+      new_state = execute_next_queued_request(state)
+      # Continue processing with incremented depth
+      process_queue(new_state, depth + 1)
     else
       state
     end
@@ -456,5 +486,38 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
         updated_pending = Map.delete(pending_requests, request_key)
         {pending_request, updated_pending}
     end
+  end
+
+  defp update_circuit_breaker_state({:ok, _}, state) do
+    # Success - reset failure count
+    %{state | failure_count: 0, circuit_state: :closed}
+  end
+
+  defp update_circuit_breaker_state({:error, %{type: :rate_limited}}, state) do
+    # Rate limited - increment failure count
+    new_failure_count = state.failure_count + 1
+
+    if new_failure_count >= state.config.circuit_failure_threshold do
+      # Open circuit breaker
+      Logger.warning(
+        "[SmartRateLimiter] Opening circuit breaker after #{new_failure_count} failures"
+      )
+
+      Process.send_after(self(), :check_circuit, state.circuit_timeout)
+
+      %{
+        state
+        | failure_count: new_failure_count,
+          circuit_state: :open,
+          last_failure: System.monotonic_time(:millisecond)
+      }
+    else
+      %{state | failure_count: new_failure_count}
+    end
+  end
+
+  defp update_circuit_breaker_state({:error, _}, state) do
+    # Other errors - don't affect circuit breaker
+    state
   end
 end

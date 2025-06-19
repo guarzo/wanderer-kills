@@ -105,7 +105,12 @@ defmodule WandererKills.Ingest.RequestCoalescer do
       pending ->
         # Reply to all waiters
         Enum.each(pending.requesters, fn {_pid, ref} ->
-          GenServer.reply(ref, result)
+          try do
+            GenServer.reply(ref, result)
+          catch
+            # Requester process died, ignore
+            :exit, _ -> :ok
+          end
         end)
 
         # Cancel timeout and remove from pending
@@ -145,7 +150,12 @@ defmodule WandererKills.Ingest.RequestCoalescer do
         timeout_error = {:error, :timeout}
 
         Enum.each(pending.requesters, fn {_pid, ref} ->
-          GenServer.reply(ref, timeout_error)
+          try do
+            GenServer.reply(ref, timeout_error)
+          catch
+            # Requester process died, ignore
+            :exit, _ -> :ok
+          end
         end)
 
         new_pending = Map.delete(state.pending_requests, request_key)
@@ -169,7 +179,6 @@ defmodule WandererKills.Ingest.RequestCoalescer do
         state.request_timeout_ms
       )
 
-    # Start async execution
     # Start async execution with monitoring
     {executing_pid, _monitor_ref} =
       spawn_monitor(fn ->
