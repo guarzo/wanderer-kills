@@ -408,22 +408,21 @@ defmodule WandererKills.Subs.Preloader do
     end
   end
 
-  # Smart rate-limited system killmail fetching
   defp fetch_system_kills_smart(system_id, opts, priority) do
-    # Use feature flag to control smart rate limiting
-    if Application.get_env(:wanderer_kills, :features, [])[:smart_rate_limiting] do
-      # Use request coalescing to avoid duplicate fetches
+    features = Application.get_env(:wanderer_kills, :features, [])
+
+    if features[:smart_rate_limiting] do
       request_key = {:preload, system_id, opts}
-      
+
       RequestCoalescer.request(request_key, fn ->
         SmartRateLimiter.request_system_killmails(
           system_id,
           opts,
-          [priority: priority, timeout: 30_000]
+          priority: priority,
+          timeout: 30_000
         )
       end)
     else
-      # Fallback to direct ZkbClient call
       ZkbClient.fetch_system_killmails(system_id, opts)
     end
   end
