@@ -1,176 +1,738 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
   title: WandererKills API
   description: |
-    Real-time killmail event streaming API for EVE Online.
-    Provides access to killmail events with client offset tracking and system filtering.
+    Real-time EVE Online killmail data service providing multiple integration patterns
+    for consuming killmail data. The service fetches data from zKillboard's RedisQ
+    stream and enriches it with ESI (EVE Swagger Interface) data.
   version: 1.0.0
   contact:
     name: API Support
-    email: support@wandererkills.com
+    url: https://github.com/wanderer-industries/wanderer-kills
 
 servers:
-  - url: https://api.wandererkills.com/v1
+  - url: http://localhost:4004/api/v1
+    description: Local development server
+  - url: https://api.wandererkills.com/api/v1
     description: Production server
-  - url: https://staging-api.wandererkills.com/v1
-    description: Staging server
 
 tags:
-  - name: Killfeed
-    description: Real-time killmail event streaming
+  - name: Kills
+    description: Killmail data operations
+  - name: Subscriptions
+    description: Webhook subscription management
+  - name: Infrastructure
+    description: Health and monitoring endpoints
 
 paths:
-  /killfeed/poll:
+  # Kill Management Endpoints
+  /kills/system/{system_id}:
     get:
       tags:
-        - Killfeed
-      summary: Poll for multiple killmail events
-      description: |
-        Fetches all new killmail events for a client across multiple systems.
-        Events are returned in chronological order and client offsets are automatically tracked.
-      operationId: pollKillfeed
+        - Kills
+      summary: Get kills for a system
+      description: Fetches killmails for a specific EVE Online system with optional time filtering
+      operationId: getSystemKills
       parameters:
-        - name: client_id
-          in: query
-          description: Unique identifier for the client
+        - name: system_id
+          in: path
+          description: EVE Online solar system ID
           required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 32000000
+        - name: since_hours
+          in: query
+          description: Hours to look back for kills
           schema:
             type: string
-            minLength: 1
-            maxLength: 100
-        - name: systems[]
+            default: "24"
+        - name: limit
           in: query
-          description: Array of system IDs to fetch events for
-          required: true
+          description: Maximum kills to return
           schema:
-            type: array
-            items:
-              type: integer
-              minimum: 1
-              maximum: 1000000
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 1000
       responses:
         "200":
-          description: Successfully retrieved events
+          description: Successfully retrieved kills
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  events:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/KillmailEvent"
-        "204":
-          description: No new events available
+                  data:
+                    type: object
+                    properties:
+                      kills:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Killmail"
+                      timestamp:
+                        type: string
+                        format: date-time
+                      cached:
+                        type: boolean
+                        description: Whether data was served from cache
+                  timestamp:
+                    type: string
+                    format: date-time
         "400":
-          description: Invalid parameters
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/BadRequest"
         "500":
-          description: Internal server error
+          $ref: "#/components/responses/InternalError"
+
+  /kills/systems:
+    post:
+      tags:
+        - Kills
+      summary: Bulk fetch multiple systems
+      description: Fetches killmails for multiple systems in parallel
+      operationId: bulkGetSystemKills
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - system_ids
+              properties:
+                system_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Array of EVE Online system IDs
+                  minItems: 1
+                  maxItems: 100
+                since_hours:
+                  type: integer
+                  default: 24
+                  description: Hours to look back for kills
+                limit:
+                  type: integer
+                  default: 50
+                  minimum: 1
+                  maximum: 1000
+                  description: Maximum kills per system
+      responses:
+        "200":
+          description: Successfully retrieved kills for multiple systems
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      systems_kills:
+                        type: object
+                        additionalProperties:
+                          type: array
+                          items:
+                            $ref: "#/components/schemas/Killmail"
+                      timestamp:
+                        type: string
+                        format: date-time
+                  timestamp:
+                    type: string
+                    format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
-  /killfeed/next:
+  /kills/cached/{system_id}:
     get:
       tags:
-        - Killfeed
-      summary: Fetch next single killmail event
-      description: |
-        Fetches the next single killmail event for a client across multiple systems.
-        The event with the lowest event_id that hasn't been seen by the client is returned.
-      operationId: nextKillmail
+        - Kills
+      summary: Get cached kills only
+      description: Returns only cached kills without triggering a fresh fetch
+      operationId: getCachedSystemKills
       parameters:
-        - name: client_id
-          in: query
-          description: Unique identifier for the client
+        - name: system_id
+          in: path
+          description: EVE Online solar system ID
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 32000000
+      responses:
+        "200":
+          description: Successfully retrieved cached kills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      kills:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Killmail"
+                      timestamp:
+                        type: string
+                        format: date-time
+                      cached:
+                        type: boolean
+                        enum: [true]
+                  timestamp:
+                    type: string
+                    format: date-time
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /killmail/{killmail_id}:
+    get:
+      tags:
+        - Kills
+      summary: Get specific killmail
+      description: Fetches details for a specific killmail by ID
+      operationId: getKillmail
+      parameters:
+        - name: killmail_id
+          in: path
+          description: Killmail ID
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Successfully retrieved killmail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Killmail"
+                  timestamp:
+                    type: string
+                    format: date-time
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /kills/count/{system_id}:
+    get:
+      tags:
+        - Kills
+      summary: Get kill count for system
+      description: Returns the number of killmails for a system
+      operationId: getSystemKillCount
+      parameters:
+        - name: system_id
+          in: path
+          description: EVE Online solar system ID
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 32000000
+      responses:
+        "200":
+          description: Successfully retrieved kill count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      system_id:
+                        type: integer
+                      count:
+                        type: integer
+                      timestamp:
+                        type: string
+                        format: date-time
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  # Subscription Management Endpoints
+  /subscriptions:
+    post:
+      tags:
+        - Subscriptions
+      summary: Create webhook subscription
+      description: |
+        Creates a webhook subscription for killmail notifications.
+        At least one of system_ids or character_ids must be provided.
+      operationId: createSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - subscriber_id
+                - callback_url
+              properties:
+                subscriber_id:
+                  type: string
+                  description: Unique identifier for your subscription
+                system_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Array of EVE Online system IDs to monitor
+                  maxItems: 100
+                character_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: Array of character IDs to track (as victim or attacker)
+                  maxItems: 1000
+                callback_url:
+                  type: string
+                  format: uri
+                  description: HTTP/HTTPS URL where webhooks will be delivered
+      responses:
+        "200":
+          description: Subscription created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      subscription_id:
+                        type: string
+                      message:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    get:
+      tags:
+        - Subscriptions
+      summary: List all subscriptions
+      description: Returns all active webhook subscriptions
+      operationId: listSubscriptions
+      responses:
+        "200":
+          description: Successfully retrieved subscriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      subscriptions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Subscription"
+                      count:
+                        type: integer
+
+  /subscriptions/stats:
+    get:
+      tags:
+        - Subscriptions
+      summary: Get subscription statistics
+      description: Returns aggregated subscription statistics
+      operationId: getSubscriptionStats
+      responses:
+        "200":
+          description: Successfully retrieved statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      total_subscriptions:
+                        type: integer
+                      total_systems_monitored:
+                        type: integer
+                      total_characters_monitored:
+                        type: integer
+                      active_webhooks:
+                        type: integer
+
+  /subscriptions/{subscriber_id}:
+    delete:
+      tags:
+        - Subscriptions
+      summary: Delete subscription
+      description: Removes a webhook subscription
+      operationId: deleteSubscription
+      parameters:
+        - name: subscriber_id
+          in: path
+          description: Subscriber identifier
           required: true
           schema:
             type: string
-            minLength: 1
-            maxLength: 100
-        - name: systems[]
-          in: query
-          description: Array of system IDs to fetch events for
-          required: true
-          schema:
-            type: array
-            items:
-              type: integer
-              minimum: 1
-              maximum: 1000000
       responses:
         "200":
-          description: Successfully retrieved event
+          description: Successfully deleted subscription
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KillmailEvent"
-        "204":
-          description: No new events available
-        "400":
-          description: Invalid parameters
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                      subscriber_id:
+                        type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # Infrastructure Endpoints (no /api/v1 prefix)
+  /ping:
+    get:
+      tags:
+        - Infrastructure
+      summary: Simple health check
+      description: Returns "pong" for basic connectivity testing
+      operationId: ping
+      servers:
+        - url: http://localhost:4004
+          description: Local development server
+        - url: https://api.wandererkills.com
+          description: Production server
+      responses:
+        "200":
+          description: Service is responsive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+
+  /health:
+    get:
+      tags:
+        - Infrastructure
+      summary: Detailed health status
+      description: Returns component health status and overall service health
+      operationId: getHealth
+      servers:
+        - url: http://localhost:4004
+          description: Local development server
+        - url: https://api.wandererkills.com
+          description: Production server
+      responses:
+        "200":
+          description: Service is healthy
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
-        "500":
-          description: Internal server error
+                type: object
+                properties:
+                  healthy:
+                    type: boolean
+                  components:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        healthy:
+                          type: boolean
+                        message:
+                          type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        "503":
+          description: Service is unhealthy
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: "#/components/schemas/HealthStatus"
+
+  /status:
+    get:
+      tags:
+        - Infrastructure
+      summary: Service status
+      description: Detailed service status including uptime and metrics
+      operationId: getStatus
+      servers:
+        - url: http://localhost:4004
+          description: Local development server
+        - url: https://api.wandererkills.com
+          description: Production server
+      responses:
+        "200":
+          description: Service status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                  version:
+                    type: string
+                  uptime_seconds:
+                    type: number
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /metrics:
+    get:
+      tags:
+        - Infrastructure
+      summary: Service metrics
+      description: Returns service metrics including request rates and performance data
+      operationId: getMetrics
+      servers:
+        - url: http://localhost:4004
+          description: Local development server
+        - url: https://api.wandererkills.com
+          description: Production server
+      responses:
+        "200":
+          description: Metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /websocket:
+    get:
+      tags:
+        - Infrastructure
+      summary: WebSocket connection info
+      description: Returns WebSocket connection details
+      operationId: getWebSocketInfo
+      servers:
+        - url: http://localhost:4004
+          description: Local development server
+        - url: https://api.wandererkills.com
+          description: Production server
+      responses:
+        "200":
+          description: WebSocket info retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  websocket_url:
+                    type: string
+                    format: uri
+                  connection_info:
+                    type: object
+
+  /websocket/status:
+    get:
+      tags:
+        - Infrastructure
+      summary: WebSocket server statistics
+      description: Returns WebSocket server statistics (cached for 30 seconds)
+      operationId: getWebSocketStatus
+      servers:
+        - url: http://localhost:4004
+          description: Local development server
+        - url: https://api.wandererkills.com
+          description: Production server
+      responses:
+        "200":
+          description: WebSocket statistics retrieved
+          content:
+            application/json:
+              schema:
+                type: object
 
 components:
   schemas:
-    KillmailEvent:
+    Killmail:
       type: object
-      required:
-        - event_id
-        - system_id
-        - killmail
       properties:
-        event_id:
+        killmail_id:
           type: integer
-          description: Unique identifier for the event
-          minimum: 1
+          description: Unique identifier for the killmail
+        kill_time:
+          type: string
+          format: date-time
+          description: When the kill occurred
         system_id:
           type: integer
-          description: Solar system ID where the killmail occurred
-          minimum: 1
-          maximum: 1000000
-        killmail:
-          type: object
-          description: The killmail data
-          properties:
-            killmail_id:
-              type: integer
-              description: Unique identifier for the killmail
-            killmail_time:
-              type: string
-              format: date-time
-              description: When the killmail occurred
-            victim:
-              type: object
-              description: Information about the destroyed ship
-            attackers:
-              type: array
-              description: List of attackers involved
-              items:
-                type: object
-            zkb:
-              type: object
-              description: zKillboard specific information
+          description: Solar system ID where the kill occurred
+        victim:
+          $ref: "#/components/schemas/Victim"
+        attackers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attacker"
+        zkb:
+          $ref: "#/components/schemas/ZKBInfo"
 
-    Error:
+    Victim:
+      type: object
+      properties:
+        character_id:
+          type: integer
+        character_name:
+          type: string
+        corporation_id:
+          type: integer
+        corporation_name:
+          type: string
+        alliance_id:
+          type: integer
+        alliance_name:
+          type: string
+        ship_type_id:
+          type: integer
+        ship_name:
+          type: string
+        damage_taken:
+          type: integer
+
+    Attacker:
+      type: object
+      properties:
+        character_id:
+          type: integer
+        character_name:
+          type: string
+        corporation_id:
+          type: integer
+        corporation_name:
+          type: string
+        alliance_id:
+          type: integer
+        alliance_name:
+          type: string
+        ship_type_id:
+          type: integer
+        ship_name:
+          type: string
+        damage_done:
+          type: integer
+        final_blow:
+          type: boolean
+
+    ZKBInfo:
+      type: object
+      properties:
+        location_id:
+          type: integer
+        hash:
+          type: string
+        fitted_value:
+          type: number
+        total_value:
+          type: number
+        points:
+          type: integer
+        npc:
+          type: boolean
+        solo:
+          type: boolean
+        awox:
+          type: boolean
+
+    Subscription:
+      type: object
+      properties:
+        subscriber_id:
+          type: string
+        system_ids:
+          type: array
+          items:
+            type: integer
+        character_ids:
+          type: array
+          items:
+            type: integer
+        callback_url:
+          type: string
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
       type: object
       required:
         - error
+        - code
+        - timestamp
       properties:
         error:
           type: string
-          description: Error message describing what went wrong
+          description: Human-readable error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+
+    HealthStatus:
+      type: object
+      properties:
+        healthy:
+          type: boolean
+        components:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Invalid request parameters"
+            code: "bad_request"
+            timestamp: "2024-01-15T15:00:00Z"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Resource not found"
+            code: "not_found"
+            timestamp: "2024-01-15T15:00:00Z"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Internal server error"
+            code: "internal_server_error"
+            timestamp: "2024-01-15T15:00:00Z"

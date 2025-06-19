@@ -58,6 +58,28 @@ defmodule WandererKillsWeb.KillmailChannel do
   channel.push("get_status", {})
     .receive("ok", resp => console.log("Current status:", resp))
   ```
+
+  ## Heartbeat and Connection Management
+
+  Phoenix channels include a built-in heartbeat mechanism that automatically:
+  - Sends heartbeat messages every 30 seconds (configurable)
+  - Detects disconnected clients and cleans up resources
+  - Attempts to reconnect automatically on connection loss
+
+  To configure the heartbeat interval and timeout in your client:
+  ```javascript
+  const socket = new Socket("ws://localhost:4000/socket", {
+    params: {client_identifier: "my-app"},
+    heartbeatIntervalMs: 30000,  // Send heartbeat every 30 seconds
+    reconnectAfterMs: (tries) => {
+      // Exponential backoff: [1s, 2s, 5s, 10s]
+      return [1000, 2000, 5000, 10000][tries - 1] || 10000
+    }
+  })
+  ```
+
+  The server will automatically disconnect clients that fail to respond to heartbeats,
+  ensuring resources are cleaned up properly.
   """
 
   use WandererKillsWeb, :channel
@@ -105,13 +127,14 @@ defmodule WandererKillsWeb.KillmailChannel do
       initial_systems_count: 0
     })
 
-    Logger.debug("[DEBUG] Client connected and joined killmail channel",
+    Logger.info("[INFO] Client connected and joined killmail channel",
       user_id: socket.assigns.user_id,
       client_identifier: socket.assigns[:client_identifier],
       subscription_id: subscription_id,
       peer_data: socket.assigns.peer_data,
       user_agent: socket.assigns.user_agent,
-      initial_systems_count: 0
+      initial_systems_count: 0,
+      initial_characters_count: 0
     )
 
     response = %{
@@ -151,11 +174,20 @@ defmodule WandererKillsWeb.KillmailChannel do
           # Check if we need to unsubscribe from all_systems topic
           maybe_unsubscribe_from_all_systems(socket, current_systems, new_systems)
 
-          Logger.debug("[DEBUG] Client subscribed to systems",
+          # Track the subscription update
+          WebSocketStats.track_subscription(:updated, MapSet.size(new_systems), %{
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
+            operation: :add_systems
+          })
+
+          Logger.info("[INFO] Client subscribed to systems",
+            user_id: socket.assigns.user_id,
+            subscription_id: socket.assigns.subscription_id,
+            new_systems: MapSet.to_list(new_systems),
             new_systems_count: MapSet.size(new_systems),
-            total_systems_count: MapSet.size(all_systems)
+            total_systems_count: MapSet.size(all_systems),
+            all_systems: MapSet.to_list(all_systems)
           )
 
           # Preload recent kills for new systems
@@ -193,6 +225,13 @@ defmodule WandererKillsWeb.KillmailChannel do
           update_subscription(socket.assigns.subscription_id, updates)
 
           socket = assign(socket, :subscribed_systems, remaining_systems)
+
+          # Track the subscription update (negative count for removals)
+          WebSocketStats.track_subscription(:updated, -MapSet.size(systems_to_remove), %{
+            user_id: socket.assigns.user_id,
+            subscription_id: socket.assigns.subscription_id,
+            operation: :remove_systems
+          })
 
           Logger.debug("[DEBUG] Client unsubscribed from systems",
             user_id: socket.assigns.user_id,
@@ -316,6 +355,16 @@ defmodule WandererKillsWeb.KillmailChannel do
         },
         socket
       ) do
+    Logger.info("[INFO] WebSocket channel received killmail update",
+      user_id: socket.assigns.user_id,
+      subscription_id: socket.assigns.subscription_id,
+      system_id: system_id,
+      killmail_count: length(killmails),
+      subscribed_systems: MapSet.to_list(socket.assigns.subscribed_systems),
+      subscribed_characters:
+        MapSet.to_list(socket.assigns[:subscribed_characters] || MapSet.new())
+    )
+
     # Build a subscription-like structure for filtering
     subscription = %{
       "system_ids" => MapSet.to_list(socket.assigns.subscribed_systems),
@@ -526,12 +575,13 @@ defmodule WandererKillsWeb.KillmailChannel do
         "killmails:#{subscription_id}"
       )
 
-      Logger.debug("[DEBUG] Client connected and joined killmail channel",
+      Logger.info("[INFO] Client connected and joined killmail channel with systems",
         user_id: socket.assigns.user_id,
         client_identifier: socket.assigns[:client_identifier],
         subscription_id: subscription_id,
         peer_data: socket.assigns.peer_data,
         user_agent: socket.assigns.user_agent,
+        initial_systems: valid_systems,
         initial_systems_count: length(valid_systems),
         initial_characters_count: length(valid_characters)
       )
@@ -655,6 +705,8 @@ defmodule WandererKillsWeb.KillmailChannel do
     # Register with SubscriptionManager with character support
     SubscriptionManager.add_websocket_subscription(%{
       "id" => subscription_id,
+      # Required field
+      "subscriber_id" => socket.assigns.user_id,
       "user_id" => socket.assigns.user_id,
       "system_ids" => systems,
       "character_ids" => characters,

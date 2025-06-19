@@ -3,37 +3,64 @@ defmodule WandererKills.WebSocketClient do
   Elixir WebSocket client for WandererKills real-time killmail subscriptions.
 
   This example shows how to connect to the WandererKills WebSocket API
-  from within Elixir to receive real-time killmail updates for specific
-  EVE Online systems.
+  from within Elixir to receive real-time killmail updates for:
+  - Specific EVE Online systems
+  - Specific characters (as victim or attacker)
+
+  Features:
+  - System-based subscriptions: Monitor specific solar systems
+  - Character-based subscriptions: Track when specific characters get kills or die
+  - Mixed subscriptions: Combine both system and character filters (OR logic)
+  - Real-time updates: Receive killmails as they happen
+  - Historical preload: Get recent kills when first subscribing
+  - Extended preload: Request historical data with progressive delivery
 
   ## Usage
 
       # Start the client
       {:ok, pid} = WandererKills.WebSocketClient.start_link([
         server_url: "ws://localhost:4004",
-        systems: [30000142, 30002187],  # Jita, Amarr
-        client_identifier: "my_app"      # Optional: helps identify your connection in server logs
+        systems: [30000142, 30002187],      # Jita, Amarr
+        character_ids: [95465499],          # Optional: track characters
+        preload: %{                         # Optional: extended preload
+          enabled: true,
+          limit_per_system: 50,
+          since_hours: 72
+        },
+        client_identifier: "my_app"         # Optional: helps identify your connection
       ])
 
       # Subscribe to additional systems
       WandererKills.WebSocketClient.subscribe_to_systems(pid, [30002659]) # Dodixie
 
+      # Subscribe to characters
+      WandererKills.WebSocketClient.subscribe_to_characters(pid, [12345678])
+
       # Unsubscribe from systems
       WandererKills.WebSocketClient.unsubscribe_from_systems(pid, [30000142])
+
+      # Unsubscribe from characters
+      WandererKills.WebSocketClient.unsubscribe_from_characters(pid, [95465499])
 
       # Get current status
       WandererKills.WebSocketClient.get_status(pid)
 
       # Stop the client
       WandererKills.WebSocketClient.stop(pid)
+
+  ## Dependencies
+
+  This example uses `phoenix_client` for WebSocket communication:
+
+      Mix.install([
+        {:phoenix_client, "~> 0.3"},
+        {:websocket_client, "~> 1.5"},
+        {:jason, "~> 1.4"}
+      ])
   """
 
   use GenServer
   require Logger
-
-  alias Phoenix.Channels.GenSocketClient
-
-  @behaviour GenSocketClient
 
   # Client API
 
@@ -44,6 +71,8 @@ defmodule WandererKills.WebSocketClient do
 
     * `:server_url` - WebSocket server URL (required)
     * `:systems` - Initial systems to subscribe to (optional)
+    * `:character_ids` - Initial characters to track (optional)
+    * `:preload` - Extended preload configuration (optional)
     * `:client_identifier` - Client identifier for debugging (optional, max 32 chars)
     * `:name` - Process name (optional)
   """
@@ -56,17 +85,33 @@ defmodule WandererKills.WebSocketClient do
   @doc """
   Subscribe to additional EVE Online systems.
   """
-  @spec subscribe_to_systems(pid() | atom(), [integer()]) :: :ok
+  @spec subscribe_to_systems(pid() | atom(), [integer()]) :: :ok | {:error, term()}
   def subscribe_to_systems(client, system_ids) when is_list(system_ids) do
-    GenServer.cast(client, {:subscribe_systems, system_ids})
+    GenServer.call(client, {:subscribe_systems, system_ids})
   end
 
   @doc """
   Unsubscribe from EVE Online systems.
   """
-  @spec unsubscribe_from_systems(pid() | atom(), [integer()]) :: :ok
+  @spec unsubscribe_from_systems(pid() | atom(), [integer()]) :: :ok | {:error, term()}
   def unsubscribe_from_systems(client, system_ids) when is_list(system_ids) do
-    GenServer.cast(client, {:unsubscribe_systems, system_ids})
+    GenServer.call(client, {:unsubscribe_systems, system_ids})
+  end
+
+  @doc """
+  Subscribe to specific characters (track as victim or attacker).
+  """
+  @spec subscribe_to_characters(pid() | atom(), [integer()]) :: :ok | {:error, term()}
+  def subscribe_to_characters(client, character_ids) when is_list(character_ids) do
+    GenServer.call(client, {:subscribe_characters, character_ids})
+  end
+
+  @doc """
+  Unsubscribe from specific characters.
+  """
+  @spec unsubscribe_from_characters(pid() | atom(), [integer()]) :: :ok | {:error, term()}
+  def unsubscribe_from_characters(client, character_ids) when is_list(character_ids) do
+    GenServer.call(client, {:unsubscribe_characters, character_ids})
   end
 
   @doc """
@@ -91,6 +136,8 @@ defmodule WandererKills.WebSocketClient do
   def init(opts) do
     server_url = Keyword.fetch!(opts, :server_url)
     initial_systems = Keyword.get(opts, :systems, [])
+    initial_characters = Keyword.get(opts, :character_ids, [])
+    preload = Keyword.get(opts, :preload, %{})
     client_identifier = Keyword.get(opts, :client_identifier, nil)
 
     # Convert HTTP URL to WebSocket URL if needed
@@ -103,8 +150,12 @@ defmodule WandererKills.WebSocketClient do
       server_url: websocket_url,
       socket: nil,
       channel: nil,
+      channel_ref: nil,
       subscribed_systems: MapSet.new(),
+      subscribed_characters: MapSet.new(),
       initial_systems: initial_systems,
+      initial_characters: initial_characters,
+      preload: preload,
       subscription_id: nil,
       connected: false,
       client_identifier: client_identifier
@@ -113,6 +164,7 @@ defmodule WandererKills.WebSocketClient do
     Logger.info("🚀 Starting WandererKills WebSocket client",
       server_url: websocket_url,
       initial_systems: initial_systems,
+      initial_characters: initial_characters,
       client_identifier: client_identifier
     )
 
@@ -129,18 +181,39 @@ defmodule WandererKills.WebSocketClient do
         Logger.info("✅ Connected to WandererKills WebSocket")
 
         # Join the killmails channel
-        case join_channel(socket, state.initial_systems) do
-          {:ok, channel} ->
+        channel_params = %{}
+        channel_params = if length(state.initial_systems) > 0,
+          do: Map.put(channel_params, "systems", state.initial_systems),
+          else: channel_params
+        
+        channel_params = if length(state.initial_characters) > 0,
+          do: Map.put(channel_params, "character_ids", state.initial_characters),
+          else: channel_params
+          
+        channel_params = if map_size(state.preload) > 0,
+          do: Map.put(channel_params, "preload", state.preload),
+          else: channel_params
+
+        case PhoenixClient.Channel.join(socket, "killmails:lobby", channel_params) do
+          {:ok, response, channel_ref} ->
+            subscription_id = Map.get(response, "subscription_id")
+            
             new_state = %{state |
               socket: socket,
-              channel: channel,
+              channel: socket,
+              channel_ref: channel_ref,
               connected: true,
-              subscribed_systems: MapSet.new(state.initial_systems)
+              subscription_id: subscription_id,
+              subscribed_systems: MapSet.new(state.initial_systems),
+              subscribed_characters: MapSet.new(state.initial_characters)
             }
 
             Logger.info("📡 Joined killmails channel",
+              subscription_id: subscription_id,
               initial_systems: state.initial_systems,
-              systems_count: length(state.initial_systems)
+              initial_characters: state.initial_characters,
+              systems_count: length(state.initial_systems),
+              characters_count: length(state.initial_characters)
             )
 
             {:noreply, new_state}
@@ -161,221 +234,50 @@ defmodule WandererKills.WebSocketClient do
   end
 
   @impl true
-  def handle_cast({:subscribe_systems, system_ids}, %{connected: true} = state) do
-    case push_to_channel(state.channel, "subscribe_systems", %{systems: system_ids}) do
-      :ok ->
-        new_subscriptions = MapSet.union(state.subscribed_systems, MapSet.new(system_ids))
-        new_state = %{state | subscribed_systems: new_subscriptions}
-
-        Logger.info("✅ Subscribed to additional systems",
-          systems: system_ids,
-          total_subscriptions: MapSet.size(new_subscriptions)
-        )
-
-        {:noreply, new_state}
-
-      {:error, reason} ->
-        Logger.error("❌ Failed to subscribe to systems: #{inspect(reason)}")
-        {:noreply, state}
-    end
-  end
-
-  def handle_cast({:subscribe_systems, _system_ids}, state) do
-    Logger.warning("⚠️  Cannot subscribe: not connected to WebSocket")
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_cast({:unsubscribe_systems, system_ids}, %{connected: true} = state) do
-    case push_to_channel(state.channel, "unsubscribe_systems", %{systems: system_ids}) do
-      :ok ->
-        new_subscriptions = MapSet.difference(state.subscribed_systems, MapSet.new(system_ids))
-        new_state = %{state | subscribed_systems: new_subscriptions}
-
-        Logger.info("❌ Unsubscribed from systems",
-          systems: system_ids,
-          remaining_subscriptions: MapSet.size(new_subscriptions)
-        )
-
-        {:noreply, new_state}
-
-      {:error, reason} ->
-        Logger.error("❌ Failed to unsubscribe from systems: #{inspect(reason)}")
-        {:noreply, state}
-    end
-  end
-
-  def handle_cast({:unsubscribe_systems, _system_ids}, state) do
-    Logger.warning("⚠️  Cannot unsubscribe: not connected to WebSocket")
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_call(:get_status, _from, state) do
-    status = %{
-      connected: state.connected,
-      server_url: state.server_url,
-      subscription_id: state.subscription_id,
-      subscribed_systems: MapSet.to_list(state.subscribed_systems),
-      systems_count: MapSet.size(state.subscribed_systems)
-    }
-
-    Logger.info("📋 Current status", status)
-    {:reply, {:ok, status}, state}
-  end
-
-  @impl true
-  def handle_call(_msg, _from, state) do
-    {:reply, {:error, :unknown_call}, state}
-  end
-
-  # Phoenix GenSocketClient Callbacks
-
-  @impl GenSocketClient
-  def handle_connected(transport, state) do
-    Logger.debug("🔗 WebSocket transport connected", transport: inspect(transport))
-    {:ok, state}
-  end
-
-  @impl GenSocketClient
-  def handle_disconnected(reason, state) do
-    Logger.warning("📡 WebSocket disconnected", reason: inspect(reason))
-
-    # Update state and attempt reconnection
-    new_state = %{state | connected: false, socket: nil, channel: nil}
-
-    # Schedule reconnection
-    Process.send_after(self(), :connect, 5_000)
-
-    {:ok, new_state}
-  end
-
-  @impl GenSocketClient
-  def handle_channel_closed(topic, payload, _transport, state) do
-    Logger.warning("📺 Channel closed", topic: topic, payload: inspect(payload))
-
-    # Update state
-    new_state = %{state | channel: nil, connected: false}
-
-    # Attempt to rejoin
-    Process.send_after(self(), :connect, 2_000)
-
-    {:ok, new_state}
-  end
-
-  @impl GenSocketClient
-  def handle_message(topic, event, payload, _transport, state) do
-    handle_channel_message(topic, event, payload, state)
-  end
-
-  @impl GenSocketClient
-  def handle_reply(topic, ref, payload, _transport, state) do
-    Logger.debug("📬 Channel reply",
-      topic: topic,
-      ref: ref,
-      status: get_in(payload, ["status"])
-    )
-
-    # Handle join reply to extract subscription_id
-    if topic == "killmails:lobby" and get_in(payload, ["status"]) == "ok" do
-      subscription_id = get_in(payload, ["response", "subscription_id"])
-      new_state = %{state | subscription_id: subscription_id}
-      {:ok, new_state}
-    else
-      {:ok, state}
-    end
-  end
-
-  # Private Helper Functions
-
-  defp connect_to_websocket(state) do
-    url = "#{state.server_url}/socket/websocket"
-
-    params = %{vsn: "2.0.0"}
-    
-    # Add client identifier if provided
-    params = if state.client_identifier do
-      Map.put(params, :client_identifier, state.client_identifier)
-    else
-      params
-    end
-
-    socket_opts = [
-      url: url,
-      params: params
-    ]
-
-    case GenSocketClient.start_link(__MODULE__, nil, socket_opts) do
-      {:ok, socket} -> {:ok, socket}
-      error -> error
-    end
-  end
-
-  defp join_channel(socket, initial_systems) do
-    join_params = if Enum.empty?(initial_systems) do
-      %{}
-    else
-      %{systems: initial_systems}
-    end
-
-    case GenSocketClient.join(socket, "killmails:lobby", join_params) do
-      {:ok, response} ->
-        Logger.debug("📺 Joined channel", response: inspect(response))
-        {:ok, socket}
-      error -> error
-    end
-  end
-
-  defp push_to_channel(socket, event, payload) when is_pid(socket) do
-    case GenSocketClient.push(socket, "killmails:lobby", event, payload) do
-      {:ok, _ref} -> :ok
-      error -> error
-    end
-  end
-
-  defp push_to_channel(_socket, _event, _payload) do
-    {:error, :no_socket}
-  end
-
-  defp handle_channel_message("killmails:lobby", "killmail_update", payload, state) do
+  def handle_info(%{"event" => "killmail_update", "payload" => payload}, state) do
     system_id = payload["system_id"]
     killmails = payload["killmails"] || []
     timestamp = payload["timestamp"]
     is_preload = payload["preload"] || false
 
-    if is_preload do
-      Logger.info("📦 Preloaded killmails for system #{system_id}:",
-        killmails_count: length(killmails),
-        timestamp: timestamp,
-        preload: true
-      )
-    else
-      Logger.info("🔥 New real-time killmails in system #{system_id}:",
-        killmails_count: length(killmails),
-        timestamp: timestamp,
-        preload: false
-      )
-    end
+    Logger.info("🔥 New killmails in system #{system_id}:",
+      killmails_count: length(killmails),
+      timestamp: timestamp,
+      preload: is_preload and "Yes (historical data)" || "No (real-time)"
+    )
 
-    # Process each killmail
-    Enum.with_index(killmails, 1)
+    # Process first few killmails
+    Enum.take(killmails, 3)
+    |> Enum.with_index(1)
     |> Enum.each(fn {killmail, index} ->
       killmail_id = killmail["killmail_id"]
       victim = killmail["victim"] || %{}
       attackers = killmail["attackers"] || []
+      zkb = killmail["zkb"] || %{}
 
-      character_name = victim["character_name"] || "Unknown"
-      ship_name = victim["ship_type_name"] || "Unknown ship"
-      kill_time = killmail["kill_time"] || killmail["killmail_time"] || "Unknown time"
-
-      prefix = if is_preload, do: "📦", else: "🔥"
-
-      Logger.info("   #{prefix} [#{index}] Killmail ID: #{killmail_id}",
-        victim: character_name,
-        ship: ship_name,
-        kill_time: kill_time,
-        attackers_count: length(attackers)
-      )
+      victim_name = victim["character_name"] || "Unknown"
+      ship_name = victim["ship_name"] || "Unknown ship"
+      corp_name = victim["corporation_name"] || "Unknown"
+      
+      Logger.info("   [#{index}] Killmail ID: #{killmail_id}")
+      Logger.info("       Victim: #{victim_name} (#{ship_name})")
+      Logger.info("       Corporation: #{corp_name}")
+      
+      if length(attackers) > 0 do
+        Logger.info("       Attackers: #{length(attackers)}")
+        
+        final_blow = Enum.find(attackers, fn a -> a["final_blow"] == true end)
+        if final_blow do
+          attacker_name = final_blow["character_name"] || "Unknown"
+          attacker_ship = final_blow["ship_name"] || "Unknown ship"
+          Logger.info("       Final blow: #{attacker_name} (#{attacker_ship})")
+        end
+      end
+      
+      if zkb["total_value"] do
+        value_m = zkb["total_value"] / 1_000_000
+        Logger.info("       Value: #{Float.round(value_m, 2)}M ISK")
+      end
     end)
 
     # You can add custom handling here:
@@ -384,26 +286,222 @@ defmodule WandererKills.WebSocketClient do
     # - Trigger business logic
     # - Send notifications
 
-    {:ok, state}
+    {:noreply, state}
   end
 
-  defp handle_channel_message("killmails:lobby", "kill_count_update", payload, state) do
+  @impl true
+  def handle_info(%{"event" => "kill_count_update", "payload" => payload}, state) do
     system_id = payload["system_id"]
     count = payload["count"]
 
     Logger.info("📊 Kill count update for system #{system_id}: #{count} kills")
 
-    {:ok, state}
+    {:noreply, state}
   end
 
-  defp handle_channel_message(topic, event, payload, state) do
-    Logger.debug("📨 Unhandled channel message",
-      topic: topic,
-      event: event,
-      payload: inspect(payload)
-    )
+  @impl true
+  def handle_info(%{"event" => "preload_status", "payload" => payload}, state) do
+    Logger.info("⏳ Preload progress: #{payload["status"]}")
+    Logger.info("   Current system: #{payload["current_system"] || "N/A"}")
+    Logger.info("   Systems complete: #{payload["systems_complete"]}/#{payload["total_systems"]}")
 
-    {:ok, state}
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(%{"event" => "preload_batch", "payload" => payload}, state) do
+    kills = payload["kills"] || []
+    Logger.info("📦 Received preload batch: #{length(kills)} historical kills")
+    
+    Enum.take(kills, 3)
+    |> Enum.each(fn kill ->
+      Logger.info("   Historical kill #{kill["killmail_id"]} from #{kill["kill_time"]}")
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(%{"event" => "preload_complete", "payload" => payload}, state) do
+    Logger.info("✅ Preload complete!")
+    Logger.info("   Total kills loaded: #{payload["total_kills"]}")
+    Logger.info("   Systems processed: #{payload["systems_processed"]}")
+    
+    errors = payload["errors"] || []
+    if length(errors) > 0 do
+      Logger.info("   ⚠️ Errors encountered: #{length(errors)}")
+      Enum.each(errors, fn err ->
+        Logger.info("      - #{err}")
+      end)
+    end
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(%{"event" => "phx_close"}, state) do
+    Logger.warning("📡 Channel closed by server")
+    new_state = %{state | connected: false, socket: nil, channel: nil}
+    Process.send_after(self(), :connect, 5_000)
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_info(%{"event" => "phx_error", "payload" => payload}, state) do
+    Logger.error("❌ Channel error: #{inspect(payload)}")
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(msg, state) do
+    Logger.debug("📨 Unhandled message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_call({:subscribe_systems, system_ids}, _from, %{connected: true} = state) do
+    case PhoenixClient.Channel.push(state.socket, state.channel_ref, "subscribe_systems", %{"systems" => system_ids}) do
+      {:ok, response} ->
+        subscribed_systems = response["subscribed_systems"] || []
+        new_state = %{state | subscribed_systems: MapSet.new(subscribed_systems)}
+        
+        Logger.info("✅ Subscribed to systems: #{Enum.join(system_ids, ", ")}")
+        Logger.info("📡 Total system subscriptions: #{length(subscribed_systems)}")
+        
+        {:reply, :ok, new_state}
+
+      {:error, reason} ->
+        Logger.error("❌ Failed to subscribe to systems: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:subscribe_systems, _}, _from, state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  @impl true
+  def handle_call({:unsubscribe_systems, system_ids}, _from, %{connected: true} = state) do
+    case PhoenixClient.Channel.push(state.socket, state.channel_ref, "unsubscribe_systems", %{"systems" => system_ids}) do
+      {:ok, response} ->
+        subscribed_systems = response["subscribed_systems"] || []
+        new_state = %{state | subscribed_systems: MapSet.new(subscribed_systems)}
+        
+        Logger.info("❌ Unsubscribed from systems: #{Enum.join(system_ids, ", ")}")
+        Logger.info("📡 Remaining system subscriptions: #{length(subscribed_systems)}")
+        
+        {:reply, :ok, new_state}
+
+      {:error, reason} ->
+        Logger.error("❌ Failed to unsubscribe from systems: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:unsubscribe_systems, _}, _from, state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  @impl true
+  def handle_call({:subscribe_characters, character_ids}, _from, %{connected: true} = state) do
+    case PhoenixClient.Channel.push(state.socket, state.channel_ref, "subscribe_characters", %{"character_ids" => character_ids}) do
+      {:ok, response} ->
+        subscribed_characters = response["subscribed_characters"] || []
+        new_state = %{state | subscribed_characters: MapSet.new(subscribed_characters)}
+        
+        Logger.info("✅ Subscribed to characters: #{Enum.join(character_ids, ", ")}")
+        Logger.info("👤 Total character subscriptions: #{length(subscribed_characters)}")
+        
+        {:reply, :ok, new_state}
+
+      {:error, reason} ->
+        Logger.error("❌ Failed to subscribe to characters: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:subscribe_characters, _}, _from, state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  @impl true
+  def handle_call({:unsubscribe_characters, character_ids}, _from, %{connected: true} = state) do
+    case PhoenixClient.Channel.push(state.socket, state.channel_ref, "unsubscribe_characters", %{"character_ids" => character_ids}) do
+      {:ok, response} ->
+        subscribed_characters = response["subscribed_characters"] || []
+        new_state = %{state | subscribed_characters: MapSet.new(subscribed_characters)}
+        
+        Logger.info("❌ Unsubscribed from characters: #{Enum.join(character_ids, ", ")}")
+        Logger.info("👤 Remaining character subscriptions: #{length(subscribed_characters)}")
+        
+        {:reply, :ok, new_state}
+
+      {:error, reason} ->
+        Logger.error("❌ Failed to unsubscribe from characters: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:unsubscribe_characters, _}, _from, state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  @impl true
+  def handle_call(:get_status, _from, %{connected: true} = state) do
+    case PhoenixClient.Channel.push(state.socket, state.channel_ref, "get_status", %{}) do
+      {:ok, response} ->
+        status = %{
+          connected: state.connected,
+          server_url: state.server_url,
+          subscription_id: response["subscription_id"] || state.subscription_id,
+          subscribed_systems: response["subscribed_systems"] || MapSet.to_list(state.subscribed_systems),
+          subscribed_characters: response["subscribed_characters"] || MapSet.to_list(state.subscribed_characters),
+          systems_count: length(response["subscribed_systems"] || []),
+          characters_count: length(response["subscribed_characters"] || [])
+        }
+        
+        Logger.info("📋 Current status: #{status.systems_count} systems, #{status.characters_count} characters")
+        {:reply, {:ok, status}, state}
+
+      {:error, reason} ->
+        Logger.error("❌ Failed to get status: #{inspect(reason)}")
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(:get_status, _from, state) do
+    status = %{
+      connected: false,
+      server_url: state.server_url,
+      subscription_id: nil,
+      subscribed_systems: [],
+      subscribed_characters: [],
+      systems_count: 0,
+      characters_count: 0
+    }
+    {:reply, {:ok, status}, state}
+  end
+
+  @impl true
+  def handle_call(_msg, _from, state) do
+    {:reply, {:error, :unknown_call}, state}
+  end
+
+  # Private Helper Functions
+
+  defp connect_to_websocket(state) do
+    params = %{}
+    params = if state.client_identifier do
+      Map.put(params, "client_identifier", state.client_identifier)
+    else
+      params
+    end
+
+    PhoenixClient.Socket.start_link(
+      url: "#{state.server_url}/socket",
+      params: params,
+      reconnect_interval: 5_000
+    )
   end
 end
 
@@ -412,149 +510,191 @@ defmodule WandererKills.WebSocketClient.Example do
   @moduledoc """
   Example usage of the WandererKills WebSocket client.
 
-  Run this example with:
+  Run these examples with:
 
-      iex> WandererKills.WebSocketClient.Example.run()
+      # Basic example
+      iex> WandererKills.WebSocketClient.Example.basic_example()
+      
+      # Extended preload example
+      iex> WandererKills.WebSocketClient.Example.preload_example()
+      
+      # Advanced example with dynamic subscriptions
+      iex> WandererKills.WebSocketClient.Example.advanced_example()
   """
 
   require Logger
 
   @doc """
-  Run the WebSocket client example.
+  Basic example showing simple connection and subscription.
   """
-  def run do
-    Logger.info("🚀 Starting WandererKills WebSocket client example...")
-    Logger.info("📋 This example demonstrates:")
-    Logger.info("   1. Connecting with initial systems (Jita, Amarr)")
-    Logger.info("   2. Receiving preloaded killmails for those systems")
-    Logger.info("   3. Subscribing to additional systems (Dodixie)")
-    Logger.info("   4. Receiving real-time killmail updates")
+  def basic_example do
+    Logger.info("🚀 Basic WebSocket client example")
+    Logger.info("📋 Connecting to popular systems...")
 
-    # Start the client with some popular systems
-    initial_systems = [30000142, 30002187]  # Jita, Amarr
-    client_opts = [
-      server_url: "ws://localhost:4004",
-      systems: initial_systems,
-      client_identifier: "example_runner",  # Optional: helps identify this connection in logs
-      name: :wanderer_websocket_client
-    ]
-
-    Logger.info("🔌 Connecting to WebSocket with initial systems:",
-      systems: initial_systems,
-      system_names: ["Jita (30000142)", "Amarr (30002187)"]
-    )
-
-    case WandererKills.WebSocketClient.start_link(client_opts) do
-      {:ok, pid} ->
-        Logger.info("✅ WebSocket client started successfully")
-        Logger.info("⏳ Watch for preloaded killmails to arrive shortly...")
-
-        # Wait a bit for connection to establish and preload to complete
-        Process.sleep(3_000)
-
-        # Subscribe to additional systems after 5 seconds
-        spawn(fn ->
-          Process.sleep(5_000)
-          Logger.info("📡 Adding Dodixie to subscriptions...")
-          Logger.info("⏳ Watch for preloaded killmails from Dodixie...")
-          WandererKills.WebSocketClient.subscribe_to_systems(pid, [30002659]) # Dodixie
-        end)
-
-        # Unsubscribe from Jita after 15 seconds
-        spawn(fn ->
-          Process.sleep(15_000)
-          Logger.info("❌ Removing Jita from subscriptions...")
-          WandererKills.WebSocketClient.unsubscribe_from_systems(pid, [30000142]) # Jita
-        end)
-
-        # Get status after 20 seconds
-        spawn(fn ->
-          Process.sleep(20_000)
-          case WandererKills.WebSocketClient.get_status(pid) do
-            {:ok, status} ->
-              Logger.info("📋 Current client status:",
-                connected: status.connected,
-                systems_count: status.systems_count,
-                subscribed_systems: status.subscribed_systems
-              )
-            {:error, reason} ->
-              Logger.error("❌ Failed to get status: #{inspect(reason)}")
-          end
-        end)
-
-        # Keep the example running
-        Logger.info("")
-        Logger.info("🎧 Client is now listening for killmail updates...")
-        Logger.info("💡 You can interact with it using:")
-        Logger.info("   WandererKills.WebSocketClient.subscribe_to_systems(:wanderer_websocket_client, [system_ids])")
-        Logger.info("   WandererKills.WebSocketClient.unsubscribe_from_systems(:wanderer_websocket_client, [system_ids])")
-        Logger.info("   WandererKills.WebSocketClient.get_status(:wanderer_websocket_client)")
-        Logger.info("   WandererKills.WebSocketClient.stop(:wanderer_websocket_client)")
-        Logger.info("")
-        Logger.info("📦 Preloaded killmails have a 📦 icon")
-        Logger.info("🔥 Real-time killmails have a 🔥 icon")
-
-        {:ok, pid}
-
-      {:error, reason} ->
-        Logger.error("❌ Failed to start WebSocket client: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Stop the example client.
-  """
-  def stop do
-    case Process.whereis(:wanderer_websocket_client) do
-      nil ->
-        Logger.info("ℹ️  WebSocket client is not running")
-        :ok
-
-      pid ->
-        WandererKills.WebSocketClient.stop(pid)
-        Logger.info("🛑 WebSocket client stopped")
-        :ok
-    end
-  end
-
-  @doc """
-  Simple example that connects with initial systems and shows preload behavior.
-
-  This demonstrates the most common use case: connecting to a few systems
-  and immediately receiving cached killmail data.
-  """
-  def simple_example do
-    Logger.info("🚀 Simple WebSocket client example")
-    Logger.info("📋 Connecting to Jita and Amarr with preload...")
-
-    # Connect with initial systems
+    # Start the client
     {:ok, pid} = WandererKills.WebSocketClient.start_link([
       server_url: "ws://localhost:4004",
-      systems: [30000142, 30002187],  # Jita, Amarr
-      client_identifier: "simple_example",  # Optional: helps identify this connection in logs
-      name: :simple_client
+      systems: [30000142, 30002659, 30002187],  # Jita, Dodixie, Amarr
+      character_ids: [95465499, 90379338],       # Example character IDs
+      client_identifier: "basic_example"
     ])
 
-    Logger.info("✅ Connected! Watch for preloaded killmails...")
+    Logger.info("✅ Connected! Watching for killmail updates...")
 
-    # Wait and show status
+    # Wait a bit, then get status
     Process.sleep(5_000)
-
+    
     case WandererKills.WebSocketClient.get_status(pid) do
       {:ok, status} ->
-        Logger.info("📋 Client status: #{status.systems_count} systems, connected: #{status.connected}")
-      {:error, _} ->
-        Logger.warning("⚠️  Could not get client status")
+        Logger.info("📋 Current status:")
+        Logger.info("   Subscription ID: #{status.subscription_id}")
+        Logger.info("   Subscribed systems: #{length(status.subscribed_systems)}")
+        Logger.info("   Subscribed characters: #{length(status.subscribed_characters)}")
+      {:error, reason} ->
+        Logger.error("Failed to get status: #{inspect(reason)}")
     end
 
-    Logger.info("🎧 Listening for real-time updates... (Ctrl+C to stop)")
+    # Keep running for 5 minutes
+    Logger.info("🎧 Listening for killmail updates for 5 minutes...")
+    Process.sleep(5 * 60 * 1000)
 
-    # Wait for termination signal
-    receive do
-      {:shutdown, reason} ->
-        Logger.info("🛑 Shutting down: #{inspect(reason)}")
-        :ok
-    end
+    WandererKills.WebSocketClient.stop(pid)
+    Logger.info("🛑 Example completed")
   end
+
+  @doc """
+  Example with extended historical data preload.
+  """
+  def preload_example do
+    Logger.info("🚀 Extended preload example")
+    Logger.info("📋 Connecting with historical data request...")
+
+    # Start with extended preload configuration
+    {:ok, pid} = WandererKills.WebSocketClient.start_link([
+      server_url: "ws://localhost:4004",
+      systems: [30000142, 30002187],      # Jita and Amarr
+      character_ids: [95465499],          # Track specific character
+      preload: %{
+        enabled: true,
+        limit_per_system: 50,             # Get up to 50 kills per system
+        since_hours: 72,                  # Look back 3 days
+        delivery_batch_size: 10,          # Deliver in batches of 10
+        delivery_interval_ms: 500         # 500ms between batches
+      },
+      client_identifier: "preload_example"
+    ])
+
+    Logger.info("🚀 Connected with extended preload configuration")
+    Logger.info("⏳ Watch for historical data to arrive in batches...")
+
+    # Keep running for 10 minutes to see real-time kills after preload
+    Process.sleep(10 * 60 * 1000)
+
+    WandererKills.WebSocketClient.stop(pid)
+    Logger.info("🛑 Example completed")
+  end
+
+  @doc """
+  Advanced example showing dynamic subscription management.
+  """
+  def advanced_example do
+    Logger.info("🚀 Advanced WebSocket client example")
+    Logger.info("📋 This example demonstrates dynamic subscription management")
+
+    # Start with initial subscriptions
+    {:ok, pid} = WandererKills.WebSocketClient.start_link([
+      server_url: "ws://localhost:4004",
+      systems: [30000142, 30002187],          # Jita, Amarr
+      character_ids: [95465499, 90379338],    # Example character IDs
+      client_identifier: "advanced_example",
+      name: :advanced_client
+    ])
+
+    Logger.info("✅ Connected with mixed subscriptions")
+    Logger.info("   The client will now receive killmails from:")
+    Logger.info("   1. Jita system (30000142)")
+    Logger.info("   2. Amarr system (30002187)")
+    Logger.info("   3. Any system where character 95465499 gets a kill or dies")
+    Logger.info("   4. Any system where character 90379338 gets a kill or dies")
+
+    # Wait 30 seconds, then add more subscriptions
+    Process.sleep(30_000)
+    Logger.info("\n📝 Adding more subscriptions...")
+
+    # Add more systems
+    WandererKills.WebSocketClient.subscribe_to_systems(pid, [30002659])  # Dodixie
+    
+    # Add more characters
+    WandererKills.WebSocketClient.subscribe_to_characters(pid, [12345678])
+    
+    # Get updated status
+    {:ok, status} = WandererKills.WebSocketClient.get_status(pid)
+    Logger.info("📋 Updated subscriptions: #{status.systems_count} systems, #{status.characters_count} characters")
+
+    # Wait another 30 seconds, then remove some subscriptions
+    Process.sleep(30_000)
+    Logger.info("\n📝 Removing some subscriptions...")
+
+    # Remove a system
+    WandererKills.WebSocketClient.unsubscribe_from_systems(pid, [30000142])  # Remove Jita
+    
+    # Remove a character
+    WandererKills.WebSocketClient.unsubscribe_from_characters(pid, [90379338])
+    
+    # Get final status
+    {:ok, final_status} = WandererKills.WebSocketClient.get_status(pid)
+    Logger.info("📋 Final subscriptions: #{final_status.systems_count} systems, #{final_status.characters_count} characters")
+
+    # Keep running for remaining time
+    Process.sleep(4 * 60 * 1000)
+
+    WandererKills.WebSocketClient.stop(pid)
+    Logger.info("🛑 Example completed")
+  end
+
+  @doc """
+  Interactive example that starts a client you can control from IEx.
+  """
+  def interactive do
+    Logger.info("🚀 Starting interactive WebSocket client...")
+    Logger.info("📋 This client will be registered as :wanderer_client")
+
+    # Start with some initial systems
+    {:ok, _pid} = WandererKills.WebSocketClient.start_link([
+      server_url: "ws://localhost:4004",
+      systems: [30000142],  # Start with just Jita
+      client_identifier: "interactive_client",
+      name: :wanderer_client
+    ])
+
+    Logger.info("✅ Client started! You can now interact with it:")
+    Logger.info("")
+    Logger.info("   # Subscribe to systems")
+    Logger.info("   WandererKills.WebSocketClient.subscribe_to_systems(:wanderer_client, [30002659, 30002187])")
+    Logger.info("")
+    Logger.info("   # Subscribe to characters")
+    Logger.info("   WandererKills.WebSocketClient.subscribe_to_characters(:wanderer_client, [95465499])")
+    Logger.info("")
+    Logger.info("   # Unsubscribe from systems")
+    Logger.info("   WandererKills.WebSocketClient.unsubscribe_from_systems(:wanderer_client, [30000142])")
+    Logger.info("")
+    Logger.info("   # Get current status")
+    Logger.info("   WandererKills.WebSocketClient.get_status(:wanderer_client)")
+    Logger.info("")
+    Logger.info("   # Stop the client")
+    Logger.info("   WandererKills.WebSocketClient.stop(:wanderer_client)")
+    Logger.info("")
+
+    :ok
+  end
+end
+
+# Installation script for dependencies when running as a script
+if Code.ensure_loaded?(Mix) do
+  Logger.info("📦 Installing dependencies...")
+  Mix.install([
+    {:phoenix_client, "~> 0.3"},
+    {:websocket_client, "~> 1.5"},
+    {:jason, "~> 1.4"}
+  ])
 end
