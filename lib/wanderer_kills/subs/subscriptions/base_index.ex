@@ -263,16 +263,6 @@ defmodule WandererKills.Subs.Subscriptions.BaseIndex do
       case :ets.lookup(table_name, entity_id) do
         [{^entity_id, subscription_ids}] ->
           subs = MapSet.to_list(subscription_ids)
-
-          if length(subs) > 0 do
-            require Logger
-
-            Logger.info(
-              "[INFO] #{entity_type}Index lookup found subscriptions - " <>
-                "entity_id: #{entity_id}, subscriptions: #{inspect(subs)}"
-            )
-          end
-
           subs
 
         [] ->
