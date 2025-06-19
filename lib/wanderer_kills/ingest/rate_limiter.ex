@@ -66,10 +66,18 @@ defmodule WandererKills.Ingest.RateLimiter do
 
   @impl true
   def init(opts) do
-    zkb_capacity = Keyword.get(opts, :zkb_capacity, @zkb_capacity)
-    zkb_refill_rate = Keyword.get(opts, :zkb_refill_rate, @zkb_refill_rate)
-    esi_capacity = Keyword.get(opts, :esi_capacity, @esi_capacity)
-    esi_refill_rate = Keyword.get(opts, :esi_refill_rate, @esi_refill_rate)
+    # Get configuration from application env, then fall back to opts, then defaults
+    config = Application.get_env(:wanderer_kills, :rate_limiter, [])
+
+    zkb_capacity = config[:zkb_capacity] || Keyword.get(opts, :zkb_capacity, @zkb_capacity)
+
+    zkb_refill_rate =
+      config[:zkb_refill_rate] || Keyword.get(opts, :zkb_refill_rate, @zkb_refill_rate)
+
+    esi_capacity = config[:esi_capacity] || Keyword.get(opts, :esi_capacity, @esi_capacity)
+
+    esi_refill_rate =
+      config[:esi_refill_rate] || Keyword.get(opts, :esi_refill_rate, @esi_refill_rate)
 
     state = %{
       zkillboard: %{

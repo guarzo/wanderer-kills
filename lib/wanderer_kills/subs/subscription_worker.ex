@@ -16,7 +16,6 @@ defmodule WandererKills.Subs.SubscriptionWorker do
   require Logger
 
   alias WandererKills.Subs.Subscriptions.{
-    Broadcaster,
     CharacterIndex,
     Filter,
     SystemIndex,
@@ -204,8 +203,23 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
   @impl true
   def handle_cast({:killmail_update, system_id, kills}, state) do
+    Logger.info(
+      "[INFO] SubscriptionWorker received killmail update - " <>
+        "subscription_id: #{state.subscription_id}, system_id: #{system_id}, " <>
+        "kills_received: #{length(kills)}, " <>
+        "subscription_systems: #{inspect(state.subscription["system_ids"])}, " <>
+        "subscription_characters: #{inspect(state.subscription["character_ids"])}"
+    )
+
     # Filter kills that match this subscription
     matching_kills = Filter.filter_killmails(kills, state.subscription)
+
+    Logger.info(
+      "[INFO] SubscriptionWorker filtered killmails - " <>
+        "subscription_id: #{state.subscription_id}, system_id: #{system_id}, " <>
+        "original_count: #{length(kills)}, filtered_count: #{length(matching_kills)}, " <>
+        "has_matches: #{length(matching_kills) > 0}"
+    )
 
     if not Enum.empty?(matching_kills) do
       case state.type do
@@ -213,15 +227,14 @@ defmodule WandererKills.Subs.SubscriptionWorker do
           send_webhook_notification(state, system_id, matching_kills)
 
         :websocket ->
-          # Broadcast to WebSocket via PubSub (using the general broadcast function)
-          Broadcaster.broadcast_killmail_update(system_id, matching_kills)
+          # Send directly to the WebSocket channel with the correct format
+          send_to_websocket_channel(state, system_id, matching_kills)
       end
 
-      Logger.debug("[DEBUG] Delivered killmails to subscription",
-        subscription_id: state.subscription_id,
-        type: state.type,
-        system_id: system_id,
-        killmail_count: length(matching_kills)
+      Logger.info(
+        "[INFO] Delivered killmails to subscription - " <>
+          "subscription_id: #{state.subscription_id}, type: #{state.type}, " <>
+          "system_id: #{system_id}, killmail_count: #{length(matching_kills)}"
       )
     end
 
@@ -275,11 +288,21 @@ defmodule WandererKills.Subs.SubscriptionWorker do
 
     # Register with system index
     if system_ids = subscription["system_ids"] do
+      Logger.info(
+        "[INFO] Registering subscription with SystemIndex - " <>
+          "subscription_id: #{subscription_id}, systems: #{inspect(system_ids)}"
+      )
+
       SystemIndex.add_subscription(subscription_id, system_ids)
     end
 
     # Register with character index
     if character_ids = subscription["character_ids"] do
+      Logger.info(
+        "[INFO] Registering subscription with CharacterIndex - " <>
+          "subscription_id: #{subscription_id}, characters: #{inspect(character_ids)}"
+      )
+
       CharacterIndex.add_subscription(subscription_id, character_ids)
     end
   end
@@ -318,5 +341,35 @@ defmodule WandererKills.Subs.SubscriptionWorker do
         killmail_count: length(matching_kills)
       }
     )
+  end
+
+  defp send_to_websocket_channel(state, system_id, matching_kills) do
+    # Get the socket process from the subscription
+    socket_pid = state.subscription["socket_pid"]
+
+    # Build the message in the format expected by the WebSocket channel
+    message = %{
+      type: :detailed_kill_update,
+      solar_system_id: system_id,
+      kills: matching_kills,
+      timestamp: DateTime.utc_now()
+    }
+
+    # Send directly to the WebSocket process
+    if Process.alive?(socket_pid) do
+      send(socket_pid, message)
+
+      Logger.info(
+        "[INFO] Sent killmail update directly to WebSocket - " <>
+          "subscription_id: #{state.subscription_id}, system_id: #{system_id}, " <>
+          "killmail_count: #{length(matching_kills)}, " <>
+          "socket_pid: #{inspect(socket_pid)}, user_id: #{state.subscription["user_id"]}"
+      )
+    else
+      Logger.warning("[WARNING] WebSocket process no longer alive",
+        subscription_id: state.subscription_id,
+        socket_pid: inspect(socket_pid)
+      )
+    end
   end
 end
