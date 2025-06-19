@@ -630,6 +630,8 @@ defmodule WandererKillsWeb.KillmailChannel do
         if length(valid_systems) == length(systems) do
           {:ok, Enum.uniq(valid_systems)}
         else
+          Logger.error("Invalid system IDs: #{inspect(systems)}")
+
           {:error,
            Error.validation_error(:invalid_system_ids, "Invalid system IDs", %{systems: systems})}
         end
