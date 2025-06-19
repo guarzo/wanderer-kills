@@ -85,24 +85,23 @@ defmodule WandererKills.Application do
 
   defp maybe_smart_rate_limiting_children do
     features = Application.get_env(:wanderer_kills, :features, [])
-    
-    children = []
-    
-    children = if features[:request_coalescing] do
-      config = Application.get_env(:wanderer_kills, :request_coalescer, [])
-      [{WandererKills.Ingest.RequestCoalescer, config} | children]
-    else
-      children
-    end
 
-    children = if features[:smart_rate_limiting] do
-      config = Application.get_env(:wanderer_kills, :smart_rate_limiter, [])
-      [{WandererKills.Ingest.SmartRateLimiter, config} | children]
-    else
-      children
-    end
+    []
+    |> maybe_add_request_coalescer(features[:request_coalescing])
+    |> maybe_add_smart_rate_limiter(features[:smart_rate_limiting])
+  end
 
-    children
+  defp maybe_add_request_coalescer(children, true) do
+    config = Application.get_env(:wanderer_kills, :request_coalescer, [])
+    [{WandererKills.Ingest.RequestCoalescer, config} | children]
+  end
+  defp maybe_add_request_coalescer(children, _), do: children
+
+  defp maybe_add_smart_rate_limiter(children, true) do
+    config = Application.get_env(:wanderer_kills, :smart_rate_limiter, [])
+    [{WandererKills.Ingest.SmartRateLimiter, config} | children]
+  end
+  defp maybe_add_smart_rate_limiter(children, _), do: children
   end
 
   # Observability and monitoring processes
