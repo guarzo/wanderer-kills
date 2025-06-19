@@ -445,6 +445,7 @@ defmodule WandererKills.Core.Observability.Monitoring do
       uptime_seconds: get_uptime_seconds(),
       caches: cache_metrics,
       system: get_system_info(),
+      rate_limiter: collect_rate_limiter_metrics(),
       aggregate: %{
         total_cache_size: Enum.sum(Enum.map(cache_metrics, &Map.get(&1, :size, 0))),
         average_hit_rate: calculate_average_hit_rate(cache_metrics)
@@ -553,4 +554,62 @@ defmodule WandererKills.Core.Observability.Monitoring do
     |> elem(0)
     |> div(1000)
   end
+
+  @spec collect_rate_limiter_metrics() :: map()
+  defp collect_rate_limiter_metrics do
+    features = Application.get_env(:wanderer_kills, :features, [])
+
+    base_metrics = %{
+      smart_rate_limiting_enabled: features[:smart_rate_limiting] || false,
+      request_coalescing_enabled: features[:request_coalescing] || false
+    }
+
+    smart_limiter_stats = collect_smart_limiter_stats(features[:smart_rate_limiting])
+    coalescer_stats = collect_coalescer_stats(features[:request_coalescing])
+
+    Map.merge(base_metrics, %{
+      smart_rate_limiter: smart_limiter_stats,
+      request_coalescer: coalescer_stats
+    })
+  end
+
+  defp collect_smart_limiter_stats(true) do
+    case WandererKills.Ingest.SmartRateLimiter.get_stats() do
+      {:ok, stats} ->
+        %{
+          queue_size: stats.queue_size,
+          pending_requests: stats.pending_requests,
+          current_tokens: stats.current_tokens,
+          circuit_state: stats.circuit_state,
+          failure_count: stats.failure_count,
+          detected_window_ms: stats.detected_window_ms
+        }
+
+      {:error, reason} ->
+        %{error: "smart_rate_limiter_unreachable", reason: inspect(reason)}
+
+      _ ->
+        %{error: "smart_rate_limiter_unreachable"}
+    end
+  end
+
+  defp collect_smart_limiter_stats(_), do: %{}
+
+  defp collect_coalescer_stats(true) do
+    case WandererKills.Ingest.RequestCoalescer.get_stats() do
+      {:ok, stats} ->
+        %{
+          pending_requests: stats.pending_requests,
+          total_requesters: stats.total_requesters
+        }
+
+      {:error, reason} ->
+        %{error: "request_coalescer_unreachable", reason: inspect(reason)}
+
+      _ ->
+        %{error: "request_coalescer_unreachable"}
+    end
+  end
+
+  defp collect_coalescer_stats(_), do: %{}
 end

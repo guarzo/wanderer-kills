@@ -91,13 +91,18 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   @spec track_subscription(:added | :updated | :removed, non_neg_integer(), map()) :: :ok
   def track_subscription(event, system_count, metadata \\ %{})
       when event in [:added, :updated, :removed] and is_integer(system_count) do
+    character_count = Map.get(metadata, :character_count, 0)
+
     Telemetry.websocket_subscription(
       event,
       system_count,
       metadata
     )
 
-    GenServer.cast(__MODULE__, {:track_subscription, event, system_count, metadata})
+    GenServer.cast(
+      __MODULE__,
+      {:track_subscription, event, system_count, character_count, metadata}
+    )
   end
 
   @doc """
@@ -178,7 +183,8 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
         total_added: 0,
         total_removed: 0,
         active: 0,
-        total_systems: 0
+        total_systems: 0,
+        total_characters: 0
       },
       rates: %{
         last_measured: DateTime.utc_now(),
@@ -250,12 +256,13 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :added, system_count, _metadata}, state) do
+  def handle_cast({:track_subscription, :added, system_count, character_count, _metadata}, state) do
     new_subscriptions = %{
       state.subscriptions
       | total_added: state.subscriptions.total_added + 1,
         active: state.subscriptions.active + 1,
-        total_systems: state.subscriptions.total_systems + system_count
+        total_systems: state.subscriptions.total_systems + system_count,
+        total_characters: state.subscriptions.total_characters + character_count
     }
 
     new_state = %{state | subscriptions: new_subscriptions}
@@ -263,12 +270,16 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :removed, system_count, _metadata}, state) do
+  def handle_cast(
+        {:track_subscription, :removed, system_count, character_count, _metadata},
+        state
+      ) do
     new_subscriptions = %{
       state.subscriptions
       | total_removed: state.subscriptions.total_removed + 1,
         active: max(0, state.subscriptions.active - 1),
-        total_systems: max(0, state.subscriptions.total_systems - system_count)
+        total_systems: max(0, state.subscriptions.total_systems - system_count),
+        total_characters: max(0, state.subscriptions.total_characters - character_count)
     }
 
     new_state = %{state | subscriptions: new_subscriptions}
@@ -276,11 +287,15 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :updated, system_count_delta, _metadata}, state) do
-    # For updates, adjust the total system count by the delta
+  def handle_cast(
+        {:track_subscription, :updated, system_count_delta, character_count_delta, _metadata},
+        state
+      ) do
+    # For updates, adjust the total system and character counts by the deltas
     new_subscriptions = %{
       state.subscriptions
-      | total_systems: max(0, state.subscriptions.total_systems + system_count_delta)
+      | total_systems: max(0, state.subscriptions.total_systems + system_count_delta),
+        total_characters: max(0, state.subscriptions.total_characters + character_count_delta)
     }
 
     new_state = %{state | subscriptions: new_subscriptions}
@@ -304,7 +319,8 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
         total_kills_sent: stats.kills_sent.total,
         active_subscriptions: stats.subscriptions.active,
         kills_per_minute: stats.rates.kills_per_minute,
-        total_systems: stats.subscriptions.total_systems
+        total_systems: stats.subscriptions.total_systems,
+        total_characters: stats.subscriptions.total_characters
       },
       %{period: "5_minutes"}
     )
@@ -338,7 +354,8 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
         active: state.subscriptions.active,
         total_added: state.subscriptions.total_added,
         total_removed: state.subscriptions.total_removed,
-        total_systems: state.subscriptions.total_systems
+        total_systems: state.subscriptions.total_systems,
+        total_characters: state.subscriptions.total_characters
       },
       rates: calculate_current_rates(state),
       uptime_seconds: uptime_seconds,

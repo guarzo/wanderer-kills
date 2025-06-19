@@ -90,7 +90,7 @@ defmodule WandererKillsWeb.KillmailChannel do
   alias WandererKills.Core.Support.Error
   alias WandererKills.Core.Support.PubSubTopics
   alias WandererKills.Core.Support.SupervisedTask
-  alias WandererKills.Ingest.HistoricalFetcher
+  # alias WandererKills.Ingest.HistoricalFetcher - not needed for WebSocket subscriptions
   alias WandererKills.Subs.Preloader
   alias WandererKills.Subs.SubscriptionManager
   alias WandererKills.Subs.Subscriptions.Filter
@@ -127,12 +127,9 @@ defmodule WandererKillsWeb.KillmailChannel do
       initial_systems_count: 0
     })
 
-    Logger.info("[INFO] Client connected and joined killmail channel",
+    Logger.debug("[DEBUG] Client connected and joined killmail channel",
       user_id: socket.assigns.user_id,
-      client_identifier: socket.assigns[:client_identifier],
       subscription_id: subscription_id,
-      peer_data: socket.assigns.peer_data,
-      user_agent: socket.assigns.user_agent,
       initial_systems_count: 0,
       initial_characters_count: 0
     )
@@ -178,16 +175,15 @@ defmodule WandererKillsWeb.KillmailChannel do
           WebSocketStats.track_subscription(:updated, MapSet.size(new_systems), %{
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
-            operation: :add_systems
+            operation: :add_systems,
+            character_count: 0
           })
 
-          Logger.info("[INFO] Client subscribed to systems",
+          Logger.debug("[DEBUG] Client subscribed to systems",
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
-            new_systems: MapSet.to_list(new_systems),
             new_systems_count: MapSet.size(new_systems),
-            total_systems_count: MapSet.size(all_systems),
-            all_systems: MapSet.to_list(all_systems)
+            total_systems_count: MapSet.size(all_systems)
           )
 
           # Preload recent kills for new systems
@@ -230,7 +226,8 @@ defmodule WandererKillsWeb.KillmailChannel do
           WebSocketStats.track_subscription(:updated, -MapSet.size(systems_to_remove), %{
             user_id: socket.assigns.user_id,
             subscription_id: socket.assigns.subscription_id,
-            operation: :remove_systems
+            operation: :remove_systems,
+            character_count: 0
           })
 
           Logger.debug("[DEBUG] Client unsubscribed from systems",
@@ -294,37 +291,19 @@ defmodule WandererKillsWeb.KillmailChannel do
 
   # Handle preload after join completes
   @impl true
-  def handle_info({:after_join, systems, preload_config}, socket) do
+  def handle_info({:after_join, systems, _preload_config}, socket) do
     Logger.debug("[DEBUG] Starting preload after join completed",
       user_id: socket.assigns.user_id,
       subscription_id: socket.assigns.subscription_id,
       systems_count: length(systems)
     )
 
-    # Check if extended preload is requested
-    if preload_config["enabled"] != false && map_size(preload_config) > 0 do
-      # Request extended historical preload
-      case HistoricalFetcher.request_preload(
-             socket.assigns.subscription_id,
-             preload_config
-           ) do
-        :ok ->
-          Logger.info("[INFO] Extended preload requested",
-            user_id: socket.assigns.user_id,
-            subscription_id: socket.assigns.subscription_id,
-            config: preload_config
-          )
-
-        {:error, reason} ->
-          Logger.error("[ERROR] Failed to request extended preload",
-            user_id: socket.assigns.user_id,
-            subscription_id: socket.assigns.subscription_id,
-            error: reason
-          )
-
-          # Fall back to standard preload
-          preload_kills_for_systems(socket, systems, "initial join")
-      end
+    # Extended preload is only supported for webhook subscriptions, not WebSocket
+    # For WebSocket connections, always use standard preload
+    if false do
+      # Disabled for WebSocket subscriptions - HistoricalFetcher only works with webhook subscriptions
+      # This code path would always fail because WebSocket subscriptions aren't in SubscriptionManager
+      nil
     else
       # Standard preload behavior
       preload_kills_for_systems(socket, systems, "initial join")
@@ -355,7 +334,7 @@ defmodule WandererKillsWeb.KillmailChannel do
         },
         socket
       ) do
-    Logger.info("[INFO] WebSocket channel received killmail update",
+    Logger.debug("[WebSocket] Received killmail update",
       user_id: socket.assigns.user_id,
       subscription_id: socket.assigns.subscription_id,
       system_id: system_id,
@@ -501,9 +480,13 @@ defmodule WandererKillsWeb.KillmailChannel do
       # Track subscription removal
       subscribed_systems_count = MapSet.size(socket.assigns.subscribed_systems || MapSet.new())
 
+      subscribed_characters_count =
+        MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
+
       WebSocketStats.track_subscription(:removed, subscribed_systems_count, %{
         user_id: socket.assigns.user_id,
-        subscription_id: subscription_id
+        subscription_id: subscription_id,
+        character_count: subscribed_characters_count
       })
 
       # Clean up subscription
@@ -518,7 +501,7 @@ defmodule WandererKillsWeb.KillmailChannel do
             DateTime.diff(DateTime.utc_now(), connected_at, :second)
         end
 
-      Logger.info("[INFO] Client disconnected from killmail channel",
+      Logger.debug("[DEBUG] Client disconnected from killmail channel",
         user_id: socket.assigns.user_id,
         subscription_id: subscription_id,
         subscribed_systems_count: MapSet.size(socket.assigns.subscribed_systems || MapSet.new()),
@@ -527,7 +510,7 @@ defmodule WandererKillsWeb.KillmailChannel do
         socket_transport: socket.transport
       )
     else
-      Logger.info("[INFO] Client disconnected (no active subscription)",
+      Logger.debug("[DEBUG] Client disconnected (no active subscription)",
         user_id: socket.assigns[:user_id] || "unknown",
         disconnect_reason: reason,
         socket_transport: socket.transport
@@ -575,13 +558,10 @@ defmodule WandererKillsWeb.KillmailChannel do
         "killmails:#{subscription_id}"
       )
 
-      Logger.info("[INFO] Client connected and joined killmail channel with systems",
+      Logger.info("[WebSocket] Client connected",
         user_id: socket.assigns.user_id,
         client_identifier: socket.assigns[:client_identifier],
         subscription_id: subscription_id,
-        peer_data: socket.assigns.peer_data,
-        user_agent: socket.assigns.user_agent,
-        initial_systems: valid_systems,
         initial_systems_count: length(valid_systems),
         initial_characters_count: length(valid_characters)
       )
@@ -663,8 +643,13 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp validate_characters(characters) do
-    # Default to 1000 max characters per subscription
-    max_characters = 1000
+    max_characters =
+      Application.get_env(:wanderer_kills, :validation, [])
+      |> Keyword.get(:max_subscribed_characters, 1000)
+
+    max_character_id =
+      Application.get_env(:wanderer_kills, :validation, [])
+      |> Keyword.get(:max_character_id, 3_000_000_000)
 
     cond do
       length(characters) > max_characters ->
@@ -679,8 +664,12 @@ defmodule WandererKillsWeb.KillmailChannel do
          )}
 
       Enum.all?(characters, &is_integer/1) ->
-        # Character IDs should be positive integers
-        valid_characters = Enum.filter(characters, &(&1 > 0))
+        # Character IDs should be positive integers within valid range
+        # EVE Online character IDs typically start from 90000000 for players
+        min_character_id = 90_000_000
+
+        valid_characters =
+          Enum.filter(characters, &(&1 >= min_character_id and &1 <= max_character_id))
 
         if length(valid_characters) == length(characters) do
           {:ok, Enum.uniq(valid_characters)}
@@ -805,7 +794,7 @@ defmodule WandererKillsWeb.KillmailChannel do
     current_systems = MapSet.size(socket.assigns.subscribed_systems)
     current_characters = MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
 
-    Logger.info("[INFO] Starting preload for WebSocket client: #{length(systems)} systems",
+    Logger.debug("[WebSocket] Starting preload: #{length(systems)} systems",
       user_id: user_id,
       subscription_id: subscription_id,
       systems_to_preload: length(systems),
@@ -824,8 +813,8 @@ defmodule WandererKillsWeb.KillmailChannel do
           end)
           |> Enum.sum()
 
-        Logger.info(
-          "[INFO] Preload completed: #{total_kills_sent} kills sent across #{length(systems)} systems",
+        Logger.debug(
+          "[DEBUG] Preload completed: #{total_kills_sent} kills sent across #{length(systems)} systems",
           user_id: user_id,
           subscription_id: subscription_id,
           total_systems: length(systems),
@@ -851,9 +840,43 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp preload_system_kills_for_websocket(socket, system_id, limit) do
-    # Use the shared preloader
-    kills = Preloader.preload_kills_for_system(system_id, limit, 24)
+    kills = fetch_system_kills_with_coalescing(system_id, limit)
     send_preload_kills_to_websocket(socket, system_id, kills)
+  end
+
+  defp fetch_system_kills_with_coalescing(system_id, limit) do
+    features = Application.get_env(:wanderer_kills, :features, [])
+
+    if features[:request_coalescing] do
+      coalesce_system_kills_request(system_id, limit)
+    else
+      # Use the shared preloader directly
+      Preloader.preload_kills_for_system(system_id, limit, 24)
+    end
+  end
+
+  defp coalesce_system_kills_request(system_id, limit) do
+    request_key = {:websocket_preload, system_id, limit, 24}
+
+    case WandererKills.Ingest.RequestCoalescer.request(request_key, fn ->
+           Preloader.preload_kills_for_system(system_id, limit, 24)
+         end) do
+      {:ok, kills} ->
+        kills
+
+      {:error, reason} ->
+        Logger.debug(
+          "[KillmailChannel] Request coalescing failed, using direct preload",
+          system_id: system_id,
+          error: reason
+        )
+
+        Preloader.preload_kills_for_system(system_id, limit, 24)
+
+      kills when is_list(kills) ->
+        # Handle direct list response (when executor function returns a list)
+        kills
+    end
   end
 
   # Removed - now using shared Preloader module

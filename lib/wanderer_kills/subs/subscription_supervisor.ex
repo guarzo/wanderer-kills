@@ -144,7 +144,7 @@ defmodule WandererKills.Subs.SubscriptionSupervisor do
 
   @impl true
   def init(_init_args) do
-    Logger.info("[INFO] SubscriptionSupervisor starting")
+    Logger.debug("[DEBUG] SubscriptionSupervisor starting")
 
     DynamicSupervisor.init(
       strategy: :one_for_one,
