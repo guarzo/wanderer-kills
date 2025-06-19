@@ -188,17 +188,24 @@ config :wanderer_kills,
   # Smart rate limiter configuration
   smart_rate_limiter: [
     # Token bucket configuration
-    max_tokens: 150,              # Increased from 100
-    refill_rate: 75,              # Tokens per second
-    refill_interval_ms: 1000,     # How often to refill
+    max_tokens: 150,
+    # Increased from 100
+    refill_rate: 75,
+    # Tokens per second
+    refill_interval_ms: 1000,
+    # How often to refill
 
     # Circuit breaker
-    circuit_failure_threshold: 10,  # Failures before opening circuit
-    circuit_timeout_ms: 60_000,     # How long circuit stays open
+    circuit_failure_threshold: 10,
+    # Failures before opening circuit
+    circuit_timeout_ms: 60_000,
+    # How long circuit stays open
 
     # Queue management
-    max_queue_size: 5000,           # Max queued requests
-    queue_timeout_ms: 300_000       # 5 minutes max queue time
+    max_queue_size: 5000,
+    # Max queued requests
+    queue_timeout_ms: 300_000
+    # 5 minutes max queue time
   ],
 
   # Request coalescing configuration
