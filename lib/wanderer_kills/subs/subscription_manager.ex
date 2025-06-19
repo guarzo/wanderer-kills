@@ -2,7 +2,7 @@ defmodule WandererKills.Subs.SubscriptionManager do
   @moduledoc """
   Subscription manager using DynamicSupervisor + Registry pattern.
 
-  Uses individual processes for each subscription, providing better 
+  Uses individual processes for each subscription, providing better
   fault tolerance and isolation than the previous single GenServer approach.
 
   ## Architecture
@@ -246,12 +246,6 @@ defmodule WandererKills.Subs.SubscriptionManager do
       SubscriptionWorker.handle_killmail_update(subscription_id, system_id, kills)
     end)
 
-    Logger.debug("[DEBUG] Broadcast killmail update",
-      system_id: system_id,
-      killmail_count: length(kills),
-      subscription_count: length(all_subscriptions)
-    )
-
     :ok
   end
 
@@ -260,8 +254,6 @@ defmodule WandererKills.Subs.SubscriptionManager do
   """
   @spec broadcast_killmail_count_update_async(system_id(), integer()) :: :ok
   def broadcast_killmail_count_update_async(system_id, count) do
-    # For now, we'll use the existing broadcaster for count updates
-    # since they don't need per-subscription filtering
     alias WandererKills.Subs.Subscriptions.Broadcaster
     Broadcaster.broadcast_killmail_count(system_id, count)
   end
@@ -305,6 +297,14 @@ defmodule WandererKills.Subs.SubscriptionManager do
   """
   @spec add_websocket_subscription(map()) :: {:ok, subscription_id()} | {:error, term()}
   def add_websocket_subscription(attrs) do
+    Logger.info(
+      "[INFO] Adding WebSocket subscription - user_id: #{attrs["user_id"]}, " <>
+        "subscriber_id: #{attrs["subscriber_id"] || attrs["user_id"]}, " <>
+        "systems: #{inspect(attrs["system_ids"])}, " <>
+        "characters: #{inspect(attrs["character_ids"])}, " <>
+        "socket_pid: #{inspect(attrs["socket_pid"])}"
+    )
+
     add_subscription(attrs, :websocket)
   end
 

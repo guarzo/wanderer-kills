@@ -37,6 +37,14 @@ config :wanderer_kills,
     batch_concurrency: 5
   ],
 
+  # Rate limiter configuration
+  rate_limiter: [
+    zkb_capacity: 30,
+    zkb_refill_rate: 30,
+    esi_capacity: 100,
+    esi_refill_rate: 100
+  ],
+
   # RedisQ stream configuration
   redisq: [
     base_url: "https://zkillredisq.stream/listen.php",

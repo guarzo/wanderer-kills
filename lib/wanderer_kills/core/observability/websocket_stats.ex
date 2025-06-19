@@ -97,7 +97,7 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
       metadata
     )
 
-    GenServer.cast(__MODULE__, {:track_subscription, event, system_count})
+    GenServer.cast(__MODULE__, {:track_subscription, event, system_count, metadata})
   end
 
   @doc """
@@ -250,7 +250,7 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :added, system_count}, state) do
+  def handle_cast({:track_subscription, :added, system_count, _metadata}, state) do
     new_subscriptions = %{
       state.subscriptions
       | total_added: state.subscriptions.total_added + 1,
@@ -263,7 +263,7 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :removed, system_count}, state) do
+  def handle_cast({:track_subscription, :removed, system_count, _metadata}, state) do
     new_subscriptions = %{
       state.subscriptions
       | total_removed: state.subscriptions.total_removed + 1,
@@ -276,9 +276,15 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :updated, _system_count}, state) do
-    # For updates, we don't change active count, just log the event
-    {:noreply, state}
+  def handle_cast({:track_subscription, :updated, system_count_delta, _metadata}, state) do
+    # For updates, adjust the total system count by the delta
+    new_subscriptions = %{
+      state.subscriptions
+      | total_systems: max(0, state.subscriptions.total_systems + system_count_delta)
+    }
+
+    new_state = %{state | subscriptions: new_subscriptions}
+    {:noreply, new_state}
   end
 
   @impl true

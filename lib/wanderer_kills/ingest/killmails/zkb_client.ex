@@ -48,6 +48,7 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
   alias WandererKills.Core.Support.Error
   alias WandererKills.Ingest.Http.Client
   alias WandererKills.Ingest.Http.Param
+  alias WandererKills.Ingest.RateLimiter
 
   # Compile-time configuration
   @zkb_timeout_ms Application.compile_env(:wanderer_kills, [:zkb, :request_timeout_ms], 15_000)
@@ -86,37 +87,56 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
 
     request_opts = Keyword.put(request_opts, :operation, :fetch_killmail)
 
-    case Client.request_with_telemetry(url, :zkb, request_opts) do
-      {:ok, response} ->
-        case Client.parse_json_response(response) do
-          # ZKB API returns array with single killmail
-          {:ok, [killmail]} ->
-            Telemetry.fetch_system_complete(killmail_id, :success)
-            {:ok, killmail}
-
-          {:ok, []} ->
-            Telemetry.fetch_system_error(killmail_id, :not_found, :zkb)
-            {:error, Error.zkb_error(:not_found, "Killmail not found in zKillboard", false)}
-
-          # Take first if multiple
-          {:ok, killmails} when is_list(killmails) ->
-            Telemetry.fetch_system_complete(killmail_id, :success)
-            {:ok, List.first(killmails)}
-
-          {:error, reason} ->
-            Telemetry.fetch_system_error(killmail_id, reason, :zkb)
-            {:error, reason}
-        end
+    # Check rate limit before making request
+    with :ok <- RateLimiter.check_rate_limit(:zkillboard),
+         {:ok, response} <- Client.request_with_telemetry(url, :zkb, request_opts),
+         {:ok, parsed} <- Client.parse_json_response(response) do
+      handle_killmail_response(parsed, killmail_id)
+    else
+      {:error, %Error{} = error} ->
+        handle_killmail_error(error, killmail_id)
 
       {:error, reason} ->
-        Telemetry.fetch_system_error(killmail_id, reason, :zkb)
-        {:error, reason}
+        handle_killmail_error(reason, killmail_id)
     end
   end
 
   def fetch_killmail(invalid_id) do
     {:error,
      Error.validation_error(:invalid_format, "Invalid killmail ID format: #{inspect(invalid_id)}")}
+  end
+
+  defp handle_killmail_response([killmail], killmail_id) do
+    Telemetry.fetch_system_complete(killmail_id, :success)
+    {:ok, killmail}
+  end
+
+  defp handle_killmail_response([], killmail_id) do
+    error = Error.zkb_error(:not_found, "Killmail not found in zKillboard", false)
+    Telemetry.fetch_system_error(killmail_id, :not_found, :zkb)
+    {:error, error}
+  end
+
+  defp handle_killmail_response(killmails, killmail_id) when is_list(killmails) do
+    Telemetry.fetch_system_complete(killmail_id, :success)
+    {:ok, List.first(killmails)}
+  end
+
+  defp handle_killmail_error(%Error{type: :rate_limit} = error, killmail_id) do
+    Telemetry.fetch_system_error(killmail_id, error, :zkb)
+
+    Logger.warning("Rate limit exceeded for zkillboard",
+      killmail_id: killmail_id,
+      operation: :fetch_killmail,
+      error: error
+    )
+
+    {:error, error}
+  end
+
+  defp handle_killmail_error(reason, killmail_id) do
+    Telemetry.fetch_system_error(killmail_id, reason, :zkb)
+    {:error, reason}
   end
 
   @doc """
@@ -179,74 +199,81 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
         headers: Client.eve_api_headers(),
         timeout: 60_000
       )
+      |> Keyword.put(:operation, :fetch_system_killmails)
 
-    request_opts = Keyword.put(request_opts, :operation, :fetch_system_killmails)
-
-    case Client.request_with_telemetry(url, :zkb, request_opts) do
-      {:ok, response} ->
-        case Client.parse_json_response(response) do
-          {:ok, killmails} when is_list(killmails) ->
-            Telemetry.fetch_system_success(system_id, length(killmails), :zkb)
-
-            Logger.debug("Successfully fetched system killmails from ZKB",
-              system_id: system_id,
-              killmail_count: length(killmails),
-              operation: :fetch_system_killmails,
-              step: :success
-            )
-
-            # Validate and log the format of received killmails
-            validate_zkb_format(killmails, system_id)
-
-            {:ok, killmails}
-
-          {:error, reason} ->
-            Telemetry.fetch_system_error(system_id, reason, :zkb)
-
-            Logger.error("Failed to fetch system killmails from ZKB",
-              system_id: system_id,
-              operation: :fetch_system_killmails,
-              error: reason,
-              step: :error
-            )
-
-            {:error, reason}
-
-          other ->
-            # Handle unexpected successful responses
-            error_reason =
-              Error.zkb_error(:unexpected_response, "Unexpected response format from ZKB", false)
-
-            Telemetry.fetch_system_error(system_id, error_reason, :zkb)
-
-            Logger.error("Failed to fetch system killmails from ZKB",
-              system_id: system_id,
-              operation: :fetch_system_killmails,
-              error: error_reason,
-              unexpected_response: other,
-              step: :error
-            )
-
-            {:error, error_reason}
-        end
+    # Check rate limit and make request
+    with :ok <- RateLimiter.check_rate_limit(:zkillboard),
+         {:ok, response} <- Client.request_with_telemetry(url, :zkb, request_opts),
+         {:ok, parsed} <- Client.parse_json_response(response) do
+      handle_system_killmails_response(parsed, system_id)
+    else
+      {:error, %Error{} = error} ->
+        handle_system_killmails_error(error, system_id)
 
       {:error, reason} ->
-        Telemetry.fetch_system_error(system_id, reason, :zkb)
-
-        Logger.error("Failed to fetch system killmails from ZKB",
-          system_id: system_id,
-          operation: :fetch_system_killmails,
-          error: reason,
-          step: :error
-        )
-
-        {:error, reason}
+        handle_system_killmails_error(reason, system_id)
     end
   end
 
   def fetch_system_killmails(invalid_id, _opts) do
     {:error,
      Error.validation_error(:invalid_format, "Invalid system ID format: #{inspect(invalid_id)}")}
+  end
+
+  defp handle_system_killmails_response(killmails, system_id) when is_list(killmails) do
+    Telemetry.fetch_system_success(system_id, length(killmails), :zkb)
+
+    Logger.debug("Successfully fetched system killmails from ZKB",
+      system_id: system_id,
+      killmail_count: length(killmails),
+      operation: :fetch_system_killmails,
+      step: :success
+    )
+
+    # Validate and log the format of received killmails
+    validate_zkb_format(killmails, system_id)
+
+    {:ok, killmails}
+  end
+
+  defp handle_system_killmails_response(other, system_id) do
+    error = Error.zkb_error(:unexpected_response, "Unexpected response format from ZKB", false)
+    Telemetry.fetch_system_error(system_id, error, :zkb)
+
+    Logger.error("Failed to fetch system killmails from ZKB",
+      system_id: system_id,
+      operation: :fetch_system_killmails,
+      error: error,
+      unexpected_response: other,
+      step: :error
+    )
+
+    {:error, error}
+  end
+
+  defp handle_system_killmails_error(%Error{type: :rate_limit} = error, system_id) do
+    Telemetry.fetch_system_error(system_id, error, :zkb)
+
+    Logger.warning("Rate limit exceeded for zkillboard",
+      system_id: system_id,
+      operation: :fetch_system_killmails,
+      error: error
+    )
+
+    {:error, error}
+  end
+
+  defp handle_system_killmails_error(reason, system_id) do
+    Telemetry.fetch_system_error(system_id, reason, :zkb)
+
+    Logger.error("Failed to fetch system killmails from ZKB",
+      system_id: system_id,
+      operation: :fetch_system_killmails,
+      error: reason,
+      step: :error
+    )
+
+    {:error, reason}
   end
 
   @doc """
@@ -292,9 +319,23 @@ defmodule WandererKills.Ingest.Killmails.ZkbClient do
 
     request_opts = Keyword.put(request_opts, :operation, operation_atom)
 
-    case Client.request_with_telemetry(url, :zkb, request_opts) do
-      {:ok, response} -> Client.parse_json_response(response)
-      {:error, reason} -> {:error, reason}
+    # Check rate limit and make request
+    with :ok <- RateLimiter.check_rate_limit(:zkillboard),
+         {:ok, response} <- Client.request_with_telemetry(url, :zkb, request_opts) do
+      Client.parse_json_response(response)
+    else
+      {:error, %Error{type: :rate_limit} = error} ->
+        Logger.warning("Rate limit exceeded for zkillboard",
+          entity_type: entity_type,
+          entity_id: entity_id,
+          operation: operation_atom,
+          error: error
+        )
+
+        {:error, error}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
