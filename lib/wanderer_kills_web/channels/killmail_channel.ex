@@ -613,7 +613,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
     max_system_id =
       Application.get_env(:wanderer_kills, :validation, [])
-      |> Keyword.get(:max_system_id, 32_000_000)
+      |> Keyword.get(:max_system_id, 50_000_000)
 
     cond do
       length(systems) > max_systems ->
@@ -627,14 +627,9 @@ defmodule WandererKillsWeb.KillmailChannel do
         valid_systems =
           Enum.filter(systems, &(&1 > 0 and &1 <= max_system_id))
 
-        invalid_systems =
-          Enum.filter(systems, &(&1 > 0 and &1 > max_system_id))
-
         if length(valid_systems) == length(systems) do
           {:ok, Enum.uniq(valid_systems)}
         else
-          Logger.error("Invalid system IDs: #{inspect(invalid_systems)}")
-
           {:error,
            Error.validation_error(:invalid_system_ids, "Invalid system IDs", %{systems: systems})}
         end

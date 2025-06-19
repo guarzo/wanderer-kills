@@ -12,17 +12,17 @@ defmodule WandererKills.Config do
 
       # Compile-time configuration (preferred for performance)
       @cache_ttl Application.compile_env(:wanderer_kills, [:cache, :killmails_ttl], 3600)
-      
+
       # Runtime configuration (when needed)
       ttl = Application.get_env(:wanderer_kills, :cache, [])[:killmails_ttl] || 3600
-      
+
       # Constants from this module
       max_id = WandererKills.Config.max_killmail_id()
   """
 
   # Application constants that shouldn't change
   @max_killmail_id 999_999_999_999
-  @max_system_id 34_999_999
+  @max_system_id 50_999_999
   @max_character_id 2_129_999_999
   @max_subscribed_systems 100
   @gen_server_call_timeout 5_000
