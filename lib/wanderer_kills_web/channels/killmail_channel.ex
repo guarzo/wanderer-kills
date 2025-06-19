@@ -613,7 +613,7 @@ defmodule WandererKillsWeb.KillmailChannel do
 
     max_system_id =
       Application.get_env(:wanderer_kills, :validation, [])
-      |> Keyword.get(:max_system_id, 32_000_000)
+      |> Keyword.get(:max_system_id, 50_000_000)
 
     cond do
       # Empty list is valid - allows clients to join without initial system subscriptions

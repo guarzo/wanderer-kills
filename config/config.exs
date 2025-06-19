@@ -175,7 +175,7 @@ config :wanderer_kills,
     # System subscription limits
     # Increased from 50 to 10,000
     max_subscribed_systems: 10_000,
-    max_system_id: 32_000_000,
+    max_system_id: 50_000_000,
 
     # Character subscription limits
     # Increased from 1,000 to 50,000
