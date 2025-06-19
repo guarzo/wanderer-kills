@@ -870,8 +870,16 @@ defmodule WandererKillsWeb.KillmailChannel do
       case WandererKills.Ingest.RequestCoalescer.request(request_key, fn ->
         Preloader.preload_kills_for_system(system_id, limit, 24)
       end) do
-        {:ok, kills} -> kills
-        {:error, _} -> []
+        {:ok, kills} ->
+          kills
+
+        {:error, reason} ->
+          Logger.debug(
+            "[KillmailChannel] Request coalescing failed, using direct preload",
+            system_id: system_id,
+            error: reason
+          )
+          Preloader.preload_kills_for_system(system_id, limit, 24)
       end
     else
       # Use the shared preloader directly
