@@ -95,14 +95,15 @@ defmodule WandererKills.Application do
     config = Application.get_env(:wanderer_kills, :request_coalescer, [])
     [{WandererKills.Ingest.RequestCoalescer, config} | children]
   end
+
   defp maybe_add_request_coalescer(children, _), do: children
 
   defp maybe_add_smart_rate_limiter(children, true) do
     config = Application.get_env(:wanderer_kills, :smart_rate_limiter, [])
     [{WandererKills.Ingest.SmartRateLimiter, config} | children]
   end
+
   defp maybe_add_smart_rate_limiter(children, _), do: children
-  end
 
   # Observability and monitoring processes
   defp observability_children do

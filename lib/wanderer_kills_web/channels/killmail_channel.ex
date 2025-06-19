@@ -502,7 +502,9 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       # Track subscription removal
       subscribed_systems_count = MapSet.size(socket.assigns.subscribed_systems || MapSet.new())
-      subscribed_characters_count = MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
+
+      subscribed_characters_count =
+        MapSet.size(socket.assigns[:subscribed_characters] || MapSet.new())
 
       WebSocketStats.track_subscription(:removed, subscribed_systems_count, %{
         user_id: socket.assigns.user_id,
@@ -689,7 +691,11 @@ defmodule WandererKillsWeb.KillmailChannel do
 
       Enum.all?(characters, &is_integer/1) ->
         # Character IDs should be positive integers within valid range
-        valid_characters = Enum.filter(characters, &(&1 > 0 and &1 <= max_character_id))
+        # EVE Online character IDs typically start from 90000000 for players
+        min_character_id = 90_000_000
+
+        valid_characters =
+          Enum.filter(characters, &(&1 >= min_character_id and &1 <= max_character_id))
 
         if length(valid_characters) == length(characters) do
           {:ok, Enum.uniq(valid_characters)}
@@ -860,33 +866,43 @@ defmodule WandererKillsWeb.KillmailChannel do
   end
 
   defp preload_system_kills_for_websocket(socket, system_id, limit) do
-    # Use request coalescing for WebSocket preloads if enabled
-    features = Application.get_env(:wanderer_kills, :features, [])
-    
-    kills = if features[:request_coalescing] do
-      # Use coalescing to avoid duplicate preloads for same system
-      request_key = {:websocket_preload, system_id, limit, 24}
-      
-      case WandererKills.Ingest.RequestCoalescer.request(request_key, fn ->
-        Preloader.preload_kills_for_system(system_id, limit, 24)
-      end) do
-        {:ok, kills} ->
-          kills
+    kills = fetch_system_kills_with_coalescing(system_id, limit)
+    send_preload_kills_to_websocket(socket, system_id, kills)
+  end
 
-        {:error, reason} ->
-          Logger.debug(
-            "[KillmailChannel] Request coalescing failed, using direct preload",
-            system_id: system_id,
-            error: reason
-          )
-          Preloader.preload_kills_for_system(system_id, limit, 24)
-      end
+  defp fetch_system_kills_with_coalescing(system_id, limit) do
+    features = Application.get_env(:wanderer_kills, :features, [])
+
+    if features[:request_coalescing] do
+      coalesce_system_kills_request(system_id, limit)
     else
       # Use the shared preloader directly
       Preloader.preload_kills_for_system(system_id, limit, 24)
     end
-    
-    send_preload_kills_to_websocket(socket, system_id, kills)
+  end
+
+  defp coalesce_system_kills_request(system_id, limit) do
+    request_key = {:websocket_preload, system_id, limit, 24}
+
+    case WandererKills.Ingest.RequestCoalescer.request(request_key, fn ->
+           Preloader.preload_kills_for_system(system_id, limit, 24)
+         end) do
+      {:ok, kills} ->
+        kills
+
+      [] ->
+        # Handle empty list response from coalescer
+        []
+
+      {:error, reason} ->
+        Logger.debug(
+          "[KillmailChannel] Request coalescing failed, using direct preload",
+          system_id: system_id,
+          error: reason
+        )
+
+        Preloader.preload_kills_for_system(system_id, limit, 24)
+    end
   end
 
   # Removed - now using shared Preloader module

@@ -92,14 +92,17 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   def track_subscription(event, system_count, metadata \\ %{})
       when event in [:added, :updated, :removed] and is_integer(system_count) do
     character_count = Map.get(metadata, :character_count, 0)
-    
+
     Telemetry.websocket_subscription(
       event,
       system_count,
       metadata
     )
 
-    GenServer.cast(__MODULE__, {:track_subscription, event, system_count, character_count, metadata})
+    GenServer.cast(
+      __MODULE__,
+      {:track_subscription, event, system_count, character_count, metadata}
+    )
   end
 
   @doc """
@@ -267,7 +270,10 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :removed, system_count, character_count, _metadata}, state) do
+  def handle_cast(
+        {:track_subscription, :removed, system_count, character_count, _metadata},
+        state
+      ) do
     new_subscriptions = %{
       state.subscriptions
       | total_removed: state.subscriptions.total_removed + 1,
@@ -281,7 +287,10 @@ defmodule WandererKills.Core.Observability.WebSocketStats do
   end
 
   @impl true
-  def handle_cast({:track_subscription, :updated, system_count_delta, character_count_delta, _metadata}, state) do
+  def handle_cast(
+        {:track_subscription, :updated, system_count_delta, character_count_delta, _metadata},
+        state
+      ) do
     # For updates, adjust the total system and character counts by the deltas
     new_subscriptions = %{
       state.subscriptions

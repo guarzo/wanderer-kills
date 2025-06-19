@@ -39,8 +39,10 @@ config :wanderer_kills,
 
   # Rate limiter configuration
   rate_limiter: [
-    zkb_capacity: 100,        # Increased from 30 to 100
-    zkb_refill_rate: 50,      # Increased from 30 to 50
+    # Increased from 30 to 100
+    zkb_capacity: 100,
+    # Increased from 30 to 50
+    zkb_refill_rate: 50,
     esi_capacity: 100,
     esi_refill_rate: 100
   ],
@@ -171,18 +173,23 @@ config :wanderer_kills,
   # WebSocket subscription validation limits
   validation: [
     # System subscription limits
-    max_subscribed_systems: 10_000,    # Increased from 50 to 10,000
+    # Increased from 50 to 10,000
+    max_subscribed_systems: 10_000,
     max_system_id: 32_000_000,
 
     # Character subscription limits
-    max_subscribed_characters: 50_000, # Increased from 1,000 to 50,000
-    max_character_id: 3_000_000_000    # EVE character IDs can be up to ~3B
+    # Increased from 1,000 to 50,000
+    max_subscribed_characters: 50_000,
+    # EVE character IDs can be up to ~3B
+    max_character_id: 3_000_000_000
   ],
 
   # Feature flags for gradual rollout
   features: [
-    smart_rate_limiting: false,         # Enable smart rate limiting
-    request_coalescing: false           # Enable request coalescing
+    # Enable smart rate limiting
+    smart_rate_limiting: false,
+    # Enable request coalescing
+    request_coalescing: false
   ],
 
   # Smart rate limiter configuration
@@ -210,7 +217,8 @@ config :wanderer_kills,
 
   # Request coalescing configuration
   request_coalescer: [
-    request_timeout_ms: 30_000      # Max time to wait for coalesced request
+    # Max time to wait for coalesced request
+    request_timeout_ms: 30_000
   ]
 
 # Configure the Phoenix endpoint

@@ -18,14 +18,18 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
 
   # Request priorities (lower number = higher priority)
   @priorities %{
-    realtime: 1,      # Real-time killmail fetches
-    preload: 2,       # WebSocket preload requests
-    background: 3,    # Background system updates
-    bulk: 4          # Bulk operations
+    # Real-time killmail fetches
+    realtime: 1,
+    # WebSocket preload requests
+    preload: 2,
+    # Background system updates
+    background: 3,
+    # Bulk operations
+    bulk: 4
   }
 
-
   defmodule State do
+    @moduledoc "Internal state for SmartRateLimiter GenServer"
     defstruct [
       # Request queue (priority queue)
       request_queue: :queue.new(),
@@ -43,11 +47,13 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
       circuit_state: :closed,
       failure_count: 0,
       last_failure: nil,
-      circuit_timeout: 30_000,  # 30 seconds
+      # 30 seconds
+      circuit_timeout: 30_000,
 
       # Rate window detection
       rate_limit_history: [],
-      detected_window_ms: 60_000,  # Default 1 minute
+      # Default 1 minute
+      detected_window_ms: 60_000,
 
       # Configuration
       config: %{}
@@ -55,11 +61,15 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
   end
 
   defmodule Request do
+    @moduledoc "Request structure for rate-limited API calls"
     defstruct [
       :id,
-      :type,           # :system_killmails, :killmail, etc.
-      :params,         # %{system_id: 123, opts: []}
-      :priority,       # :realtime, :preload, :background, :bulk
+      # :system_killmails, :killmail, etc.
+      :type,
+      # %{system_id: 123, opts: []}
+      :params,
+      # :realtime, :preload, :background, :bulk
+      :priority,
       :requester_pid,
       :reply_ref,
       :created_at,
@@ -137,7 +147,9 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     case state.circuit_state do
       :open ->
         # Circuit is open, reject immediately
-        {:reply, {:error, Error.rate_limit_error(:circuit_open, "Circuit breaker is open")}, state}
+        {:reply,
+         {:error, Error.rate_limit_error("Circuit breaker is open", %{reason: :circuit_open})},
+         state}
 
       _ ->
         # Try to process request or queue it
@@ -238,11 +250,13 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
 
     # Add to pending requests
     request_key = request_key(request)
-    pending_requests = Map.put(state.pending_requests, request_key, %{
-      request: request,
-      waiters: [from],
-      started_at: System.monotonic_time(:millisecond)
-    })
+
+    pending_requests =
+      Map.put(state.pending_requests, request_key, %{
+        request: request,
+        waiters: [from],
+        started_at: System.monotonic_time(:millisecond)
+      })
 
     # Set timeout for request
     timeout_ms = min(30_000, request.timeout || 30_000)
@@ -250,19 +264,19 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
 
     # Execute the actual request asynchronously
     Task.start(fn ->
-      result = try do
-        perform_zkb_request(request)
-      rescue
-        error -> {:error, error}
-      catch
-        :exit, reason -> {:error, {:exit, reason}}
-      end
+      result =
+        try do
+          perform_zkb_request(request)
+        rescue
+          error -> {:error, error}
+        catch
+          :exit, reason -> {:error, {:exit, reason}}
+        end
+
       GenServer.cast(__MODULE__, {:request_complete, request.id, result})
     end)
 
-    updated_state = %{new_state |
-      pending_requests: pending_requests
-    }
+    updated_state = %{new_state | pending_requests: pending_requests}
 
     {:noreply, updated_state}
   end
@@ -289,22 +303,26 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
 
   defp process_queue(state) do
     if state.current_tokens > 0 and not :queue.is_empty(state.request_queue) do
-      case :queue.out(state.request_queue) do
-        {{:value, {_priority, request, from, timeout_ref}}, new_queue} ->
-          # Cancel timeout
-          Process.cancel_timer(timeout_ref)
-
-          # Execute the request
-          case execute_request(request, from, %{state | request_queue: new_queue}) do
-            {:noreply, new_state} -> new_state
-            _ -> state
-          end
-
-        {:empty, _} ->
-          state
-      end
+      execute_next_queued_request(state)
     else
       state
+    end
+  end
+
+  defp execute_next_queued_request(state) do
+    case :queue.out(state.request_queue) do
+      {{:value, {_priority, request, from, timeout_ref}}, new_queue} ->
+        # Cancel timeout
+        Process.cancel_timer(timeout_ref)
+
+        # Execute the request
+        {:noreply, new_state} =
+          execute_request(request, from, %{state | request_queue: new_queue})
+
+        new_state
+
+      {:empty, _} ->
+        state
     end
   end
 
@@ -334,10 +352,7 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     tokens_to_add = trunc(elapsed * state.refill_rate / 1000)
     new_tokens = min(state.current_tokens + tokens_to_add, state.max_tokens)
 
-    %{state |
-      current_tokens: new_tokens,
-      last_refill: now
-    }
+    %{state | current_tokens: new_tokens, last_refill: now}
   end
 
   defp request_key(request) do
@@ -345,8 +360,10 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     case request.type do
       :system_killmails ->
         {request.type, request.params.system_id, request.params.opts}
+
       :killmail ->
         {request.type, request.params.killmail_id}
+
       _ ->
         {request.type, request.params}
     end
@@ -366,7 +383,9 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
 
   defp add_waiter_to_pending(pending_requests, request_key, from) do
     case Map.get(pending_requests, request_key) do
-      nil -> pending_requests
+      nil ->
+        pending_requests
+
       pending ->
         updated_waiters = [from | pending.waiters]
         Map.put(pending_requests, request_key, %{pending | waiters: updated_waiters})
@@ -377,14 +396,59 @@ defmodule WandererKills.Ingest.SmartRateLimiter do
     # Find and remove timed out request from queue or pending
     Logger.warning("[SmartRateLimiter] Request timeout", request_id: request_id)
 
-    # TODO: Implement timeout handling for queued and pending requests
-    state
+    # Check if it's in pending requests
+    pending_key = find_pending_request_key(state.pending_requests, request_id)
+
+    if pending_key do
+      handle_pending_timeout(state, pending_key)
+    else
+      # Check if it's in the queue
+      new_queue = remove_from_queue(state.request_queue, request_id)
+      %{state | request_queue: new_queue}
+    end
+  end
+
+  defp handle_pending_timeout(state, pending_key) do
+    case Map.get(state.pending_requests, pending_key) do
+      nil ->
+        state
+
+      pending ->
+        Enum.each(pending.waiters, fn from ->
+          GenServer.reply(from, {:error, Error.timeout_error("Request timed out")})
+        end)
+
+        %{state | pending_requests: Map.delete(state.pending_requests, pending_key)}
+    end
+  end
+
+  defp find_pending_request_key(pending_requests, request_id) do
+    Enum.find_value(pending_requests, fn {key, pending} ->
+      if pending.request.id == request_id, do: key, else: nil
+    end)
+  end
+
+  defp remove_from_queue(queue, request_id) do
+    items = :queue.to_list(queue)
+
+    filtered =
+      Enum.reject(items, fn {_priority, request, from, _timeout_ref} ->
+        if request.id == request_id do
+          # Reply with timeout error
+          GenServer.reply(from, {:error, Error.timeout_error("Request timed out in queue")})
+          true
+        else
+          false
+        end
+      end)
+
+    :queue.from_list(filtered)
   end
 
   defp find_and_remove_pending_request(pending_requests, request_id) do
     case Enum.find(pending_requests, fn {_key, pending} ->
-      pending.request.id == request_id
-    end) do
+           pending.request.id == request_id
+         end) do
       nil ->
         {nil, pending_requests}
 

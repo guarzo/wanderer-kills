@@ -564,51 +564,52 @@ defmodule WandererKills.Core.Observability.Monitoring do
       request_coalescing_enabled: features[:request_coalescing] || false
     }
 
-    smart_limiter_stats = 
-      if features[:smart_rate_limiting] do
-        case WandererKills.Ingest.SmartRateLimiter.get_stats() do
-          {:ok, stats} ->
-            %{
-              queue_size: stats.queue_size,
-              pending_requests: stats.pending_requests,
-              current_tokens: stats.current_tokens,
-              circuit_state: stats.circuit_state,
-              failure_count: stats.failure_count,
-              detected_window_ms: stats.detected_window_ms
-            }
-
-          {:error, reason} ->
-            %{error: "smart_rate_limiter_unreachable", reason: inspect(reason)}
-
-          _ ->
-            %{error: "smart_rate_limiter_unreachable"}
-        end
-      else
-        %{}
-      end
-
-    coalescer_stats = 
-      if features[:request_coalescing] do
-        case WandererKills.Ingest.RequestCoalescer.get_stats() do
-          {:ok, stats} ->
-            %{
-              pending_requests: stats.pending_requests,
-              total_requesters: stats.total_requesters
-            }
-
-          {:error, reason} ->
-            %{error: "request_coalescer_unreachable", reason: inspect(reason)}
-
-          _ ->
-            %{error: "request_coalescer_unreachable"}
-        end
-      else
-        %{}
-      end
+    smart_limiter_stats = collect_smart_limiter_stats(features[:smart_rate_limiting])
+    coalescer_stats = collect_coalescer_stats(features[:request_coalescing])
 
     Map.merge(base_metrics, %{
       smart_rate_limiter: smart_limiter_stats,
       request_coalescer: coalescer_stats
     })
   end
+
+  defp collect_smart_limiter_stats(true) do
+    case WandererKills.Ingest.SmartRateLimiter.get_stats() do
+      {:ok, stats} ->
+        %{
+          queue_size: stats.queue_size,
+          pending_requests: stats.pending_requests,
+          current_tokens: stats.current_tokens,
+          circuit_state: stats.circuit_state,
+          failure_count: stats.failure_count,
+          detected_window_ms: stats.detected_window_ms
+        }
+
+      {:error, reason} ->
+        %{error: "smart_rate_limiter_unreachable", reason: inspect(reason)}
+
+      _ ->
+        %{error: "smart_rate_limiter_unreachable"}
+    end
+  end
+
+  defp collect_smart_limiter_stats(_), do: %{}
+
+  defp collect_coalescer_stats(true) do
+    case WandererKills.Ingest.RequestCoalescer.get_stats() do
+      {:ok, stats} ->
+        %{
+          pending_requests: stats.pending_requests,
+          total_requesters: stats.total_requesters
+        }
+
+      {:error, reason} ->
+        %{error: "request_coalescer_unreachable", reason: inspect(reason)}
+
+      _ ->
+        %{error: "request_coalescer_unreachable"}
+    end
+  end
+
+  defp collect_coalescer_stats(_), do: %{}
 end
