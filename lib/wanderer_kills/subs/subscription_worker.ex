@@ -325,20 +325,26 @@ defmodule WandererKills.Subs.SubscriptionWorker do
   end
 
   defp send_webhook_notification(state, system_id, matching_kills) do
+    # Convert all killmails to structs before sending to webhook
+    struct_kills =
+      matching_kills
+      |> Enum.map(&ensure_killmail_struct/1)
+      |> Enum.filter(& &1)
+
     # Send webhook notification asynchronously
     SupervisedTask.start_child(
       fn ->
         WebhookNotifier.notify_webhook(
           state.subscription["callback_url"],
           system_id,
-          matching_kills,
+          struct_kills,
           state.subscription_id
         )
       end,
       task_name: "webhook_notification",
       metadata: %{
         subscription_id: state.subscription_id,
-        killmail_count: length(matching_kills)
+        killmail_count: length(struct_kills)
       }
     )
   end
@@ -347,11 +353,17 @@ defmodule WandererKills.Subs.SubscriptionWorker do
     # Get the socket process from the subscription
     socket_pid = state.subscription["socket_pid"]
 
+    # Convert all killmails to structs before sending
+    struct_kills =
+      matching_kills
+      |> Enum.map(&ensure_killmail_struct/1)
+      |> Enum.filter(& &1)
+
     # Build the message in the format expected by the WebSocket channel
     message = %{
       type: :detailed_kill_update,
       solar_system_id: system_id,
-      kills: matching_kills,
+      kills: struct_kills,
       timestamp: DateTime.utc_now()
     }
 
@@ -362,7 +374,7 @@ defmodule WandererKills.Subs.SubscriptionWorker do
       Logger.debug(
         "[SubscriptionWorker] Sent to WebSocket - " <>
           "subscription_id: #{state.subscription_id}, system_id: #{system_id}, " <>
-          "killmail_count: #{length(matching_kills)}, " <>
+          "killmail_count: #{length(struct_kills)}, " <>
           "socket_pid: #{inspect(socket_pid)}, user_id: #{state.subscription["user_id"]}"
       )
     else
@@ -372,4 +384,24 @@ defmodule WandererKills.Subs.SubscriptionWorker do
       )
     end
   end
+
+  # Convert killmail maps to structs
+  defp ensure_killmail_struct(%Killmail{} = killmail), do: killmail
+
+  defp ensure_killmail_struct(killmail_map) when is_map(killmail_map) do
+    case Killmail.new(killmail_map) do
+      {:ok, killmail} ->
+        killmail
+
+      {:error, reason} ->
+        Logger.warning("[WARNING] Failed to convert killmail map to struct",
+          killmail_id: killmail_map["killmail_id"] || killmail_map[:killmail_id],
+          error: inspect(reason)
+        )
+
+        nil
+    end
+  end
+
+  defp ensure_killmail_struct(_), do: nil
 end

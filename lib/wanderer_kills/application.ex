@@ -76,7 +76,8 @@ defmodule WandererKills.Application do
       WandererKills.Subs.SubscriptionRegistry,
       WandererKills.Subs.SubscriptionSupervisor,
       WandererKills.Ingest.RateLimiter,
-      WandererKills.Ingest.HistoricalFetcher
+      WandererKills.Ingest.HistoricalFetcher,
+      WandererKills.Core.Storage.CleanupWorker
     ]
 
     # Add smart rate limiting components if enabled

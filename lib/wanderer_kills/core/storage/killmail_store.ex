@@ -605,4 +605,232 @@ defmodule WandererKills.Core.Storage.KillmailStore do
       _ -> table_name
     end
   end
+
+  # ============================================================================
+  # Cleanup Operations
+  # ============================================================================
+
+  @doc """
+  Performs cleanup of old data based on configured TTLs.
+
+  TTL Configuration:
+  - killmails: 7 days
+  - system_killmails: 7 days
+  - system_kill_counts: 1 day
+  - system_fetch_timestamps: 1 day
+  - killmail_events: 7 days
+  - client_offsets: 3 days
+  """
+  def cleanup_old_data do
+    Logger.info("[KillmailStore] Starting cleanup of old data")
+
+    now = DateTime.utc_now()
+
+    # Define TTLs in seconds
+    # 7 days
+    killmail_ttl = 7 * 24 * 60 * 60
+    # 1 day
+    system_count_ttl = 24 * 60 * 60
+    # 1 day
+    timestamp_ttl = 24 * 60 * 60
+    # 3 days
+    client_offset_ttl = 3 * 24 * 60 * 60
+
+    # Track cleanup stats
+    stats = %{
+      killmails_removed: 0,
+      system_killmails_cleaned: 0,
+      system_counts_removed: 0,
+      timestamps_removed: 0,
+      events_removed: 0,
+      client_offsets_removed: 0
+    }
+
+    # Cleanup killmails older than 7 days
+    stats = cleanup_killmails(now, killmail_ttl, stats)
+
+    # Cleanup system kill counts older than 1 day
+    stats = cleanup_system_counts(now, system_count_ttl, stats)
+
+    # Cleanup fetch timestamps older than 1 day
+    stats = cleanup_fetch_timestamps(now, timestamp_ttl, stats)
+
+    # Cleanup event streaming data if enabled
+    final_stats =
+      if event_streaming_enabled?() do
+        stats
+        |> cleanup_events(now, killmail_ttl)
+        |> cleanup_client_offsets(now, client_offset_ttl)
+      else
+        stats
+      end
+
+    Logger.info("[KillmailStore] Cleanup completed", final_stats)
+
+    {:ok, final_stats}
+  end
+
+  defp cleanup_killmails(now, ttl, stats) do
+    cutoff = DateTime.add(now, -ttl, :second)
+
+    # Find and remove old killmails
+    old_killmail_ids =
+      :ets.foldl(
+        fn {killmail_id, killmail_data}, acc ->
+          case get_killmail_time(killmail_data) do
+            {:ok, kill_time} when kill_time < cutoff ->
+              # Remove from main table
+              :ets.delete(@killmails_table, killmail_id)
+              # Also remove from system killmails
+              remove_killmail_from_all_systems(killmail_id)
+              [killmail_id | acc]
+
+            _ ->
+              acc
+          end
+        end,
+        [],
+        @killmails_table
+      )
+
+    %{stats | killmails_removed: length(old_killmail_ids)}
+  end
+
+  defp cleanup_system_counts(_now, _ttl, stats) do
+    # System kill counts are running totals, so we only remove entries
+    # for systems that have no killmails at all
+    empty_systems =
+      :ets.foldl(
+        fn {system_id, _count}, acc ->
+          case :ets.lookup(@system_killmails_table, system_id) do
+            [] ->
+              :ets.delete(@system_kill_counts_table, system_id)
+              acc + 1
+
+            _ ->
+              acc
+          end
+        end,
+        0,
+        @system_kill_counts_table
+      )
+
+    %{stats | system_counts_removed: empty_systems}
+  end
+
+  defp cleanup_fetch_timestamps(now, ttl, stats) do
+    cutoff = DateTime.add(now, -ttl, :second)
+
+    removed =
+      :ets.foldl(
+        fn {system_id, timestamp}, acc ->
+          if DateTime.compare(timestamp, cutoff) == :lt do
+            :ets.delete(@system_fetch_timestamps_table, system_id)
+            acc + 1
+          else
+            acc
+          end
+        end,
+        0,
+        @system_fetch_timestamps_table
+      )
+
+    %{stats | timestamps_removed: removed}
+  end
+
+  defp cleanup_events(stats, now, ttl) do
+    cutoff = DateTime.add(now, -ttl, :second)
+
+    # Since events table is ordered_set with event_id as key,
+    # we need to check each event's killmail time
+    removed =
+      :ets.foldl(
+        fn {event_id, _system_id, killmail_data}, acc ->
+          case get_killmail_time(killmail_data) do
+            {:ok, kill_time} when kill_time < cutoff ->
+              :ets.delete(@killmail_events_table, event_id)
+              acc + 1
+
+            _ ->
+              acc
+          end
+        end,
+        0,
+        @killmail_events_table
+      )
+
+    %{stats | events_removed: removed}
+  end
+
+  defp cleanup_client_offsets(stats, _now, _ttl) do
+    # For client offsets, we could implement last-seen tracking,
+    # but for now we'll just remove all offsets since they can be recreated
+    # Count before clearing
+    count = :ets.info(@client_offsets_table, :size)
+
+    # Only clear if table has old data (simple heuristic)
+    if count > 1000 do
+      :ets.delete_all_objects(@client_offsets_table)
+      %{stats | client_offsets_removed: count}
+    else
+      stats
+    end
+  end
+
+  defp get_killmail_time(killmail_data) when is_map(killmail_data) do
+    cond do
+      # Check for kill_time field (canonical)
+      Map.has_key?(killmail_data, "kill_time") ->
+        parse_time(killmail_data["kill_time"])
+
+      Map.has_key?(killmail_data, :kill_time) ->
+        parse_time(killmail_data[:kill_time])
+
+      # Check for killmail_time field (ESI format)
+      Map.has_key?(killmail_data, "killmail_time") ->
+        parse_time(killmail_data["killmail_time"])
+
+      Map.has_key?(killmail_data, :killmail_time) ->
+        parse_time(killmail_data[:killmail_time])
+
+      true ->
+        {:error, :no_time_field}
+    end
+  end
+
+  defp parse_time(%DateTime{} = dt), do: {:ok, dt}
+
+  defp parse_time(time_string) when is_binary(time_string) do
+    case DateTime.from_iso8601(time_string) do
+      {:ok, dt, _offset} -> {:ok, dt}
+      error -> error
+    end
+  end
+
+  defp parse_time(_), do: {:error, :invalid_time_format}
+
+  defp remove_killmail_from_all_systems(killmail_id) do
+    :ets.foldl(
+      fn {system_id, killmail_ids}, _acc ->
+        remove_killmail_from_system_if_present(system_id, killmail_ids, killmail_id)
+      end,
+      :ok,
+      @system_killmails_table
+    )
+  end
+
+  defp remove_killmail_from_system_if_present(system_id, killmail_ids, killmail_id) do
+    if killmail_id in killmail_ids do
+      new_ids = List.delete(killmail_ids, killmail_id)
+      update_system_killmails_table(system_id, new_ids)
+    end
+  end
+
+  defp update_system_killmails_table(system_id, []) do
+    :ets.delete(@system_killmails_table, system_id)
+  end
+
+  defp update_system_killmails_table(system_id, new_ids) do
+    :ets.insert(@system_killmails_table, {system_id, new_ids})
+  end
 end

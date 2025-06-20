@@ -254,14 +254,15 @@ defmodule WandererKills.Core.Client do
       {:continue, killmail} ->
         case extract_time_from_killmail_time(killmail) do
           {:ok, time} -> {:ok, time}
-          {:continue, killmail} -> extract_time_from_zkb(killmail)
+          {:continue, _} -> extract_time_from_zkb({:continue, killmail})
         end
     end
   end
 
   defp extract_time_from_killmail(killmail) do
-    if is_map(killmail) and Map.has_key?(killmail, "killmail_time") do
-      case parse_datetime(killmail["killmail_time"]) do
+    # Check for kill_time first (canonical field name)
+    if is_map(killmail) and Map.has_key?(killmail, "kill_time") do
+      case parse_datetime(killmail["kill_time"]) do
         {:ok, datetime} -> {:ok, datetime}
         {:error, _} -> {:continue, killmail}
       end
@@ -271,8 +272,9 @@ defmodule WandererKills.Core.Client do
   end
 
   defp extract_time_from_killmail_time(killmail) do
-    if is_map(killmail) and Map.has_key?(killmail, "kill_time") do
-      case parse_datetime(killmail["kill_time"]) do
+    # Check for killmail_time (ESI format)
+    if is_map(killmail) and Map.has_key?(killmail, "killmail_time") do
+      case parse_datetime(killmail["killmail_time"]) do
         {:ok, datetime} -> {:ok, datetime}
         {:error, _} -> {:continue, killmail}
       end
@@ -300,6 +302,8 @@ defmodule WandererKills.Core.Client do
   defp extract_time_from_zkb_metadata(_),
     do: {:error, Error.validation_error(:invalid_zkb_data, "Invalid zkb metadata format")}
 
+  defp parse_datetime(%DateTime{} = datetime), do: {:ok, datetime}
+
   defp parse_datetime(datetime_string) when is_binary(datetime_string) do
     case DateTime.from_iso8601(datetime_string) do
       {:ok, datetime, _offset} -> {:ok, datetime}
@@ -307,7 +311,6 @@ defmodule WandererKills.Core.Client do
     end
   end
 
-  defp parse_datetime(%DateTime{} = datetime), do: {:ok, datetime}
   defp parse_datetime(_), do: {:error, :invalid_datetime_format}
 
   @doc """

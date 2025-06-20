@@ -84,7 +84,8 @@ config :wanderer_kills,
   # Storage configuration
   storage: [
     enable_event_streaming: true,
-    gc_interval_ms: 60_000,
+    # 1 hour cleanup interval
+    gc_interval_ms: 3_600_000,
     max_events_per_system: 10_000
   ],
 
