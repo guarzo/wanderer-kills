@@ -68,14 +68,15 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
     # Get configured interval or use default
     interval = get_cleanup_interval()
 
-    # Schedule first cleanup
-    schedule_cleanup(interval)
+    # Schedule first cleanup and track when it will run
+    next_cleanup_at = schedule_cleanup(interval)
 
     state = %{
       interval: interval,
       last_cleanup: nil,
       last_stats: nil,
-      total_cleanups: 0
+      total_cleanups: 0,
+      next_cleanup_at: next_cleanup_at
     }
 
     {:ok, state}
@@ -108,7 +109,7 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
       last_cleanup: state.last_cleanup,
       last_stats: state.last_stats,
       total_cleanups: state.total_cleanups,
-      next_cleanup_in: calculate_next_cleanup_time(state.interval),
+      next_cleanup_in: calculate_next_cleanup_time(state.next_cleanup_at),
       interval_ms: state.interval
     }
 
@@ -131,15 +132,16 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
           nil
       end
 
-    # Schedule next cleanup
-    schedule_cleanup(state.interval)
+    # Schedule next cleanup and track when it will run
+    next_cleanup_at = schedule_cleanup(state.interval)
 
     # Update state
     new_state = %{
       state
       | last_cleanup: DateTime.utc_now(),
         last_stats: stats,
-        total_cleanups: state.total_cleanups + 1
+        total_cleanups: state.total_cleanups + 1,
+        next_cleanup_at: next_cleanup_at
     }
 
     {:noreply, new_state}
@@ -161,6 +163,7 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
 
   defp schedule_cleanup(interval) do
     Process.send_after(self(), :perform_cleanup, interval)
+    DateTime.add(DateTime.utc_now(), interval, :millisecond)
   end
 
   defp perform_cleanup do
@@ -172,16 +175,17 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
     end
   end
 
-  defp calculate_next_cleanup_time(interval) do
-    # Returns milliseconds until next cleanup
-    case Process.info(self(), :message_queue_len) do
-      {_, 0} ->
-        interval
+  defp calculate_next_cleanup_time(nil) do
+    # No cleanup scheduled yet
+    0
+  end
 
-      _ ->
-        # If there's a pending message, calculate actual time remaining
-        # This is approximate since we can't inspect timer references
-        interval
-    end
+  defp calculate_next_cleanup_time(next_cleanup_at) do
+    # Calculate milliseconds remaining until next cleanup
+    now = DateTime.utc_now()
+    diff = DateTime.diff(next_cleanup_at, now, :millisecond)
+
+    # Return 0 if the cleanup time has passed (shouldn't happen normally)
+    max(0, diff)
   end
 end
