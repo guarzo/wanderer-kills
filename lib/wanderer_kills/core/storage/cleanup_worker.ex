@@ -23,6 +23,7 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
   alias WandererKills.Core.Storage.KillmailStore
 
   @default_interval_ms :timer.hours(1)
+  @default_cleanup_timeout_ms :timer.minutes(5)
 
   # ============================================================================
   # Client API
@@ -37,9 +38,16 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
 
   @doc """
   Triggers an immediate cleanup.
+
+  The timeout can be configured via:
+  ```
+  config :wanderer_kills, :storage,
+    cleanup_timeout_ms: 300_000  # 5 minutes default
+  ```
   """
   def cleanup_now do
-    GenServer.call(__MODULE__, :cleanup_now, :timer.seconds(30))
+    timeout = get_cleanup_timeout()
+    GenServer.call(__MODULE__, :cleanup_now, timeout)
   end
 
   @doc """
@@ -144,6 +152,11 @@ defmodule WandererKills.Core.Storage.CleanupWorker do
   defp get_cleanup_interval do
     Application.get_env(:wanderer_kills, :storage, [])
     |> Keyword.get(:gc_interval_ms, @default_interval_ms)
+  end
+
+  defp get_cleanup_timeout do
+    Application.get_env(:wanderer_kills, :storage, [])
+    |> Keyword.get(:cleanup_timeout_ms, @default_cleanup_timeout_ms)
   end
 
   defp schedule_cleanup(interval) do

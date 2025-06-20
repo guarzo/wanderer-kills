@@ -389,6 +389,9 @@ defmodule WandererKills.Core.Storage.KillmailStore do
   def get_client_offsets(client_id) do
     if event_streaming_enabled?() do
       case :ets.lookup(@client_offsets_table, client_id) do
+        # Handle new format with timestamp
+        [{^client_id, offsets, _timestamp}] when is_map(offsets) -> offsets
+        # Handle old format for backwards compatibility
         [{^client_id, offsets}] when is_map(offsets) -> offsets
         [] -> %{}
       end
@@ -403,7 +406,8 @@ defmodule WandererKills.Core.Storage.KillmailStore do
   @impl true
   def put_client_offsets(client_id, offsets) when is_map(offsets) do
     if event_streaming_enabled?() do
-      :ets.insert(@client_offsets_table, {client_id, offsets})
+      # Store with last access timestamp
+      :ets.insert(@client_offsets_table, {client_id, offsets, DateTime.utc_now()})
     end
 
     :ok
@@ -562,7 +566,8 @@ defmodule WandererKills.Core.Storage.KillmailStore do
         {[{event_id, sys_id, km}], _continuation} ->
           # Update offset for this system only
           updated_offsets = Map.put(client_offsets, sys_id, event_id)
-          :ets.insert(@client_offsets_table, {client_id, updated_offsets})
+          # Store with last access timestamp
+          :ets.insert(@client_offsets_table, {client_id, updated_offsets, DateTime.utc_now()})
 
           {:ok, {event_id, sys_id, km}}
 
@@ -622,59 +627,69 @@ defmodule WandererKills.Core.Storage.KillmailStore do
   - client_offsets: 3 days
   """
   def cleanup_old_data do
-    Logger.info("[KillmailStore] Starting cleanup of old data")
+    try do
+      Logger.info("[KillmailStore] Starting cleanup of old data")
 
-    now = DateTime.utc_now()
+      now = DateTime.utc_now()
 
-    # Define TTLs in seconds
-    # 7 days
-    killmail_ttl = 7 * 24 * 60 * 60
-    # 1 day
-    system_count_ttl = 24 * 60 * 60
-    # 1 day
-    timestamp_ttl = 24 * 60 * 60
-    # 3 days
-    client_offset_ttl = 3 * 24 * 60 * 60
+      # Define TTLs in seconds
+      # 7 days
+      killmail_ttl = 7 * 24 * 60 * 60
+      # 1 day
+      system_count_ttl = 24 * 60 * 60
+      # 1 day
+      timestamp_ttl = 24 * 60 * 60
+      # 3 days
+      client_offset_ttl = 3 * 24 * 60 * 60
 
-    # Track cleanup stats
-    stats = %{
-      killmails_removed: 0,
-      system_killmails_cleaned: 0,
-      system_counts_removed: 0,
-      timestamps_removed: 0,
-      events_removed: 0,
-      client_offsets_removed: 0
-    }
+      # Track cleanup stats
+      stats = %{
+        killmails_removed: 0,
+        system_killmails_cleaned: 0,
+        system_counts_removed: 0,
+        timestamps_removed: 0,
+        events_removed: 0,
+        client_offsets_removed: 0
+      }
 
-    # Cleanup killmails older than 7 days
-    stats = cleanup_killmails(now, killmail_ttl, stats)
+      # Cleanup killmails older than 7 days
+      stats = cleanup_killmails(now, killmail_ttl, stats)
 
-    # Cleanup system kill counts older than 1 day
-    stats = cleanup_system_counts(now, system_count_ttl, stats)
+      # Cleanup system kill counts older than 1 day
+      stats = cleanup_system_counts(now, system_count_ttl, stats)
 
-    # Cleanup fetch timestamps older than 1 day
-    stats = cleanup_fetch_timestamps(now, timestamp_ttl, stats)
+      # Cleanup fetch timestamps older than 1 day
+      stats = cleanup_fetch_timestamps(now, timestamp_ttl, stats)
 
-    # Cleanup event streaming data if enabled
-    final_stats =
-      if event_streaming_enabled?() do
-        stats
-        |> cleanup_events(now, killmail_ttl)
-        |> cleanup_client_offsets(now, client_offset_ttl)
-      else
-        stats
-      end
+      # Cleanup event streaming data if enabled
+      final_stats =
+        if event_streaming_enabled?() do
+          stats
+          |> cleanup_events(now, killmail_ttl)
+          |> cleanup_client_offsets(now, client_offset_ttl)
+        else
+          stats
+        end
 
-    Logger.info("[KillmailStore] Cleanup completed", final_stats)
+      Logger.info("[KillmailStore] Cleanup completed", final_stats)
 
-    {:ok, final_stats}
+      {:ok, final_stats}
+    rescue
+      error ->
+        Logger.error("[KillmailStore] Cleanup failed",
+          error: inspect(error),
+          stacktrace: __STACKTRACE__
+        )
+
+        {:error, error}
+    end
   end
 
   defp cleanup_killmails(now, ttl, stats) do
     cutoff = DateTime.add(now, -ttl, :second)
 
-    # Find and remove old killmails
-    old_killmail_ids =
+    # Count and remove old killmails
+    removed_count =
       :ets.foldl(
         fn {killmail_id, killmail_data}, acc ->
           case get_killmail_time(killmail_data) do
@@ -683,17 +698,17 @@ defmodule WandererKills.Core.Storage.KillmailStore do
               :ets.delete(@killmails_table, killmail_id)
               # Also remove from system killmails
               remove_killmail_from_all_systems(killmail_id)
-              [killmail_id | acc]
+              acc + 1
 
             _ ->
               acc
           end
         end,
-        [],
+        0,
         @killmails_table
       )
 
-    %{stats | killmails_removed: length(old_killmail_ids)}
+    %{stats | killmails_removed: removed_count}
   end
 
   defp cleanup_system_counts(_now, _ttl, stats) do
@@ -762,19 +777,36 @@ defmodule WandererKills.Core.Storage.KillmailStore do
     %{stats | events_removed: removed}
   end
 
-  defp cleanup_client_offsets(stats, _now, _ttl) do
-    # For client offsets, we could implement last-seen tracking,
-    # but for now we'll just remove all offsets since they can be recreated
-    # Count before clearing
-    count = :ets.info(@client_offsets_table, :size)
+  defp cleanup_client_offsets(stats, now, ttl) do
+    cutoff = DateTime.add(now, -ttl, :second)
 
-    # Only clear if table has old data (simple heuristic)
-    if count > 1000 do
-      :ets.delete_all_objects(@client_offsets_table)
-      %{stats | client_offsets_removed: count}
+    # Remove client offsets older than TTL
+    removed =
+      :ets.foldl(
+        fn entry, acc ->
+          process_client_offset_entry(entry, acc, cutoff)
+        end,
+        0,
+        @client_offsets_table
+      )
+
+    %{stats | client_offsets_removed: removed}
+  end
+
+  defp process_client_offset_entry({client_id, _offsets, last_access}, acc, cutoff) do
+    # New format with timestamp
+    if DateTime.compare(last_access, cutoff) == :lt do
+      :ets.delete(@client_offsets_table, client_id)
+      acc + 1
     else
-      stats
+      acc
     end
+  end
+
+  defp process_client_offset_entry({client_id, _offsets}, acc, _cutoff) do
+    # Old format without timestamp - remove to migrate to new format
+    :ets.delete(@client_offsets_table, client_id)
+    acc + 1
   end
 
   defp get_killmail_time(killmail_data) when is_map(killmail_data) do
