@@ -130,9 +130,10 @@ config :logger, :default_formatter,
 
 # Development-specific configuration
 if config_env() == :dev do
+  # :debug_errors and :code_reloader live in config/dev.exs — Phoenix 1.8 reads
+  # them via Application.compile_env/3, and setting a compile-env key here
+  # aborts boot.
   config :wanderer_kills, WandererKillsWeb.Endpoint,
-    debug_errors: true,
-    code_reloader: true,
     live_reload: [
       patterns: [
         ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
@@ -159,11 +160,10 @@ end
 
 # Production-specific configuration
 if config_env() == :prod do
-  # Disable debug features
-  config :wanderer_kills, WandererKillsWeb.Endpoint,
-    debug_errors: false,
-    code_reloader: false,
-    socket_drainer_timeout: 60_000
+  # :debug_errors and :code_reloader live in config/prod.exs — Phoenix 1.8 reads
+  # them via Application.compile_env/3, and setting a compile-env key here
+  # aborts the release at boot.
+  config :wanderer_kills, WandererKillsWeb.Endpoint, socket_drainer_timeout: 60_000
 
   # Disable Phoenix debug logs
   config :phoenix, :logger, false

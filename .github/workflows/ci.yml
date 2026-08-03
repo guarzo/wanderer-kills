@@ -289,14 +289,23 @@ jobs:
   # change that compiled under `mix compile` but failed the release build's
   # `--warnings-as-errors` would land green and break main.
   # This job never logs in to the registry and never pushes.
+  #
+  # It builds a Dockerfile that the PR itself can modify, so it runs with the
+  # narrowest token it can: read-only permissions, and no checkout credentials
+  # left in .git/config for build-time code to read. The workflow-level
+  # GH_TOKEN env var is inherited here but is scoped down by `permissions`.
   docker-build:
     name: Build Docker Image (PR)
     needs: [test]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
