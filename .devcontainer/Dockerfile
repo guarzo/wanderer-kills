@@ -1,4 +1,4 @@
-FROM elixir:1.18.3-otp-27-slim AS builder
+FROM elixir:1.19.5-otp-28-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential git curl ca-certificates sudo make jq \
@@ -15,7 +15,7 @@ RUN mix deps.get && mix deps.compile
 
 COPY . .
 
-FROM elixir:1.18.3-otp-27-slim
+FROM elixir:1.19.5-otp-28-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash zsh vim nano git curl wget ca-certificates \
@@ -32,7 +32,9 @@ WORKDIR /app
 
 COPY --chown=vscode:vscode --from=builder /app /app
 
-ENV MIX_ENV=dev \
-    ERL_AFLAGS="-kernel shell_history enabled"
+# Deliberately no `ENV MIX_ENV=dev`: Mix already defaults to :dev, and an
+# exported MIX_ENV overrides the `preferred_envs` in mix.exs, which made plain
+# `mix test` run in :dev where test-only deps such as :mox are not available.
+ENV ERL_AFLAGS="-kernel shell_history enabled"
 
 

@@ -251,12 +251,10 @@ defmodule WandererKills.TestHelpers do
   end
 
   defp mock_http_get_zkb(url, _headers, _opts) do
-    cond do
-      String.contains?(url, "zkillboard.com/api/killID") ->
-        mock_zkb_killmail_response(url)
-
-      true ->
-        {:ok, %{status: 200, body: Jason.encode!([])}}
+    if String.contains?(url, "zkillboard.com/api/killID") do
+      mock_zkb_killmail_response(url)
+    else
+      {:ok, %{status: 200, body: Jason.encode!([])}}
     end
   end
 

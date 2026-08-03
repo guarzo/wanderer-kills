@@ -17,15 +17,6 @@ defmodule WandererKills.MixProject do
 
       # Coverage configuration
       test_coverage: [tool: ExCoveralls],
-      preferred_cli_env: [
-        test: :test,
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "coveralls.json": :test,
-        "coveralls.xml": :test
-      ],
 
       # Boundary configuration
       boundary: [
@@ -40,6 +31,25 @@ defmodule WandererKills.MixProject do
       dialyzer: [
         ignore_warnings: ".dialyzer_ignore.exs",
         plt_add_apps: [:ex_unit, :mix]
+      ]
+    ]
+  end
+
+  # CLI configuration. Replaces the `:preferred_cli_env` project key, which
+  # Elixir 1.17 deprecated and newer versions ignore outright — leaving plain
+  # `mix test` to run in :dev, where test-only deps such as :mox do not exist.
+  def cli do
+    [
+      preferred_envs: [
+        test: :test,
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "coveralls.json": :test,
+        "coveralls.xml": :test,
+        "test.headless": :test,
+        "test.core": :test
       ]
     ]
   end
@@ -62,8 +72,8 @@ defmodule WandererKills.MixProject do
   defp deps do
     [
       # Phoenix framework (optional - can be excluded for headless operation)
-      {:phoenix, "~> 1.7.14", optional: true},
-      {:plug_cowboy, "~> 2.7", optional: true},
+      {:phoenix, "~> 1.8", optional: true},
+      {:plug_cowboy, "~> 2.9", optional: true},
 
       # JSON parsing
       {:jason, "~> 1.4"},
@@ -71,8 +81,10 @@ defmodule WandererKills.MixProject do
       # Caching
       {:cachex, "~> 4.1"},
 
-      # HTTP client with retry support
-      {:req, "~> 0.5"},
+      # HTTP client. Finch is used directly by WandererKills.Http.Client; it was
+      # previously pulled in only as a transitive dependency of :req, which
+      # nothing in this codebase ever called.
+      {:finch, "~> 0.20"},
       {:backoff, "~> 1.1"},
 
       # CSV parsing
@@ -85,25 +97,25 @@ defmodule WandererKills.MixProject do
       {:telemetry_poller, "~> 1.2"},
 
       # Phoenix PubSub for real-time killmail distribution
-      {:phoenix_pubsub, "~> 2.1"},
+      {:phoenix_pubsub, "~> 2.2"},
 
       # Server-Sent Events with PubSub integration
       {:sse_phoenix_pubsub, "~> 1.0"},
 
       # OpenAPI specification
-      {:open_api_spex, "~> 3.18"},
+      {:open_api_spex, "~> 3.22"},
 
       # Development and test tools
-      {:credo, "~> 1.7.6", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4.3", only: [:dev], runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:boundary, "~> 0.10", runtime: false},
-      {:mox, "~> 1.2.0", only: :test},
+      {:mox, "~> 1.2", only: :test},
 
       # Code coverage
       {:excoveralls, "~> 0.18", only: :test},
 
       # Property-based testing
-      {:stream_data, "~> 1.2", only: [:test, :dev]}
+      {:stream_data, "~> 1.4", only: [:test, :dev]}
     ]
   end
 
@@ -124,11 +136,16 @@ defmodule WandererKills.MixProject do
       ],
       "test.coverage": ["coveralls.html"],
       "test.coverage.ci": ["coveralls.json"],
-      "test.headless": [
-        "test --config config/test_headless.exs --require test/test_helper_headless.exs"
-      ],
-      "test.core": ["test.headless test/wanderer_kills/"],
+      # `mix test` may only run in :test, so headless mode is selected via the
+      # WANDERER_KILLS_HEADLESS env var that Application.start_web_components?/0
+      # already checks ahead of app config — no separate MIX_ENV needed.
+      # Tests tagged :web need WandererKillsWeb.Endpoint, which headless mode
+      # does not start, so they are excluded rather than left to fail.
+      "test.headless": [&set_headless/1, "test --exclude web"],
+      "test.core": [&set_headless/1, "test --exclude web test/wanderer_kills/"],
       "test.perf": ["test --include perf test/performance/"]
     ]
   end
+
+  defp set_headless(_args), do: System.put_env("WANDERER_KILLS_HEADLESS", "true")
 end

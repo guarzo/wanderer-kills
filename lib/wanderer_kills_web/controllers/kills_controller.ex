@@ -6,7 +6,7 @@ defmodule WandererKillsWeb.KillsController do
   and kill counts as specified in the WandererKills API interface.
   """
 
-  use Phoenix.Controller, namespace: WandererKillsWeb
+  use Phoenix.Controller, formats: [:json]
   use OpenApiSpex.ControllerSpecs
 
   import WandererKillsWeb.Api.Validators

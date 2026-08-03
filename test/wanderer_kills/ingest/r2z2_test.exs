@@ -100,10 +100,10 @@ defmodule WandererKills.Ingest.R2Z2Test do
 
   describe "sequence persistence via ETS" do
     test "sequence ID can be stored and retrieved", %{table: table} do
-      :ets.insert(table, {:r2z2_last_sequence_id, 12345})
+      :ets.insert(table, {:r2z2_last_sequence_id, 12_345})
 
       [{:r2z2_last_sequence_id, id}] = :ets.lookup(table, :r2z2_last_sequence_id)
-      assert id == 12345
+      assert id == 12_345
     end
   end
 
