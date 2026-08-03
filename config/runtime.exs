@@ -124,7 +124,7 @@ logger_metadata =
     _ -> [:request_id, :operation, :killmail_id, :system_id, :application, :mfa]
   end
 
-config :logger, :console,
+config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: logger_metadata
 

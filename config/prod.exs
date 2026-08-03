@@ -8,8 +8,8 @@ config :wanderer_kills, env: :prod
 config :wanderer_kills, WandererKillsWeb.Endpoint, server: true
 
 # Configure logger for production
-config :logger,
-  level: :info,
-  format: "$time $metadata[$level] $message\n"
+config :logger, level: :info
+
+config :logger, :default_formatter, format: "$time $metadata[$level] $message\n"
 
 # Runtime configuration should be loaded from runtime.exs
