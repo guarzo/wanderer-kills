@@ -498,14 +498,27 @@ defmodule WandererKills.TestHelpers do
   # ============================================================================
 
   @doc """
-  Ensures the TaskSupervisor is running, starting it if needed.
+  Ensures the TaskSupervisor is running, waiting for it if it is mid-restart.
   This helper is useful in tests that require the WandererKills.TaskSupervisor.
+
+  The TaskSupervisor is an application-level singleton owned by
+  `WandererKills.Application`. It is deliberately *not* started under the ExUnit
+  test supervisor here: doing so hands a globally-registered name to a
+  supervisor that tears it down at the end of the current test, so every later
+  test in the run finds it gone. If it is briefly absent it is being restarted
+  by the application supervisor, so wait for that instead.
   """
   def ensure_task_supervisor do
     case Process.whereis(WandererKills.TaskSupervisor) do
       nil ->
-        ExUnit.Callbacks.start_supervised!({Task.Supervisor, name: WandererKills.TaskSupervisor})
-        :ok
+        case wait_for_process(WandererKills.TaskSupervisor) do
+          {:ok, _pid} ->
+            :ok
+
+          {:error, :timeout} ->
+            raise "WandererKills.TaskSupervisor is not running and did not restart. " <>
+                    "Is the :wanderer_kills application started?"
+        end
 
       _pid ->
         :ok
@@ -517,28 +530,21 @@ defmodule WandererKills.TestHelpers do
   """
   def wait_for_process(name, timeout \\ 1000) do
     deadline = System.monotonic_time(:millisecond) + timeout
+    do_wait_for_process(name, deadline)
+  end
 
-    Stream.repeatedly(fn ->
-      case Process.whereis(name) do
-        nil ->
+  defp do_wait_for_process(name, deadline) do
+    case Process.whereis(name) do
+      nil ->
+        if System.monotonic_time(:millisecond) < deadline do
           Process.sleep(10)
-          :retry
+          do_wait_for_process(name, deadline)
+        else
+          {:error, :timeout}
+        end
 
-        pid ->
-          {:ok, pid}
-      end
-    end)
-    |> Stream.take_while(fn
-      :retry -> System.monotonic_time(:millisecond) < deadline
-      _ -> false
-    end)
-    |> Enum.reduce(:retry, fn
-      {:ok, pid}, _ -> {:ok, pid}
-      :retry, _ -> :retry
-    end)
-    |> case do
-      {:ok, pid} -> {:ok, pid}
-      :retry -> {:error, :timeout}
+      pid ->
+        {:ok, pid}
     end
   end
 
