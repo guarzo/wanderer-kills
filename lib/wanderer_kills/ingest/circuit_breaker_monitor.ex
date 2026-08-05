@@ -156,7 +156,7 @@ defmodule WandererKills.Ingest.CircuitBreakerMonitor do
 
   defp check_circuit_status(state), do: state
 
-  defp handle_open_circuit(state, circuit_status) do
+  defp handle_open_circuit(%State{} = state, circuit_status) do
     now = System.monotonic_time(:millisecond)
     now_wall = DateTime.utc_now() |> DateTime.to_iso8601()
 

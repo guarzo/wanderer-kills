@@ -11,7 +11,7 @@ defmodule WandererKillsWeb do
   @spec controller() :: Macro.t()
   def controller do
     quote do
-      use Phoenix.Controller, namespace: WandererKillsWeb
+      use Phoenix.Controller, formats: [:json]
 
       import Plug.Conn
     end

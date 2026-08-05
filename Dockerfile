@@ -3,7 +3,7 @@
 ###############################################################################
 # 1. Build Dependencies Stage with enhanced caching
 ###############################################################################
-FROM elixir:1.18.3-otp-27-slim AS deps
+FROM elixir:1.19.5-otp-28-slim AS deps
 
 # Get target architecture for cache isolation
 ARG TARGETARCH
@@ -69,7 +69,10 @@ RUN --mount=type=cache,id=build-${TARGETARCH},target=/app/_build,sharing=locked 
 ###############################################################################
 # 3. Runtime Stage - minimal size
 ###############################################################################
-FROM debian:bookworm-slim AS runtime
+# Must track the build image's Debian release: elixir:1.19.5-otp-28-slim is
+# built on erlang:28-slim -> debian:trixie. A bookworm runtime would link the
+# release against older glibc/OpenSSL than it was compiled for.
+FROM debian:trixie-slim AS runtime
 
 WORKDIR /app
 

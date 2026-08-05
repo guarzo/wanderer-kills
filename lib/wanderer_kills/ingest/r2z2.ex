@@ -189,7 +189,7 @@ defmodule WandererKills.Ingest.R2Z2 do
   end
 
   @impl true
-  def handle_continue(:fetch_initial_sequence, state) do
+  def handle_continue(:fetch_initial_sequence, %State{} = state) do
     Logger.info("[R2Z2] Fetching initial sequence ID")
 
     # Try to recover sequence from ETS first
@@ -387,7 +387,7 @@ defmodule WandererKills.Ingest.R2Z2 do
   defp persist_sequence_to_ets(_), do: :ok
 
   # Fetch the starting sequence from the R2Z2 API
-  defp fetch_sequence_from_api(state) do
+  defp fetch_sequence_from_api(%State{} = state) do
     url = "#{base_url()}/sequence.json"
     headers = [{"user-agent", @user_agent}]
 
@@ -421,7 +421,7 @@ defmodule WandererKills.Ingest.R2Z2 do
     end
   end
 
-  defp retry_sequence_fetch(state) do
+  defp retry_sequence_fetch(%State{} = state) do
     config = load_config()
     retry_count = state.sequence_retry_count
 
@@ -439,7 +439,7 @@ defmodule WandererKills.Ingest.R2Z2 do
     {:noreply, %State{state | sequence_retry_count: retry_count + 1}}
   end
 
-  defp start_polling(state) do
+  defp start_polling(%State{} = state) do
     config = load_config()
     Logger.info("[R2Z2] Starting polling with sequence ID: #{state.sequence_id}")
 
