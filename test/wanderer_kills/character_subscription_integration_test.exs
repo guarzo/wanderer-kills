@@ -13,17 +13,15 @@ defmodule WandererKills.CharacterSubscriptionIntegrationTest do
   alias WandererKills.Subs.{CharacterIndex, SystemIndex}
 
   setup do
-    # Ensure TaskSupervisor is started
-    case Process.whereis(WandererKills.TaskSupervisor) do
-      nil -> start_supervised!({Task.Supervisor, name: WandererKills.TaskSupervisor})
-      _pid -> :ok
-    end
+    # Both the TaskSupervisor and the SimpleSubscriptionManager are
+    # application-level singletons. Starting a replacement under the ExUnit test
+    # supervisor would tear it down at the end of this test and strand every
+    # later test in the run -- and the manager owns the subscription index ETS
+    # tables, which would go with it. Wait for the application supervisor
+    # instead.
+    WandererKills.TestHelpers.ensure_task_supervisor()
 
-    # Ensure SimpleSubscriptionManager is started
-    case Process.whereis(SubscriptionManager) do
-      nil -> start_supervised!(SubscriptionManager)
-      _pid -> :ok
-    end
+    {:ok, _pid} = WandererKills.TestHelpers.wait_for_process(SubscriptionManager)
 
     # Clear any existing subscriptions
     SubscriptionManager.clear_all_subscriptions()

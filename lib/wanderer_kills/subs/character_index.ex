@@ -12,6 +12,10 @@ defmodule WandererKills.Subs.CharacterIndex do
   # Public API
   # ============================================================================
 
+  @doc "Name of the ETS table backing this index"
+  @spec table_name() :: atom()
+  def table_name, do: @table_name
+
   @doc "Initialize the ETS table"
   @spec init() :: :ok
   def init do
