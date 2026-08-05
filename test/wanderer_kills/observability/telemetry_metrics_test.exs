@@ -223,4 +223,36 @@ defmodule WandererKills.Core.Observability.TelemetryMetricsTest do
       assert metrics[:tasks_failed] == 0
     end
   end
+
+  describe "counter robustness" do
+    test "survives an increment carrying no numeric amount" do
+      pid = Process.whereis(Telemetry)
+
+      # A :token_consumed event emitted without a :tokens_consumed measurement
+      # used to reach :ets.update_counter/4 with nil and crash this GenServer.
+      # Repeated crashes exhausted the application supervisor's restart
+      # intensity and took the whole tree down mid-suite.
+      Telemetry.increment_counter("counter_with_nil_amount", nil)
+
+      :sys.get_state(Telemetry)
+
+      assert Process.alive?(pid)
+      assert Process.whereis(Telemetry) == pid
+    end
+
+    test "a rate limiter token_consumed event without a consumed amount is survivable" do
+      pid = Process.whereis(Telemetry)
+
+      :telemetry.execute(
+        [:wanderer_kills, :rate_limiter, :token_consumed],
+        %{tokens_remaining: 5},
+        %{service: "zkillboard", status_code: 200}
+      )
+
+      :sys.get_state(Telemetry)
+
+      assert Process.alive?(pid)
+      assert Process.whereis(Telemetry) == pid
+    end
+  end
 end

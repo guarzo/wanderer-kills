@@ -484,8 +484,20 @@ defmodule WandererKills.Core.Observability.Telemetry do
   end
 
   @impl true
-  def handle_cast({:increment, key, value}, state) do
+  def handle_cast({:increment, key, value}, state) when is_number(value) do
     :ets.update_counter(@table, key, value, {key, 0})
+    {:noreply, state}
+  end
+
+  # Metrics collection must never take the server down: an unusable increment
+  # from one instrumented call site would otherwise crash-loop this GenServer
+  # and, past the supervisor's restart intensity, the whole application tree.
+  def handle_cast({:increment, key, value}, state) do
+    Logger.warning("Ignoring non-numeric telemetry counter increment",
+      key: key,
+      value: inspect(value)
+    )
+
     {:noreply, state}
   end
 
@@ -683,8 +695,14 @@ defmodule WandererKills.Core.Observability.Telemetry do
         status_code = metadata[:status_code]
         tokens_consumed = measurements[:tokens_consumed]
 
-        # Track tokens consumed by service and status code
-        increment_counter("rate_limiter_#{service}_tokens_consumed", tokens_consumed)
+        # Track tokens consumed by service and status code.
+        # Not every :token_consumed emitter reports a consumed amount -- the
+        # reserved-token path only carries :tokens_remaining -- so skip the
+        # counter rather than passing nil to :ets.update_counter/4.
+        if tokens_consumed do
+          increment_counter("rate_limiter_#{service}_tokens_consumed", tokens_consumed)
+        end
+
         increment_counter("rate_limiter_#{service}_#{status_code}_requests")
 
         # Update remaining tokens gauge

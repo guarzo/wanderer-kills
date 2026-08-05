@@ -9,6 +9,8 @@ defmodule WandererKills.Core.EtsOwner do
   use GenServer
   require Logger
 
+  alias WandererKills.Subs.{CharacterIndex, SystemIndex}
+
   @websocket_stats_table :websocket_stats
   @wanderer_kills_stats_table :wanderer_kills_stats
 
@@ -113,7 +115,23 @@ defmodule WandererKills.Core.EtsOwner do
 
     Logger.info("ETS tables initialized successfully")
 
-    {:ok, %{tables: [@websocket_stats_table, @wanderer_kills_stats_table]}}
+    # The subscription indexes are plain named ETS tables created by whichever
+    # process calls init/0 first. Creating them here binds them to this
+    # long-lived process instead: without it the first caller can be an
+    # ephemeral one (an ExUnit test process, say), and the table vanishes with
+    # it, leaving every later reader with a dead table identifier.
+    CharacterIndex.init()
+    SystemIndex.init()
+
+    {:ok,
+     %{
+       tables: [
+         @websocket_stats_table,
+         @wanderer_kills_stats_table,
+         CharacterIndex.table_name(),
+         SystemIndex.table_name()
+       ]
+     }}
   end
 
   @doc """
