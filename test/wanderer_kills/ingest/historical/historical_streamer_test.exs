@@ -18,14 +18,7 @@ defmodule WandererKills.Ingest.Historical.HistoricalStreamerTest do
     end
 
     # Double-check TaskSupervisor is available
-    case Process.whereis(WandererKills.TaskSupervisor) do
-      nil ->
-        # If it's still not running, start it under the test supervisor
-        start_supervised!({Task.Supervisor, name: WandererKills.TaskSupervisor})
-
-      _pid ->
-        :ok
-    end
+    ensure_task_supervisor()
 
     # Mock configuration for testing
     test_config = %{
