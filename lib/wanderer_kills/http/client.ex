@@ -468,7 +468,7 @@ defmodule WandererKills.Http.Client do
     end
   rescue
     error ->
-      if is_process_unavailable_error?(error) and retry_count < 2 do
+      if process_unavailable_error?(error) and retry_count < 2 do
         delay_ms = 100 * (retry_count + 1)
 
         Logger.warning(
@@ -486,11 +486,11 @@ defmodule WandererKills.Http.Client do
     {:error, :max_retries_exceeded}
   end
 
-  defp is_process_unavailable_error?(%{message: message}) when is_binary(message) do
+  defp process_unavailable_error?(%{message: message}) when is_binary(message) do
     String.contains?(message, "no process") or
       String.contains?(message, "not alive") or
       String.contains?(message, "application isn't started")
   end
 
-  defp is_process_unavailable_error?(_), do: false
+  defp process_unavailable_error?(_), do: false
 end

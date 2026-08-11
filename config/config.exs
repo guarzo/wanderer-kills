@@ -232,13 +232,13 @@ config :wanderer_kills, WandererKills.PubSub, adapter: Phoenix.PubSub.PG
 config :cachex, :default_ttl, :timer.hours(24)
 
 # Configure the logger
-config :logger,
-  level: :info,
-  format: "$time $metadata[$level] $message\n",
-  metadata: :all,
-  backends: [:console]
+# Elixir 1.15 replaced the legacy :backends/:console backend system with
+# :default_handler and :default_formatter. :backends is deprecated and warns at
+# boot on 1.19; Logger already translated `[:console]` to the default handler,
+# so this is a rename, not a behavior change — format and metadata are verbatim.
+config :logger, level: :info
 
-config :logger, :console,
+config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: :all
 

@@ -1,7 +1,7 @@
 // .devcontainer.json
 {
   "name": "wanderer-kills-dev",
-  "dockerComposeFile": ["./docker-compose.yml"],
+  "dockerComposeFile": ["./docker-compose.yml", "./docker-compose.override.yml"],
   "service": "wanderer-kills",
   "workspaceFolder": "/app",
   "shutdownAction": "stopCompose",                 // pull in your secrets & config

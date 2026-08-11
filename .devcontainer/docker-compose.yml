@@ -1,6 +1,4 @@
 # docker-compose.yml
-version: "3.8"
-
 services:
   wanderer-kills:
     build:
@@ -8,7 +6,9 @@ services:
       dockerfile: .devcontainer/Dockerfile # ← path to your Dockerfile
     environment:
       PORT: 4004
-      MIX_ENV: dev
+      # No MIX_ENV here: an exported MIX_ENV overrides mix.exs `preferred_envs`,
+      # which makes plain `mix test` run in :dev without the test-only deps.
+      # Mix already defaults to :dev. See also .devcontainer/Dockerfile.
       WEB_APP_URL: "http://localhost:4004"
       ERL_AFLAGS: "-kernel shell_history enabled"
     ports:

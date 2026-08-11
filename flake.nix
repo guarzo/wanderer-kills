@@ -18,7 +18,7 @@
 
         overlay = (final: prev: {
           yarn = prev.yarn.override {
-                  nodejs = final.pkgs.nodejs_20;
+                  nodejs = final.pkgs.nodejs_24;
                 };
         });
 
@@ -29,11 +29,11 @@
 
         pname = "wanderer";
 
-        erlang = pkgs.beam.interpreters.erlang_27;
-        elixir = pkgs.beam.packages.erlang_27.elixir_1_17;
-        elixir-ls = pkgs.beam.packages.erlang_27.elixir_ls;
+        erlang = pkgs.beam.interpreters.erlang_28;
+        elixir = pkgs.beam.packages.erlang_28.elixir_1_19;
+        elixir-ls = pkgs.beam.packages.erlang_28.elixir_ls;
         packages = pkgs.beam.packagesWith erlang;
-        nodejs = pkgs.nodejs_20;
+        nodejs = pkgs.nodejs_24;
         postgresql = pkgs.postgresql_14;
         yarn = pkgs.yarn;
 
@@ -44,7 +44,7 @@
 
         # This is opinionated instead of simple using:
         # pkgs.beam.packages.erlang.rebar3;
-        rebar3 = pkgs.beam.packages.erlang_27.rebar3;
+        rebar3 = pkgs.beam.packages.erlang_28.rebar3;
 
         MIX_REBAR3 = "${rebar3}/bin/rebar3";
       in

@@ -25,8 +25,8 @@ jobs:
         id: beam
         uses: erlef/setup-beam@v1
         with:
-          elixir-version: "1.18.4"
-          otp-version: "27.0"
+          elixir-version: "1.19.5"
+          otp-version: "28.5"
 
       - name: Restore dependencies cache
         uses: actions/cache@v4
@@ -37,8 +37,11 @@ jobs:
             ~/.hex
             ~/.mix
             ~/.cache/rebar3
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
+          # _build artifacts are BEAM-version-specific, so the version must be
+          # part of both the key and the restore prefix — otherwise a cache from
+          # a previous Elixir/OTP can be restored on a lockfile miss.
+          key: ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-mix-
 
       - name: Restore PLT cache
         uses: actions/cache@v4
@@ -280,6 +283,76 @@ jobs:
           name: quality-status
           path: .github/badges/quality-status.json
 
+  # Build and smoke-test the production image on pull requests. The `docker`
+  # job below only runs on pushes to main and on version tags, so before this
+  # existed nothing exercised the Dockerfile until after a PR had merged — a
+  # change that compiled under `mix compile` but failed the release build's
+  # `--warnings-as-errors` would land green and break main.
+  # This job never logs in to the registry and never pushes.
+  #
+  # It builds a Dockerfile that the PR itself can modify, so it runs with the
+  # narrowest token it can: read-only permissions, and no checkout credentials
+  # left in .git/config for build-time code to read. The workflow-level
+  # GH_TOKEN env var is inherited here but is scoped down by `permissions`.
+  docker-build:
+    name: Build Docker Image (PR)
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.REGISTRY_IMAGE }}:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            VERSION=pr-${{ github.event.pull_request.number }}
+
+      - name: Smoke-test Docker image
+        run: |
+          IMAGE="${{ env.REGISTRY_IMAGE }}:pr-${{ github.event.pull_request.number }}"
+          docker run -d --name pr_test -p 4004:4004 "$IMAGE"
+
+          # Fail loudly if the container exits during startup rather than
+          # letting the health check time out with a less useful message.
+          for _ in $(seq 1 20); do
+            if ! docker ps --filter name=pr_test --filter status=running -q | grep -q .; then
+              echo "::error::Container exited during startup"
+              docker logs pr_test 2>&1 || true
+              exit 1
+            fi
+            if curl -fsS http://localhost:4004/health >/dev/null 2>&1; then
+              echo "Health check passed"
+              docker logs pr_test 2>&1 | tail -20
+              docker rm -f pr_test
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "::error::Health endpoint never became ready"
+          docker logs pr_test 2>&1 || true
+          docker rm -f pr_test
+          exit 1
+        env:
+          DOCKER_BUILDKIT: 1
+
   docker:
     name: Build and Push Docker Image
     needs: [test, auto-tag]
@@ -399,9 +472,10 @@ jobs:
             exit 1
           fi
 
-          # Try to check health endpoint
+          # Check the health endpoint. Blocking: an image that builds and stays
+          # up but cannot serve /health is not a passing image.
           echo "Checking health endpoint:"
-          curl -f http://localhost:4004/health || echo "Health check failed"
+          curl -f --retry 5 --retry-delay 3 --retry-connrefused http://localhost:4004/health
 
           # Clean up
           docker stop test_container

@@ -102,7 +102,7 @@ defmodule WandererKills.Http.ConnectionMonitor do
   end
 
   @impl true
-  def handle_cast({:timeout_error, url}, state) do
+  def handle_cast({:timeout_error, url}, %State{} = state) do
     new_consecutive = state.consecutive_timeout_errors + 1
     new_total = state.total_timeouts + 1
 
@@ -139,7 +139,7 @@ defmodule WandererKills.Http.ConnectionMonitor do
   end
 
   @impl true
-  def handle_cast({:connection_failure, url, reason}, state) do
+  def handle_cast({:connection_failure, url, reason}, %State{} = state) do
     new_consecutive = state.consecutive_connection_failures + 1
     new_total = state.total_connection_failures + 1
 
@@ -180,7 +180,7 @@ defmodule WandererKills.Http.ConnectionMonitor do
   end
 
   @impl true
-  def handle_cast({:success, _url}, state) do
+  def handle_cast({:success, _url}, %State{} = state) do
     new_state = %State{
       state
       | consecutive_timeout_errors: 0,
@@ -192,7 +192,7 @@ defmodule WandererKills.Http.ConnectionMonitor do
   end
 
   @impl true
-  def handle_info(:check_health, state) do
+  def handle_info(:check_health, %State{} = state) do
     current_time = System.system_time(:second)
     time_since_success = current_time - state.last_successful_request
     time_since_recycled = current_time - state.last_recycled_at
@@ -249,7 +249,7 @@ defmodule WandererKills.Http.ConnectionMonitor do
   end
 
   @impl true
-  def handle_call(:recycle_connections, _from, state) do
+  def handle_call(:recycle_connections, _from, %State{} = state) do
     Logger.info("[ConnectionMonitor] Manual connection recycling requested")
     recycle_connection_pool()
 

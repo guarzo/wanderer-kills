@@ -63,6 +63,9 @@ defmodule WandererKills.UnifiedTestCase do
         case test_type do
           :conn ->
             quote do
+              # Requires WandererKillsWeb.Endpoint, which does not start in
+              # headless mode — see `mix test.headless`.
+              @moduletag :web
               @endpoint WandererKillsWeb.Endpoint
               use ExUnit.Case, async: unquote(async)
               import Plug.Conn
@@ -72,6 +75,7 @@ defmodule WandererKills.UnifiedTestCase do
 
           :channel ->
             quote do
+              @moduletag :web
               @endpoint WandererKillsWeb.Endpoint
               import Phoenix.ChannelTest
               import WandererKills.UnifiedTestCase
