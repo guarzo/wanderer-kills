@@ -25,9 +25,28 @@ end
 port_str = System.get_env("PORT") || "4004"
 port = RuntimeConfig.PortValidator.parse_and_validate_port(port_str, "PORT")
 
+# Bind address. Defaults to 0.0.0.0 so existing docker-compose deployments are
+# unaffected. Set to "::" on platforms whose private networking is IPv6-only —
+# Fly.io's 6PN, for instance, where a 0.0.0.0 listener is unreachable from
+# sibling apps.
+bind_ip_str = System.get_env("BIND_IP", "0.0.0.0")
+
+bind_ip =
+  bind_ip_str
+  |> String.to_charlist()
+  |> :inet.parse_address()
+  |> case do
+    {:ok, address} ->
+      address
+
+    {:error, _} ->
+      raise "BIND_IP must be a valid IP address, such as \"0.0.0.0\" or \"::\". Got: #{bind_ip_str}"
+  end
+
 config :wanderer_kills, WandererKillsWeb.Endpoint,
   http: [
     port: port,
+    ip: bind_ip,
     # Increase timeouts for SSE connections
     protocol_options: [
       idle_timeout: :infinity,
