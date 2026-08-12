@@ -1,0 +1,92 @@
+# fly.toml — wanderer-kills
+#
+# Deploy with:  fly deploy --ha=false --app <your-app-name>
+#
+# Carries no app name and no secrets. `primary_region` below is the one value an
+# operator must review: set it to the region the consuming app runs in.
+#
+# EXACTLY ONE MACHINE. The cache is node-local Cachex, so a second machine would
+# serve different answers depending on which one a subscription landed on.
+#
+# Machine count is not a fly.toml concept at all — there is no key for it, and
+# adding a [[services]] block would not provide one (min_machines_running is a
+# floor on how many stay awake, not a cap on how many exist). Enforce it at
+# deploy time with --ha=false, which prevents a second machine ever being
+# created, and verify afterwards:
+#
+#   fly deploy --ha=false --app <your-app-name>
+#   fly status --app <your-app-name>          # expect exactly one machine
+#
+# `fly scale count 1` repairs the count if it ever drifts, but it is a repair,
+# not a preventative: it cannot choose which machine survives, and the destroyed
+# one takes its subscriber's websocket with it.
+#
+# NO PUBLIC IP. There is no [http_service] and no [[services]] block, which is
+# what keeps this app off the public internet. It is reachable only over Fly's
+# 6PN private network at <app>.internal:4004.
+#
+# BIND_IP is "::" for that reason: 6PN is IPv6-only, and a 0.0.0.0 listener
+# cannot accept a 6PN connection. The application default is "0.0.0.0"
+# (config/runtime.exs), so this value is load-bearing, not decorative. On Linux
+# "::" is dual-stack, so it is a superset of 0.0.0.0 rather than a trade —
+# IPv4 loopback callers such as the Dockerfile HEALTHCHECK still work.
+
+# Set this to the region your consumer app runs in — co-location keeps the 6PN
+# path short. 'iad' is a default, not a recommendation for your deployment.
+primary_region = 'iad'
+
+# Non-default, and deliberate: Fly's default kill signal is SIGINT, whereas OTP
+# turns SIGTERM into a graceful init:stop/0. The Dockerfile's ENTRYPOINT is
+# exec-form, so the release script is PID 1 and receives the signal directly.
+# Do not "clean up" this line.
+kill_signal = 'SIGTERM'
+
+# No builder or image override, so Fly falls back to the repository Dockerfile.
+[build]
+
+# Without this, the policy is on-failure. A release stopped by SIGTERM exits 0,
+# which Fly would read as an intentional stop — and with no service block there
+# is no proxy request to wake the machine and no min_machines_running floor to
+# notice. The app would stay down, holding no websocket, until a human ran
+# `fly machine start`.
+[[restart]]
+  policy = 'always'
+
+[env]
+  PORT = '4004'
+  BIND_IP = '::'
+
+[[vm]]
+  size = 'shared-cpu-2x'
+  memory = '2gb'
+
+# Top-level [checks], not [[services.*.checks]]: those require a service
+# definition, which this app does not have.
+#
+# This targets /ping, not /health, and the difference matters. /health is
+# dependency-aware: it returns 503 when the zKillboard circuit breaker is open
+# or after 3 consecutive connection timeouts
+# (lib/wanderer_kills_web/controllers/health_controller.ex). Those are ordinary,
+# self-healing upstream conditions that say nothing about whether this machine
+# is alive, and gating on them would mark a perfectly healthy node unhealthy
+# during a zKillboard outage — blocking deploys and raising false alarms.
+# /ping (router.ex, same unauthenticated :infrastructure pipeline) returns 200
+# unconditionally and touches no dependency, which is the liveness semantics a
+# machine check wants. /health remains the right endpoint for a human or a
+# monitoring dashboard asking "is the data flowing?".
+#
+# The Dockerfile's own HEALTHCHECK still targets /health. That is not a
+# contradiction: Fly machines ignore Dockerfile HEALTHCHECK entirely, so that
+# line only affects plain `docker run`, where dependency-aware is the more
+# useful answer.
+[checks]
+  [checks.liveness]
+    type = 'http'
+    port = 4004
+    path = '/ping'
+    interval = '15s'
+    timeout = '5s'
+    # Boot has to start the supervision tree and bind the endpoint before this
+    # can pass. If the first check after a deploy fails, time a real cold start
+    # before assuming a fault — this may simply need raising.
+    grace_period = '30s'
